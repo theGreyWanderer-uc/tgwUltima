@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
 import typer
+from titan import _wizard_ui as ui
 from titan._config import get_config, resolve_config_path
 from titan.u7.shape_archive import U7ShapeArchive
 from titan.u7.install import resolve_u7_path
@@ -515,6 +516,12 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
     """Create a standalone U7 SHP from PNG frames in Windows A-Z name order."""
     from titan.u7.palette import U7Palette
     from titan.u7.shape_import import create_u7_shape_from_pngs, sorted_png_frame_paths
+    from titan.u7.shape_animation_flag import (
+        choose_u7_shape_animation,
+        u7_animation_sidecar,
+        u7_shape_animation_payload,
+        write_u7_animation_payloads,
+    )
 
     source_dir = Path(args.directory)
     if not source_dir.is_dir():
@@ -565,8 +572,25 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
             allow_cycling=getattr(args, "allow_cycling", False),
             flat=getattr(args, "flat", False),
         )
+        animated = choose_u7_shape_animation(
+            shape, animated=getattr(args, "animated", None)
+        )
+        metadata = (
+            [
+                (
+                    u7_animation_sidecar(output_path),
+                    u7_shape_animation_payload(shape.to_bytes(), animated),
+                )
+            ]
+            if animated is not None
+            else []
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         shape.save(str(output_path))
+        write_u7_animation_payloads(metadata)
+    except (ui.PromptCancelled, KeyboardInterrupt):
+        print("Cancelled.")
+        return 0
     except (OSError, ValueError) as error:
         print(f"ERROR: U7 shape import failed: {error}", file=sys.stderr)
         return 1
@@ -1345,6 +1369,13 @@ def cmd_u7_flex_create(args: SimpleNamespace) -> int:
 
 def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     """Add a standalone U7 shape to the first permitted free Flex record."""
+    from titan.u7.shape_animation_flag import (
+        choose_u7_shape_animation,
+        read_u7_shape_animation,
+        prepare_u7_archive_animation,
+        write_u7_animation_payloads,
+    )
+    from titan.u7.shape_archive import discover_base_archive
     from titan.u7.flex_shape_add import (
         add_shape_at_record_index,
         add_shape_to_first_available_record,
@@ -1476,7 +1507,29 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
                 replace=replace_record,
                 base_archive=resolved.base,
             )
+        default = read_u7_shape_animation(shape_path, shape_data)
+        animated = choose_u7_shape_animation(
+            shape, animated=getattr(args, "animated", None), default=default
+        )
+        base_value = getattr(args, "base_archive", None) or discover_base_archive(
+            archive_path, _resolve_u7_paths(getattr(args, "game", "bg"))[0]
+        )
+        sources = (archive_path,) + ((Path(base_value),) if base_value else ())
+        metadata = (
+            prepare_u7_archive_animation(
+                output_path,
+                {record_index: (shape_data, animated)},
+                world_shapes=archive_kind == "shapes" and not flat,
+                sources=sources,
+            )
+            if animated is not None
+            else []
+        )
         save_u7_flex_atomically(archive, output_path)
+        write_u7_animation_payloads(metadata)
+    except (ui.PromptCancelled, KeyboardInterrupt):
+        print("Cancelled.")
+        return 0
     except (OSError, ValueError) as error:
         print(f"ERROR: U7 Flex add-shape failed: {error}", file=sys.stderr)
         return 1
@@ -1572,6 +1625,13 @@ def u7_flex_add_shape_cmd(
             help="Original VGA/Flex archive for sparse patch inheritance",
         ),
     ] = None,
+    animated: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--animate/--no-animate",
+            help="Set frame animation explicitly; otherwise prompt for multiple RLE frames",
+        ),
+    ] = None,
     game: Annotated[
         Literal["bg", "si"],
         typer.Option("--game", help="BG or SI config fallback for the patch base"),
@@ -1595,6 +1655,7 @@ def u7_flex_add_shape_cmd(
                 replace=replace,
                 archive_kind=archive_kind,
                 flat=flat,
+                animated=animated,
             )
         )
     )
@@ -1608,6 +1669,13 @@ def shape_create_cmd(
     source: Annotated[
         Optional[str],
         typer.Argument(help="PNG file or folder of PNG frames (interactive mode)"),
+    ] = None,
+    animated: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--animate/--no-animate",
+            help="Set frame animation explicitly; otherwise ask in the wizard",
+        ),
     ] = None,
     config: Annotated[
         Optional[str],
@@ -1675,6 +1743,7 @@ def shape_create_cmd(
                 base_archive=base_archive,
                 preview_path=preview,
                 in_place=in_place,
+                animated=animated,
             )
         )
     raise SystemExit(
@@ -1687,6 +1756,7 @@ def shape_create_cmd(
             base_archive=base_archive,
             preview_path=preview,
             in_place=in_place,
+            animated=animated,
         )
     )
 
@@ -1936,6 +2006,13 @@ def shape_import_cmd(
         str,
         typer.Option("-o", "--output", help="Standalone output .shp path"),
     ],
+    animated: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--animate/--no-animate",
+            help="Set frame animation explicitly; otherwise prompt for multiple RLE frames",
+        ),
+    ] = None,
     palette: Annotated[
         Optional[str],
         typer.Option(
@@ -1977,6 +2054,7 @@ def shape_import_cmd(
                 game=game,
                 allow_cycling=allow_cycling,
                 flat=flat,
+                animated=animated,
             )
         )
     )

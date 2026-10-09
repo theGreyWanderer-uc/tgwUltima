@@ -12,6 +12,192 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ## [0.7.8]
 
+- **U8 world and egg search:** add `world-query` / `egg-query` paged browsers,
+  all-map item/name/area/flag filters, authoritative live-cache replacement,
+  optional lazy GLOB child searches, native trigger ranges/classes, teleport
+  links and monster count/chance fields. Connect sprite/shape, inventory/NPC,
+  parent/stamp and stored-map views; export fresh offline HTML, full CSV/JSON
+  and bounded native PNG previews without editing earlier reports.
+
+- **U8 colour experiment cleanup:** keep magic-item cycle generators, HTML
+  templates, prototype tests and notes under `titan-out/u8_magic_red_cycle/prototype`
+  rather than the shipped package and regular test suite. Preserve generated
+  previews and retain local build/test instructions.
+
+- **U8 palette browser:** add `u8 palette-browse` with shared U7/U8 numbered
+  swatches, native byte/word palette layouts, RGB inspection/matching and
+  gradients, DOS palette-effect targets and foreground PNG previews. Export
+  fresh searchable HTML, CSV, JSON, eight effect sheets and original PAL bytes
+  while preserving game data and earlier reports.
+
+- **Container desktop selection:** preserve full IREG/stored-map identities and
+  friendly labels in Questionary menus; normalise only single-letter action
+  aliases. Accept either case when entering U7 browser IDs. This also retains
+  lowercase U8 inventory filter tokens in desktop menus.
+
+- **U7 container gump contents:** add G/H/L previews with direct inventory
+  sprites, random/saved IREG layouts and fresh HTML/PNG/JSON placement evidence.
+  Inherit BG/SI and mod container mappings, storage bounds, graphics and
+  palettes; support reflected item frames and labelled locked-container
+  previews without changing saves or older reports.
+
+- **Shared U7/U8 container workflow:** use persistent result lists, independent
+  container/contents filters, direct-or-nested searches, identity breadcrumbs,
+  compact details and explicit native-record views. Add U7 nested navigation,
+  item/frame previews and fresh HTML/CSV/JSON/tree/image bundles while retaining
+  its batch tree/CSV queries. U8 current-result exports now honour every active
+  filter and record their selection; both games preserve earlier outputs.
+
+- **Windows image-preview visibility:** restore minimized viewers and bring
+  previews forward on each request, including reused Photos windows with
+  generic titles. Preserve normal window stacking after raising the viewer
+  and report when Windows declines keyboard focus.
+
+- **U8 NPC inventory access:** add G for composed gump previews and C for
+  nested inventory browsing directly in NPC details, including embedded NPC
+  views. Keep empty NPC inventories previewable, reuse the captured save and
+  names, preserve saved-gump priority, and report image-viewer launch failures
+  with the generated PNG path.
+
+- **U8 all-map container browser:** include stored FIXED/NONFIXED containers
+  and nested inventories across unloaded maps, keep the active map's live
+  cache authoritative, and distinguish archive/map/record IDs in menus,
+  filenames and reports. Add map/live/stored filters, cache-only mode and
+  explicit coverage diagnostics. Supply labelled backpack previews for NPC
+  inventories with no native gump while preserving saved, Avatar and corpse
+  artwork priority.
+
+- **U8 composed container previews:** read native GUMPAGE.DAT storage rectangles
+  and make G open container artwork with every direct child's native sprite,
+  including editor markers. Add rerolled random layouts, saved-anchor mode,
+  repeatable seeds, empty-artwork previews and placement evidence in fresh
+  HTML/CSV/JSON bundles; retain clipping/overlap/missing-metadata diagnostics
+  without writing preview positions to saves.
+
+- **U8 closed-container gump previews:** resolve verified usecode artwork for
+  chests, backpacks, bags, barrels, baskets, furniture and corpses when the
+  save has no open-gump record. Include Avatar and native dead-NPC inventory
+  defaults, retain saved shape/frame priority and show selection provenance
+  in previews and newly generated HTML/CSV/JSON reports.
+
+- **U8 container browser:** add `u8 container-browse` for nested native cache
+  inventories and named NPC owners, contextual quantities/quality, equipment
+  slots and bounded parent/list diagnostics. Preview native item sprites and
+  saved gump artwork, return from embedded shape/NPC/map browsers, and export
+  fresh linked HTML, master CSV, JSON and PNG bundles.
+
+- **U7 imported shape animation:** ask whether multi-frame object artwork
+  should animate in shape creation, PNG import and U7/Flex record imports.
+  Set or clear only the animated TFA object bit, retain standalone choices
+  in hash-bound sidecars, and support `--animate`/`--no-animate` plus recipe
+  `conversion.animated` for scripted runs.
+
+- **U8 map browser:** add `u8 map-browse` for captured FIXED/NONFIXED maps,
+  object and container inspection, named NPC slots and embedded shape/NPC
+  browsers. Preview colour overviews and native isometric PNGs in the image
+  viewer, filter storage/records/shapes/roofs/heights, and export fresh offline
+  HTML, PNG, CSV and JSON reports without replacing existing exports.
+
+- **U8 preview sizing:** preserve native pixels when console space permits,
+  with no half-width limit. Keep solid background cells, rendered-size captions
+  and native exports; document terminal font/zoom as the way to make artwork
+  physically smaller without discarding sprite pixels.
+
+- **U8 preview detail:** remove the 32-pixel-row reduction from U8 shape,
+  NPC and equipment previews. Use solid background cells to avoid font tearing,
+  retain tall static images in scrollback, and report source/rendered dimensions.
+  Fit live playback to the actual window and update on resize; retain U7's
+  solid-cell display and full-resolution image exports.
+
+- **U8 save browser:** add `u8 save-browse` for native saves and GAMEDAT,
+  with searchable entry/state views, hex inspection, raw extraction, named
+  NPCs and embedded equipment/animation browsing. Inspect packed global
+  flags, stored maps, gumps and kernel processes; compare snapshots and
+  export offline overview/data bundles to new paths. State inspection works
+  without graphics assets and preserves existing reports and game files.
+
+- **U8 native flag meanings:** identify the NPC animation-failure and weapon-hit
+  latches, plus ANIM collision-hit and repeat-after-completion flags, from
+  decoded runtime consumers. Share resolved labels across browsers and fresh
+  exports while retaining raw words and remaining unknown bits. Add readable
+  NPC flag columns to browser summaries and animation master CSVs.
+
+- **U8 NPC browser and character names:** add `u8 npc-browse` with native
+  save/GAMEDAT/loose source selection, search, allocation/map/shape filters,
+  stored-frame previews, equipment inspection, embedded animation browsing
+  and CSV/JSON/HTML exports. Resolve permanent NPC names through native
+  slot-plus-1024 usecode dispatch and saved Avatar names. Share that lookup
+  with animation reports; retain name provenance and explicit CSV overrides.
+
+- **U8 NPC animation reports:** add `u8 npc-animation-report` to join native
+  NPC/item state with sprite shapes and named ANIM actions. Export a master
+  CSV and offline per-NPC HTML pages with shared contact sheets; retain
+  action/direction/step context, raw fields, unreferenced frames and invalid
+  sprite diagnostics. Support all allocated NPCs or one slot, and explicit
+  character-name CSVs without inferring identities from sprite classes.
+
+- **U8 interactive shape browser:** add `u8 shape-browse` with native-slot
+  search, property filters, world/gump/font libraries and standalone shapes.
+  Reuse shared menus, terminal images and live playback; browse ANIM actions
+  and directions with origin-aligned flips and avatar weapon/glow overlays.
+  Export indexed/RGBA sprite PNGs, sequence GIFs and complete JSON reports.
+  Save current, selected or all named contact sheet sets for a shape,
+  grouped by ANIM action/direction or raw frame ranges with complete paging.
+  Keep metadata with its archive owner and preserve existing/source files.
+
+- **U8 native kernel process state:** decode matched DOS animation classes,
+  the game loop/30 Hz clock, waits/timers and usecode interpreter objects,
+  dependency/notification lists and authoritative script resume payloads.
+  Add `kernel-dump --view decoded`, class/coverage counts and game-clock
+  save overviews, plus scoped decoded process-state comparisons in save-diff.
+  Gate subtype decoding on the verified native build/vtable/size profile;
+  preserve unmatched and malformed subtype bytes with explicit coverage.
+
+- **U8 avatar, saved UI and kernel state:** decode every field/byte of
+  AVATAR.DAT and the complete native container GUMPS.DAT layout; expose
+  KERNEL.DAT's verified scheduler core, process base fields, paired record
+  inventory and exact raw payloads with explicit partial coverage. Add
+  `u8 avatar-dump`, `u8 gumps-dump` and `u8 kernel-dump` text/JSON/CSV views
+  and extend save-info/save-diff with avatar, UI and reusable process-slot
+  comparisons. Preserve padding, unknown fields and native pointer residue.
+
+- **U8 global flags and save views:** decode the complete 1024-byte
+  `FLAG.DAT` buffer and optional native `FLAGSYM.DAT` symbol records. Add
+  `u8 flags-dump` text/JSON/CSV bit and variable views, `u8 save-info`
+  overviews, and `u8 save-diff` scoped field/byte comparisons for native
+  saves and GAMEDAT directories. Preserve missing-file zero initialization,
+  distinguish invalid/opaque entries, compare reusable cache slots explicitly,
+  and compare NONFIXED record multisets with container context rather than
+  assuming stable record indices. Share strict archive bounds/name validation
+  with existing save extraction and saved-state parsers.
+
+- **U8 complete map items:** decode every field of FIXED/NONFIXED 16-byte
+  records, preserve exact archive bytes, resolve nested inventories using
+  native flags/depth, and distinguish NONFIXED's NPC registry in slot 0.
+  Add `u8 fixed-dump` and `u8 nonfixed-dump` summary/item text/JSON/CSV views,
+  map/record/shape/scope filters, diagnostics and optional TYPEFLAG metadata.
+  Share decoding with all map renders/samples so inventories are excluded
+  without TYPEFLAG and full source metadata remains available.
+  Audit all four map commands: merge sources before map selection, include
+  maps populated only by NONFIXED, expand globs from both sources, mirror
+  flipped sprite origins/colour samples and swap flipped depth-sort footpads.
+
+- **U8 cached items and NPC state:** decode `ITEMCACH.DAT` item arrays, cache
+  metadata, region cells and allocation lists, plus all `NPCDATA.DAT` fields,
+  equipment references and retained record tails. Add `u8 itemcach-dump` and
+  `u8 npcdata-dump` text/JSON/CSV views for loose files or native saves, with
+  slot filters, complete exports and paired NPC sprite frame reconstruction.
+
+- **U8 weapon overlays:** add a validated, byte-preserving `WPNOVLAY.DAT`
+  parser paired with `ANIM.DAT`, and `u8 wpnovlay-dump` text/JSON/CSV views
+  with action/type/direction filters, signed pixel offsets, sprite mappings,
+  and complete preservation of glow and unassigned overlay slots.
+
+- **U8 actor animations:** add a validated, byte-preserving `ANIM.DAT` parser
+  and `u8 anim-dump` with shape/action/direction filters, frame details, and
+  text/JSON/CSV reports. Decode signed nine-bit movement, four-bit repeat,
+  callbacks and unknown fields using the decoded U8 source and Pentagram.
+
 - **U7 shape properties:** add detailed physics/equipment metadata, property
   filters, and JSON reports to the shape browser.
 

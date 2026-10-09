@@ -41,6 +41,12 @@ from titan.u7.shape_archive import (
 )
 from titan.u7.shape_import import create_u7_shape_from_pngs, sorted_png_frame_paths
 from titan.u7.shape_validation import validate_u7_shape_data
+from titan.u7.shape_animation_flag import (
+    choose_u7_shape_animation,
+    prepare_u7_archive_animation,
+    u7_animation_sidecar,
+    u7_shape_animation_payload,
+)
 
 
 @dataclass
@@ -69,6 +75,7 @@ class ShapeWizardConfig:
     target_patch: str | None = None
     target_name: str | None = None
     standalone: bool = False
+    animated: bool | None = None
 
 
 @dataclass
@@ -87,6 +94,8 @@ class ArchivePlan:
 
 
 def _validate(config: ShapeWizardConfig) -> None:
+    if config.animated is not None and type(config.animated) is not bool:
+        raise ValueError("conversion.animated must be true or false")
     if config.game not in {"BG", "SI"}:
         raise ValueError("Game must be BG or SI")
     if config.output_format not in {"shp", "flex", "both"}:
@@ -507,6 +516,42 @@ def save(config: ShapeWizardConfig, converted: ConvertedShape) -> int:
         buffer = io.BytesIO()
         _preview_sheet(converted).save(buffer, format="PNG")
         payloads.append((Path(config.preview_path).expanduser(), buffer.getvalue()))
+    if config.animated is not None:
+        animated = choose_u7_shape_animation(converted.shape, animated=config.animated)
+        if animated is not None:
+            if config.output_format in {"shp", "both"}:
+                payloads.append(
+                    (
+                        u7_animation_sidecar(
+                            Path(config.output_path or "").expanduser()
+                        ),
+                        u7_shape_animation_payload(converted.data, animated),
+                    )
+                )
+            if plan:
+                sources = tuple(
+                    Path(value).expanduser()
+                    for value in (
+                        config.archive_source,
+                        config.base_archive,
+                        config.target_static,
+                    )
+                    if value
+                )
+                payloads.extend(
+                    prepare_u7_archive_animation(
+                        Path(config.archive_output or "").expanduser(),
+                        {plan.slot: (converted.data, animated)},
+                        world_shapes=config.archive_kind == "shapes"
+                        and not config.flat,
+                        sources=sources,
+                    )
+                )
+    for path, _ in payloads:
+        if path.resolve() in {p.resolve() for p in converted.png_paths}:
+            raise ValueError("Animation metadata output must differ from source PNGs")
+        if path.exists() and not path.is_file():
+            raise ValueError(f"Output is not a file: {path}")
     for path, data in payloads:
         _atomic_write(path, data)
         print(f"  Written: {path} ({len(data):,} bytes)")
@@ -796,6 +841,7 @@ def run_wizard(
     base_archive: str | None = None,
     preview_path: str | None = None,
     in_place: bool = False,
+    animated: bool | None = None,
 ) -> int:
     config = ShapeWizardConfig(
         source=source,
@@ -805,6 +851,7 @@ def run_wizard(
         base_archive=base_archive,
         preview_path=preview_path,
         in_place=in_place,
+        animated=animated,
     )
     try:
         print("\nTitan U7 PNG → Shape → Archive Wizard")
@@ -849,6 +896,9 @@ def run_wizard(
                 return 0
             if answer == "Y":
                 break
+        config.animated = choose_u7_shape_animation(
+            converted.shape, animated=config.animated
+        )
         ui.legacy_menu("\nOutput: [1] Shape (.shp)  [2] Archive (.flx/.vga)  [3] Both")
         config.output_format = {"1": "shp", "2": "flex", "3": "both"}[
             _choice(
@@ -901,8 +951,30 @@ def run_wizard(
             print(f"  Target: {config.target_name} ({config.game} flavour)")
         for path in paths:
             print(f"  {path}")
+        if config.animated is not None:
+            print(f"  Frames animate: {'Yes' if config.animated else 'No'}")
+            if config.output_format in {"shp", "both"}:
+                print(f"  {u7_animation_sidecar(Path(config.output_path or ''))}")
         if config.output_format in {"flex", "both"}:
-            print(f"  Shape slot: {prepare_archive(config, converted.data).slot}")
+            plan = prepare_archive(config, converted.data)
+            print(f"  Shape slot: {plan.slot}")
+            if config.animated is not None:
+                sources = tuple(
+                    Path(value).expanduser()
+                    for value in (
+                        config.archive_source,
+                        config.base_archive,
+                        config.target_static,
+                    )
+                    if value
+                )
+                for path, _ in prepare_u7_archive_animation(
+                    Path(config.archive_output or ""),
+                    {plan.slot: (converted.data, config.animated)},
+                    world_shapes=config.archive_kind == "shapes" and not config.flat,
+                    sources=sources,
+                ):
+                    print(f"  {path}")
         if _choice("  Save these outputs? [y/N] ", "Y N", "N") != "Y":
             print("Cancelled.")
             return 0
@@ -924,6 +996,7 @@ def run_from_config(
     base_archive: str | None = None,
     preview_path: str | None = None,
     in_place: bool = False,
+    animated: bool | None = None,
 ) -> int:
     """Recipes never prompt and resolve their paths relative to the recipe file."""
     try:
@@ -969,6 +1042,7 @@ def run_from_config(
             target_static=path(data.get("target", {}).get("static")),
             target_patch=path(data.get("target", {}).get("patch")),
             standalone=data.get("target", {}).get("standalone", False),
+            animated=animated if animated is not None else conversion.get("animated"),
         )
         if output_override:
             if config.output_format == "flex":

@@ -26,15 +26,13 @@ import csv
 import io
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from titan import _wizard_ui as ui
 
 from titan.u7.map import (
     U7MapRenderer,
     U7MapObject,
     C_NUM_SCHUNKS,
-    C_CHUNKS_PER_SCHUNK,
-    C_TILES_PER_CHUNK,
 )
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.names import U7ShapeNames, U7FrameNames
@@ -364,7 +362,8 @@ def _root_location(res: "ContainerResult", names: Optional[U7ShapeNames]) -> str
     location = f"@ ({res.world_tx},{res.world_ty})  lift={res.world_tz}"
     if not res.is_nested:
         return location
-    root_lbl = _obj_label(res.root_obj, names) if names else str(res.root_obj.shape)
+    root = res.root_obj or res.obj
+    root_lbl = _obj_label(root, names) if names else str(root.shape)
     via = " > ".join(res.parent_path) if res.parent_path else root_lbl
     egg_info = ""
     if res.root_obj and res.root_obj.egg_meta:
@@ -493,7 +492,7 @@ def format_csv(
 
 
 def _write_children_csv(
-    writer: "csv.writer",
+    writer: Any,
     children: list[U7MapObject],
     names: Optional[U7ShapeNames],
     frame_names: Optional[U7FrameNames],
@@ -589,7 +588,7 @@ def run_wizard(
     print(f"  {_SEP}")
 
     from titan.u7.target_picker import SelectionCancelled, select_world
-    from titan.u7.world import WorldQueryParams, load_query_metadata
+    from titan.u7.world import WorldQueryParams
 
     try:
         world = select_world(
@@ -606,246 +605,23 @@ def run_wizard(
         )
     except (SelectionCancelled, KeyboardInterrupt, EOFError):
         return 0
-    static_dir, gamedat_dir = world.static_dir, world.gamedat_dir
-    text_flx, mod_data_dir, map_num = (
-        world.text_flx_path,
-        world.mod_data_dir,
-        world.map_num,
+    from titan.u7.container_browser import (
+        browse_u7_container_session,
+        load_u7_container_session,
     )
+
     if world.game != game:
         from titan._config import exult_cfg
 
         exult_flx_path = exult_cfg(f"{world.game}_flx")
-
-    # ── 1. Paths ─────────────────────────────────────────────────────────
-    if not static_dir:
-        static_dir = ui.path_prompt(
-            "STATIC directory:", q=questionary, only_directories=True
-        ).ask()
-        if static_dir is None:
-            return 0
-
-    if not gamedat_dir:
-        gamedat_dir = ui.path_prompt(
-            "GAMEDAT directory:", q=questionary, only_directories=True
-        ).ask()
-        if not gamedat_dir:
-            return 0
-
-    # Load names early for hints
-    _names: Optional[U7ShapeNames] = None
-    if text_flx:
-        try:
-            _names = U7ShapeNames.from_file(text_flx)
-        except (FileNotFoundError, OSError):
-            pass
-    if _names is None and static_dir:
-        _names = U7ShapeNames.from_static_dir(static_dir)
-
-    _frame_names: Optional[U7FrameNames] = None
-    if static_dir and exult_flx_path and Path(exult_flx_path).exists():
-        _text_flx = text_flx or next(
-            (
-                str(Path(static_dir) / n)
-                for n in ("TEXT.FLX", "text.flx")
-                if (Path(static_dir) / n).exists()
-            ),
-            None,
-        )
-        if _text_flx:
-            try:
-                _frame_names = U7FrameNames.from_flx(exult_flx_path, _text_flx)
-            except Exception:
-                pass
-
-    if mod_data_dir and Path(mod_data_dir).is_dir():
-        _text_flx_for_mod = text_flx or (
-            next(
-                (
-                    str(Path(static_dir) / n)
-                    for n in ("TEXT.FLX", "text.flx")
-                    if (Path(static_dir) / n).exists()
-                ),
-                None,
-            )
-            if static_dir
-            else None
-        )
-        _names = U7ShapeNames.from_mod_dir(mod_data_dir, base=_names) or _names
-        if _text_flx_for_mod:
-            _frame_names = (
-                U7FrameNames.from_mod_dir(
-                    mod_data_dir, _text_flx_for_mod, base=_frame_names
-                )
-                or _frame_names
-            )
-
-    # ── 2. Container filter ───────────────────────────────────────────────
-    if world.patch_dir or world.mod_data_dir:
-        _, _names, _frame_names, _ = load_query_metadata(world)
-    print()
-    print(f"  {_SEP}")
-    container_name = questionary.text(
-        "Filter containers by name? (substring, leave blank for all containers)",
-        default="",
-    ).ask()
-    if container_name is None:
+    try:
+        print("  Capturing containers and nested contents…")
+        session = load_u7_container_session(world, exult_flx=exult_flx_path)
+        browse_u7_container_session(session)
         return 0
-    container_name = container_name.strip()
-
-    if container_name and _names:
-        matches = _names.find_shapes(container_name)
-        if matches:
-            hint = ", ".join(f"{n} ({_names.get(n)})" for n in matches[:6])
-            suffix = f"  …+{len(matches) - 6} more" if len(matches) > 6 else ""
-            print(f"  Matching shapes: {hint}{suffix}")
-
-    container_shape_input = questionary.text(
-        "Filter by container shape number(s)? (comma-separated, leave blank for all)",
-        default="",
-    ).ask()
-    if container_shape_input is None:
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        print("\nCancelled.")
         return 0
-
-    container_shape_nums: list[int] = []
-    for token in container_shape_input.split(","):
-        token = token.strip()
-        if token:
-            try:
-                container_shape_nums.append(int(token, 0))
-            except ValueError:
-                pass
-
-    # ── 3. Contains filter ────────────────────────────────────────────────
-    print()
-    print(f"  {_SEP}")
-    contains_name = questionary.text(
-        "Only show containers holding item by name? (substring, leave blank to skip)",
-        default="",
-    ).ask()
-    if contains_name is None:
-        return 0
-    contains_name = contains_name.strip()
-
-    if contains_name and _names:
-        matches = _names.find_shapes(contains_name)
-        if matches:
-            hint = ", ".join(f"{n} ({_names.get(n)})" for n in matches[:6])
-            suffix = f"  …+{len(matches) - 6} more" if len(matches) > 6 else ""
-            print(f"  Matching item shapes: {hint}{suffix}")
-
-    contains_shape_input = questionary.text(
-        "Only show containers holding item by shape number? (comma-separated, leave blank to skip)",
-        default="",
-    ).ask()
-    if contains_shape_input is None:
-        return 0
-
-    contains_shape_nums: list[int] = []
-    for token in contains_shape_input.split(","):
-        token = token.strip()
-        if token:
-            try:
-                contains_shape_nums.append(int(token, 0))
-            except ValueError:
-                pass
-
-    # ── 4. Area filter ────────────────────────────────────────────────────
-    print()
-    print(f"  {_SEP}")
-    area_all = questionary.confirm("Search the entire world?", default=True).ask()
-    if area_all is None:
-        return 0
-
-    superchunks: list[int] = []
-    tile_rect: Optional[tuple[int, int, int, int]] = None
-
-    if not area_all:
-        area_type = ui.select(
-            "Area filter type:",
-            q=questionary,
-            choices=["Superchunks", "Tile rectangle"],
-        ).ask()
-        if area_type is None:
-            return 0
-
-        if area_type == "Superchunks":
-            sc_input = questionary.text(
-                "Superchunk numbers (hex or decimal, comma-separated):",
-                default="",
-            ).ask()
-            if sc_input is None:
-                return 0
-            for token in sc_input.split(","):
-                token = token.strip()
-                try:
-                    superchunks.append(int(token, 0))
-                except ValueError:
-                    pass
-        else:
-            _TILE_MAX = C_NUM_SCHUNKS * C_CHUNKS_PER_SCHUNK * C_TILES_PER_CHUNK - 1
-            print(f"  Tile coordinates are 0–{_TILE_MAX} on each axis.")
-            tx0_raw = questionary.text("Top-left tile X:").ask()
-            ty0_raw = questionary.text("Top-left tile Y:").ask()
-            tx1_raw = questionary.text("Bottom-right tile X:").ask()
-            ty1_raw = questionary.text("Bottom-right tile Y:").ask()
-            if None in (tx0_raw, ty0_raw, tx1_raw, ty1_raw):
-                return 0
-            try:
-                tx0 = int(tx0_raw.strip(), 0)
-                ty0 = int(ty0_raw.strip(), 0)
-                tx1 = int(tx1_raw.strip(), 0)
-                ty1 = int(ty1_raw.strip(), 0)
-                tile_rect = (min(tx0, tx1), min(ty0, ty1), max(tx0, tx1), max(ty0, ty1))
-            except ValueError:
-                print("  Invalid coordinates — searching entire world.")
-
-    # ── 5. Output ─────────────────────────────────────────────────────────
-    print()
-    print(f"  {_SEP}")
-    fmt = ui.select(
-        "Output format:",
-        q=questionary,
-        choices=["tree", "csv"],
-        default="tree",
-    ).ask()
-    if fmt is None:
-        return 0
-
-    output_path: Optional[str] = None
-    if questionary.confirm("Save output to a file?", default=False).ask():
-        output_path = ui.path_prompt("Output file path:", q=questionary).ask()
-
-    # ── Run ───────────────────────────────────────────────────────────────
-    print()
-    print(f"  {_SEP}")
-    print("  Scanning…")
-
-    params = ContainerQueryParams(
-        static_dir=static_dir,
-        gamedat_dir=gamedat_dir,
-        container_shape_nums=container_shape_nums,
-        container_name_filter=container_name,
-        contains_shape_nums=contains_shape_nums,
-        contains_name_filter=contains_name,
-        superchunks=superchunks,
-        tile_rect=tile_rect,
-        text_flx_path=text_flx,
-        map_num=map_num,
-        output_format=fmt,
-        output_path=output_path,
-        patch_dir=world.patch_dir,
-        mod_data_dir=world.mod_data_dir,
-    )
-
-    results = browse_containers(params)
-    output = format_results(results, params, _names, _frame_names)
-
-    if output_path:
-        Path(output_path).write_text(output, encoding="utf-8")
-        print(f"  Wrote {len(results)} container(s) to {output_path}")
-    else:
-        print()
-        print(output)
-
-    return 0
+    except (ValueError, OSError) as error:
+        print(f"  U7 container browser unavailable: {error}")
+        return 1

@@ -11,7 +11,6 @@ from __future__ import annotations
 __all__ = ["u8_app"]
 
 import copy
-import csv
 import os
 import re
 import struct
@@ -35,6 +34,19 @@ from titan.palette import U8Palette
 from titan.u8.shape import U8Shape
 from titan.u8.sound import SonarcDecoder
 from titan.u8.save import U8SaveArchive
+from titan.u8.save_cli import register_u8_save_commands
+from titan.u8.shape_browser_ui import register_u8_shape_browser
+from titan.u8.npc_animation_cli import register_u8_npc_animation_report
+from titan.u8.npc_browser_ui import register_u8_npc_browser
+from titan.u8.save_browser_ui import register_u8_save_browser
+from titan.u8.map_browser_ui import register_u8_map_browser
+from titan.u8.container_browser_ui import register_u8_container_browser
+from titan.u8.palette_browser_ui import register_u8_palette_browser
+from titan.u8.world_search_ui import register_u8_world_search
+from titan.u8.shape_names import (
+    u8_shape_export_stem as _u8_shape_stem,
+    u8_shape_stem_from_path as _u8_shape_stem_from_path,
+)
 from titan.u8.typeflag import U8TypeFlags
 from titan.u8.map import U8MapRenderer, U8MapSampler
 from titan.u8.credits import decrypt_credit_text
@@ -56,67 +68,15 @@ u8_app = typer.Typer(
     pretty_exceptions_enable=False,
 )
 
-
-# ============================================================================
-# U8 SHAPE NAMING HELPERS
-# ============================================================================
-
-_U8_CLASS_NAME_CACHE: dict[int, str] | None = None
-
-
-def _u8_classes_resource_path() -> Path | None:
-    candidate = (
-        Path(__file__).resolve().parent.parent
-        / "dialogue"
-        / "pipeline"
-        / "resources"
-        / "usecode_classes.csv"
-    )
-    if candidate.is_file():
-        return candidate
-    return None
-
-
-def _load_u8_class_names() -> dict[int, str]:
-    global _U8_CLASS_NAME_CACHE
-    if _U8_CLASS_NAME_CACHE is not None:
-        return _U8_CLASS_NAME_CACHE
-
-    mapping: dict[int, str] = {}
-    classes_path = _u8_classes_resource_path()
-    if classes_path is not None:
-        with open(classes_path, "r", encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                try:
-                    shape_num = int((row.get("ID") or "").strip())
-                except ValueError:
-                    continue
-                name = (row.get("Name") or "").strip()
-                if name:
-                    mapping[shape_num] = name
-
-    _U8_CLASS_NAME_CACHE = mapping
-    return mapping
-
-
-def _u8_shape_stem(shape_num: int, fallback: str | None = None) -> str:
-    name = _load_u8_class_names().get(shape_num)
-    if name:
-        safe = FlexArchive._safe_filename(name)
-        if safe:
-            return f"{shape_num:04d}_{safe}"
-    if fallback:
-        return fallback
-    return f"{shape_num:04d}"
-
-
-def _u8_shape_stem_from_path(path: str) -> str:
-    base = Path(path).stem
-    try:
-        shape_num = int(base, 10)
-    except ValueError:
-        return base
-    return _u8_shape_stem(shape_num, fallback=base)
+register_u8_save_commands(u8_app)
+register_u8_shape_browser(u8_app)
+register_u8_npc_animation_report(u8_app)
+register_u8_npc_browser(u8_app)
+register_u8_save_browser(u8_app)
+register_u8_map_browser(u8_app)
+register_u8_container_browser(u8_app)
+register_u8_palette_browser(u8_app)
+register_u8_world_search(u8_app)
 
 
 # ============================================================================
@@ -1005,7 +965,11 @@ def cmd_save_list(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    save = U8SaveArchive.from_file(filepath)
+    try:
+        save = U8SaveArchive.from_file(filepath)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
     entries = save.list_entries()
 
     print(f"U8 Save Archive: {filepath}")
@@ -1028,7 +992,11 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    save = U8SaveArchive.from_file(filepath)
+    try:
+        save = U8SaveArchive.from_file(filepath)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
     entries = save.list_entries()
 
     outdir = args.output or Path(filepath).stem
@@ -1273,6 +1241,43 @@ def _build_map_namespace(**kw: object) -> SimpleNamespace:
 # CMD_* IMPLEMENTATION FUNCTIONS — MAP SAMPLE
 # ============================================================================
 
+def _parse_fixed_maps(
+    data: bytes,
+) -> Optional[dict[int, list[U8MapRenderer.MapObject]]]:
+    """Report strict map-input errors through the existing command return codes."""
+    try:
+        return U8MapRenderer.parse_fixed_dat(data)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def _load_nonfixed_maps(
+    path: str,
+) -> Optional[dict[int, list[U8MapRenderer.MapObject]]]:
+    """Read stored dynamic placements with a clean error for malformed files/saves."""
+    try:
+        return U8MapRenderer.load_nonfixed(path)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return None
+
+
+def _merge_nonfixed_input(
+    fixed_maps: dict[int, list[U8MapRenderer.MapObject]],
+    nonfixed_path: Optional[str],
+) -> Optional[dict[int, list[U8MapRenderer.MapObject]]]:
+    """Load dynamic placements before choosing maps or expanding either source's globs."""
+    if not nonfixed_path:
+        return U8MapRenderer.merge_maps(fixed_maps)
+    nonfixed_maps = _load_nonfixed_maps(nonfixed_path)
+    if nonfixed_maps is None:
+        return None
+    count = sum(len(items) for items in nonfixed_maps.values())
+    print(f"Loaded {count} nonfixed objects across {len(nonfixed_maps)} maps")
+    return U8MapRenderer.merge_maps(fixed_maps, nonfixed_maps)
+
+
 def cmd_map_sample(args: SimpleNamespace) -> int:
     """Render a colour-sampled top-down map (minimap-style) to PNG."""
     if not os.path.isfile(args.fixed):
@@ -1291,7 +1296,12 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
 
     with open(args.fixed, "rb") as f:
         fixed_data = f.read()
-    all_maps = U8MapRenderer.parse_fixed_dat(fixed_data)
+    all_maps = _parse_fixed_maps(fixed_data)
+    if all_maps is None:
+        return 1
+    all_maps = _merge_nonfixed_input(all_maps, getattr(args, 'nonfixed', None))
+    if all_maps is None:
+        return 1
     if map_num not in all_maps:
         print(f"ERROR: Map {map_num} not found or empty.", file=sys.stderr)
         print(f"  Available: {sorted(all_maps.keys())}", file=sys.stderr)
@@ -1304,20 +1314,6 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     glob_count = sum(1 for o in raw_objects if o.type_num == 2)
     objects = U8MapRenderer.expand_globs(raw_objects, args.globs)
     print(f"After GLOB expansion: {len(objects)} objects  ({glob_count} GLOBs)")
-
-    nf_path = getattr(args, 'nonfixed', None)
-    if nf_path:
-        if not os.path.isfile(nf_path):
-            print(f"ERROR: Nonfixed file not found: {nf_path}",
-                  file=sys.stderr)
-            return 1
-        tf = getattr(args, 'typeflag', None)
-        nf_maps = U8MapRenderer.load_nonfixed(nf_path, tf)
-        if map_num in nf_maps:
-            nf_objs = nf_maps[map_num]
-            objects.extend(nf_objs)
-            print(f"Merged {len(nf_objs)} nonfixed objects "
-                  f"(total: {len(objects)})")
 
     tf = getattr(args, 'typeflag', None)
     _exclude_flags = _get_exclude_flags(args)
@@ -1368,7 +1364,12 @@ def cmd_map_sample_all(args: SimpleNamespace) -> int:
         fixed_data = f.read()
 
     print(f"Parsing {args.fixed} ...")
-    all_maps = U8MapRenderer.parse_fixed_dat(fixed_data)
+    all_maps = _parse_fixed_maps(fixed_data)
+    if all_maps is None:
+        return 1
+    all_maps = _merge_nonfixed_input(all_maps, getattr(args, 'nonfixed', None))
+    if all_maps is None:
+        return 1
 
     targets = sorted(args.maps) if args.maps else sorted(all_maps.keys())
     missing = [m for m in targets if m not in all_maps]
@@ -1402,31 +1403,14 @@ def cmd_map_sample_all(args: SimpleNamespace) -> int:
         print(f"Typeflag filters active: {', '.join(active_filters)} "
               f"({len(exclude_set)} shapes excluded)")
 
-    nonfixed_maps: Optional[dict] = None
-    nf_path = getattr(args, 'nonfixed', None)
-    if nf_path:
-        if not os.path.isfile(nf_path):
-            print(f"ERROR: Nonfixed file not found: {nf_path}",
-                  file=sys.stderr)
-            return 1
-        nonfixed_maps = U8MapRenderer.load_nonfixed(nf_path, tf)
-        nf_total = sum(len(v) for v in nonfixed_maps.values())
-        print(f"Loaded {nf_total} nonfixed objects across "
-              f"{len(nonfixed_maps)} maps")
-
     for map_num in targets:
         raw_objects = all_maps[map_num]
         objects = U8MapRenderer.expand_globs(raw_objects, args.globs)
-        if nonfixed_maps and map_num in nonfixed_maps:
-            objects.extend(nonfixed_maps[map_num])
         if exclude_set:
             objects = [o for o in objects if o.type_num not in exclude_set]
-        nf_info = ""
-        if nonfixed_maps and map_num in nonfixed_maps:
-            nf_info = f" +{len(nonfixed_maps[map_num])} nonfixed"
         print(f"[{targets.index(map_num)+1}/{len(targets)}] "
               f"Map {map_num:3d}: {len(raw_objects):5d} raw -> "
-              f"{len(objects):5d} expanded{nf_info}")
+              f"{len(objects):5d} expanded")
 
         for scale in scales:
             img = U8MapSampler.sample_map(
@@ -1480,7 +1464,12 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         fixed_data = f.read()
 
     print(f"Parsing {fixed_path} ...")
-    all_maps = U8MapRenderer.parse_fixed_dat(fixed_data)
+    all_maps = _parse_fixed_maps(fixed_data)
+    if all_maps is None:
+        return 1
+    all_maps = _merge_nonfixed_input(all_maps, getattr(args, 'nonfixed', None))
+    if all_maps is None:
+        return 1
 
     if map_num not in all_maps:
         available = sorted(all_maps.keys())
@@ -1496,22 +1485,6 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         print(f"Expanding {glob_count} GLOB references ...")
     objects = U8MapRenderer.expand_globs(objects, glob_dir)
     print(f"After GLOB expansion: {len(objects)} objects")
-
-    nf_path = getattr(args, 'nonfixed', None)
-    if nf_path:
-        if not os.path.isfile(nf_path):
-            print(f"ERROR: Nonfixed file not found: {nf_path}",
-                  file=sys.stderr)
-            return 1
-        tf = getattr(args, 'typeflag', None)
-        nf_maps = U8MapRenderer.load_nonfixed(nf_path, tf)
-        if map_num in nf_maps:
-            nf_objs = nf_maps[map_num]
-            objects.extend(nf_objs)
-            print(f"Merged {len(nf_objs)} nonfixed objects "
-                  f"(total: {len(objects)})")
-        else:
-            print(f"No nonfixed objects for map {map_num}")
 
     tf = getattr(args, 'typeflag', None)
     _exclude_flags = _get_exclude_flags(args)
@@ -1571,7 +1544,10 @@ def _render_all_shared(
         fixed_data = f.read()
 
     print(f"Parsing {fixed_path} ...")
-    all_maps = U8MapRenderer.parse_fixed_dat(fixed_data)
+    all_maps = _parse_fixed_maps(fixed_data)
+    if all_maps is None:
+        return 1
+    all_maps = U8MapRenderer.merge_maps(all_maps, nonfixed_maps)
 
     targets = sorted(map_nums) if map_nums else sorted(all_maps.keys())
     missing = [m for m in targets if m not in all_maps]
@@ -1595,9 +1571,6 @@ def _render_all_shared(
         raw_objects = all_maps[map_num]
         glob_count = sum(1 for o in raw_objects if o.type_num == 2)
         objects = U8MapRenderer.expand_globs(raw_objects, glob_dir)
-        if nonfixed_maps and map_num in nonfixed_maps:
-            nf_objs = nonfixed_maps[map_num]
-            objects.extend(nf_objs)
         if exclude_set:
             objects = [o for o in objects if o.type_num not in exclude_set]
         nf_info = ""
@@ -1669,7 +1642,9 @@ def cmd_map_render_all(args: SimpleNamespace) -> int:
             print(f"ERROR: Nonfixed file not found: {nf_path}",
                   file=sys.stderr)
             return 1
-        nonfixed_maps = U8MapRenderer.load_nonfixed(nf_path, tf)
+        nonfixed_maps = _load_nonfixed_maps(nf_path)
+        if nonfixed_maps is None:
+            return 1
         nf_total = sum(len(v) for v in nonfixed_maps.values())
         print(f"Loaded {nf_total} nonfixed objects across "
               f"{len(nonfixed_maps)} maps")
@@ -1908,6 +1883,360 @@ def xformpal_export_cmd(
 ) -> None:
     """Export U8 transform palette as PNG swatch + text dump."""
     raise SystemExit(cmd_xformpal_export(SimpleNamespace(file=file, output=output)))
+
+
+@u8_app.command("anim-dump")
+def anim_dump_cmd(
+    file: Annotated[Path, typer.Argument(help="Path to U8 ANIM.DAT")],
+    shape: Annotated[
+        Optional[int],
+        typer.Option("--shape", min=0, max=2047, help="Shape ID (0-2047)"),
+    ] = None,
+    action: Annotated[
+        Optional[int],
+        typer.Option("--action", min=0, max=63, help="Actor action number (0-63)"),
+    ] = None,
+    direction: Annotated[
+        Optional[int],
+        typer.Option(
+            "--direction",
+            min=0,
+            max=7,
+            help="0=N, 1=NE, ... 7=NW; includes frame details",
+        ),
+    ] = None,
+    frames: Annotated[
+        bool,
+        typer.Option(
+            "--frames", help="Include packed frame nodes for all selected directions"
+        ),
+    ] = False,
+    output_format: Annotated[
+        str, typer.Option("--format", help="Report format: text, json or csv")
+    ] = "text",
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "-o",
+            "--output",
+            help="New report file (default: stdout); existing files are preserved",
+        ),
+    ] = None,
+) -> None:
+    """Inspect U8 actor actions, directions, movement, sound and animation flags."""
+    from titan.u8.anim import U8AnimData
+    from titan.u8.anim_report import format_u8_anim_report
+
+    try:
+        report = format_u8_anim_report(
+            U8AnimData.from_file(file),
+            shape=shape,
+            action=action,
+            direction=direction,
+            frames=frames,
+            output_format=output_format,
+        )
+        if output is None:
+            print(report, end="")
+        else:
+            if output.resolve() == file.resolve():
+                raise ValueError(
+                    "ANIM.DAT report: output must differ from the source file"
+                )
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with output.open("x", encoding="utf-8", newline="") as destination:
+                destination.write(report)
+            print(f"Animation report written to: {output}")
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
+
+
+@u8_app.command("wpnovlay-dump")
+def wpnovlay_dump_cmd(
+    file: Annotated[Path, typer.Argument(help="Path to U8 WPNOVLAY.DAT")],
+    anim: Annotated[
+        Optional[Path],
+        typer.Option("--anim", help="Matching ANIM.DAT (default: beside WPNOVLAY.DAT)"),
+    ] = None,
+    action: Annotated[
+        Optional[int],
+        typer.Option("--action", min=0, max=63, help="Avatar action ID (0-63)"),
+    ] = None,
+    overlay_type: Annotated[
+        Optional[int],
+        typer.Option(
+            "--overlay-type",
+            min=0,
+            help="Overlay slot: 0=mace, 1=sword, 2=axe, 3=dagger; further slots retained",
+        ),
+    ] = None,
+    direction: Annotated[
+        Optional[int],
+        typer.Option(
+            "--direction",
+            min=0,
+            max=7,
+            help="0=N, 1=NE, ... 7=NW; includes frame details",
+        ),
+    ] = None,
+    frames: Annotated[
+        bool,
+        typer.Option(
+            "--frames", help="Include overlay frames for all selected directions"
+        ),
+    ] = False,
+    output_format: Annotated[
+        str,
+        typer.Option("--format", help="Report format: text, json or csv"),
+    ] = "text",
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "-o",
+            "--output",
+            help="New report file (default: stdout); existing files are preserved",
+        ),
+    ] = None,
+) -> None:
+    """Inspect weapon overlay sprite frames and screen offsets paired with ANIM.DAT."""
+    from titan.u8.anim import U8AnimData
+    from titan.u8.wpnovlay import U8WeaponOverlayData
+    from titan.u8.wpnovlay_report import format_u8_wpnovlay_report
+
+    anim_file = anim if anim is not None else file.with_name("ANIM.DAT")
+    try:
+        report = format_u8_wpnovlay_report(
+            U8WeaponOverlayData.from_file(file, U8AnimData.from_file(anim_file)),
+            action=action,
+            overlay_type=overlay_type,
+            direction=direction,
+            frames=frames,
+            output_format=output_format,
+        )
+        if output is None:
+            print(report, end="")
+        else:
+            if output.resolve() in {file.resolve(), anim_file.resolve()}:
+                raise ValueError(
+                    "WPNOVLAY.DAT report: output must differ from both source files"
+                )
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with output.open("x", encoding="utf-8", newline="") as destination:
+                destination.write(report)
+            print(f"Weapon overlay report written to: {output}")
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
+
+
+@u8_app.command("itemcach-dump")
+def itemcach_dump_cmd(
+    file: Annotated[Path, typer.Argument(help="ITEMCACH.DAT or native U8SAVE archive")],
+    item: Annotated[
+        Optional[int],
+        typer.Option(
+            "--item", min=0, max=9215, help="Exact item slot, including free/null data"
+        ),
+    ] = None,
+    shape: Annotated[
+        Optional[int], typer.Option("--shape", min=0, max=65535, help="Stored shape ID")
+    ] = None,
+    view: Annotated[
+        str, typer.Option("--view", help="View: items or regions")
+    ] = "items",
+    all_slots: Annotated[
+        bool,
+        typer.Option(
+            "--all-slots", help="Include null/free items or empty region cells"
+        ),
+    ] = False,
+    output_format: Annotated[
+        str, typer.Option("--format", help="Report format: text, json or csv")
+    ] = "text",
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "-o",
+            "--output",
+            help="New report file (default: stdout); existing files are preserved",
+        ),
+    ] = None,
+) -> None:
+    """Inspect cached item fields, allocation lists, regions and native cache metadata."""
+    from titan.u8.itemcach import U8ItemCache
+    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report import format_u8_itemcach_report
+
+    try:
+        report = format_u8_itemcach_report(
+            U8ItemCache.from_file(file),
+            item_id=item,
+            shape=shape,
+            view=view,
+            all_slots=all_slots,
+            output_format=output_format,
+        )
+        write_u8_state_report(report, output, (file,), "Item cache")
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
+
+
+@u8_app.command("npcdata-dump")
+def npcdata_dump_cmd(
+    file: Annotated[Path, typer.Argument(help="NPCDATA.DAT or native U8SAVE archive")],
+    itemcach: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--itemcach", help="Matching ITEMCACH.DAT or save; saves pair automatically"
+        ),
+    ] = None,
+    npc: Annotated[
+        Optional[int],
+        typer.Option(
+            "--npc", min=0, max=255, help="Exact NPC slot, including unused data"
+        ),
+    ] = None,
+    map_num: Annotated[
+        Optional[int],
+        typer.Option(
+            "--map", min=0, max=255, help="NPC map ID; requires matching ITEMCACH"
+        ),
+    ] = None,
+    all_slots: Annotated[
+        bool,
+        typer.Option(
+            "--all-slots", help="Include all 256 slots, including unused/null records"
+        ),
+    ] = False,
+    output_format: Annotated[
+        str, typer.Option("--format", help="Report format: text, json or csv")
+    ] = "text",
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "-o",
+            "--output",
+            help="New report file (default: stdout); existing files are preserved",
+        ),
+    ] = None,
+) -> None:
+    """Inspect NPC stats, animation, flags and equipment; optionally join cached items."""
+    from titan.u8.itemcach import U8ItemCache
+    from titan.u8.npcdata import U8NpcData
+    from titan.u8.save import U8SaveArchive
+    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report import format_u8_npcdata_report
+
+    try:
+        # A native save contains the paired snapshot; loose NPC files need an explicit path.
+        cache_file = itemcach
+        if cache_file is None:
+            with file.open("rb") as source:
+                if U8SaveArchive.is_save_file(
+                    source.read(len(U8SaveArchive.SIGNATURE))
+                ):
+                    cache_file = file
+        item_cache = (
+            U8ItemCache.from_file(cache_file) if cache_file is not None else None
+        )
+        report = format_u8_npcdata_report(
+            U8NpcData.from_file(file),
+            item_cache=item_cache,
+            npc_id=npc,
+            map_num=map_num,
+            all_slots=all_slots,
+            output_format=output_format,
+        )
+        sources = (file, cache_file) if cache_file is not None else (file,)
+        write_u8_state_report(report, output, sources, "NPC data")
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
+
+
+@u8_app.command("fixed-dump")
+@u8_app.command("nonfixed-dump")
+def map_items_dump_cmd(
+    ctx: typer.Context,
+    file: Annotated[
+        Path,
+        typer.Argument(help="FIXED.DAT, NONFIXED.DAT, or native U8SAVE (nonfixed)"),
+    ],
+    map_num: Annotated[
+        Optional[int],
+        typer.Option(
+            "--map",
+            min=0,
+            max=255,
+            help="Flex map slot (0 is the NONFIXED NPC registry)",
+        ),
+    ] = None,
+    record: Annotated[
+        Optional[int],
+        typer.Option(
+            "--record",
+            min=0,
+            help="Map-local record index; requires --map and selects items view",
+        ),
+    ] = None,
+    shape: Annotated[
+        Optional[int], typer.Option("--shape", min=0, max=65535, help="Stored shape ID")
+    ] = None,
+    view: Annotated[
+        str,
+        typer.Option(
+            "--view", help="View: summary (all slots) or items (complete records)"
+        ),
+    ] = "summary",
+    scope: Annotated[
+        str,
+        typer.Option(
+            "--scope",
+            help="Scope: all, world, contained or npc (NONFIXED registry roots)",
+        ),
+    ] = "all",
+    typeflag: Annotated[
+        Optional[Path],
+        typer.Option(
+            "--typeflag", help="Optional TYPEFLAG.DAT shape-family/equipment enrichment"
+        ),
+    ] = None,
+    output_format: Annotated[
+        str, typer.Option("--format", help="Report format: text, json or csv")
+    ] = "text",
+    output: Annotated[
+        Optional[Path],
+        typer.Option(
+            "-o",
+            "--output",
+            help="New report file (default stdout); existing files are preserved",
+        ),
+    ] = None,
+) -> None:
+    """Inspect full 16-byte map items, container hierarchy and NPC registry records."""
+    from titan.u8.map_item_report import format_u8_map_item_report
+    from titan.u8.map_items import U8MapItems
+    from titan.u8.state_io import write_u8_state_report
+
+    kind = "nonfixed" if ctx.info_name == "nonfixed-dump" else "fixed"
+    try:
+        report = format_u8_map_item_report(
+            U8MapItems.from_file(file, kind=kind),
+            map_id=map_num,
+            record_index=record,
+            shape=shape,
+            view=view,
+            scope=scope,
+            typeflag_data=typeflag.read_bytes() if typeflag is not None else None,
+            output_format=output_format,
+        )
+        sources = (file, typeflag) if typeflag is not None else (file,)
+        write_u8_state_report(report, output, sources, f"{kind.upper()} items")
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
 
 
 @u8_app.command("typeflag-dump")

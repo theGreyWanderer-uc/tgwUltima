@@ -571,13 +571,18 @@ def test_windows_preview_opens_only_the_generated_png(tmp_path, monkeypatch, fai
     preview = tmp_path / "preview.png"
     opened = []
 
-    def startfile(path):
+    def startfile(path, **kwargs):
         if fails:
             raise OSError("no viewer")
         opened.append(path)
 
     monkeypatch.setattr(wizard.sys, "platform", "win32")
     monkeypatch.setattr(wizard.os, "startfile", startfile, raising=False)
+    from titan import _windows_preview
+
+    monkeypatch.setattr(
+        _windows_preview, "foreground_preview_window", lambda path: True
+    )
     # The fixture isolates real viewer launches; exercise the actual launcher here.
     assert _original_open_preview(preview) is (not fails)
     assert opened == ([] if fails else [str(preview)])

@@ -239,12 +239,26 @@ def choice(
     message: str | None = None,
     hotkeys: bool = True,
 ) -> str:
+    # Choice values may be native identities or case-sensitive browser tokens.
+    # Normalise user input when matching, never the values sent to Questionary.
+    def canonical(value: str, options: list[str]) -> str | None:
+        if value in options:
+            return value
+        matches = [item for item in options if item.casefold() == value.casefold()]
+        return matches[0] if len(matches) == 1 else None
+
     if menus_enabled():
         import questionary as q
 
-        unique = list(dict.fromkeys(value.upper() for value in choices))
+        # Legacy menus sometimes list both "m" and "M" for one hotkey.
+        # Collapse single-character actions while retaining full identity tokens.
+        unique = list(
+            dict.fromkeys(
+                value.upper() if len(value) == 1 else value for value in choices
+            )
+        )
         label = message or _label(prompt)
-        if set(unique) == {"Y", "N"}:
+        if {value.upper() for value in unique} == {"Y", "N"}:
             return (
                 "Y"
                 if _answer(q.confirm(label, default=default.upper() == "Y"))
@@ -260,7 +274,7 @@ def choice(
                 label,
                 q=q,
                 choices=options,
-                default=default.upper() or None,
+                default=canonical(default, unique) if default else None,
                 hotkeys=keys,
             )
         )
@@ -271,10 +285,9 @@ def choice(
             "no",
         }:
             return "Y" if value.lower() == "yes" else "N"
-        if value in choices:
-            return value
-        if value.upper() in choices:
-            return value.upper()
+        matched = canonical(value, choices)
+        if matched is not None:
+            return matched
         print(f"  Please enter one of: {', '.join(choices)}")
 
 

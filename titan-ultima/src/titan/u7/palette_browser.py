@@ -6,13 +6,13 @@ import csv
 import io
 import json
 import re
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
 
 from titan import _wizard_ui as ui
+from titan._palette_browser_ui import show_palette_colour_grid
 from titan._terminal_image import FrameProvider, play_terminal
 from titan.fonts.palette import (
     get_gradient_preset,
@@ -228,21 +228,7 @@ def show_grid(
     palette: U7Palette, start: int = 0, count: int = COLOURS_PER_PAGE
 ) -> None:
     """Numbers remain readable without colour and avoid raw ANSI on Windows."""
-    columns = max(1, min(16, (shutil.get_terminal_size((80, 30)).columns - 2) // 4))
-    end = min(256, start + count)
-    for row in range(start, end, columns):
-        fragments = [("", "  ")]
-        for index in range(row, min(row + columns, end)):
-            rgb = palette.colors[index]
-            text_colour = (
-                "#000000"
-                if sum(a * b for a, b in zip(rgb, (299, 587, 114))) >= 128000
-                else "#ffffff"
-            )
-            fragments.extend(
-                [(f"bg:{hex_colour(rgb)} fg:{text_colour}", f"{index:03d}"), ("", " ")]
-            )
-        ui.print_coloured(fragments)
+    show_palette_colour_grid(palette.colors, start, count)
 
 
 def colour_detail(

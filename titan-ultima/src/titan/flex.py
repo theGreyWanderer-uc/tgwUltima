@@ -584,7 +584,7 @@ class FlexArchive:
             if not entry.is_file():
                 continue
             # Skip metadata sidecars (NNNN.meta.txt / NNNN_NAME.meta.txt)
-            if entry.name.endswith(".meta.txt"):
+            if entry.name.endswith((".meta.txt", ".animation.json")):
                 continue
             stem = entry.stem
             # Accept "0001" or "0001_ARMHIT1A" — extract leading digits
