@@ -199,26 +199,28 @@ def _later_process_records() -> bytes:
 def _processes(
     *,
     fixed_offset: int | None = None,
+    nonfixed_offset: int | None = None,
     first_process: bool = False,
     extra: bytes = b"",
     sections: bytes = b"",
     temporary_camera: bool = False,
 ) -> bytes:
-    count = 3 if fixed_offset is not None else 2
+    encoded = -fixed_offset if fixed_offset is not None else nonfixed_offset
+    count = 3 if encoded is not None else 2
     end = OBJECT_REFERENCE_DATA_OFFSET + 12 + count * 12
     data = bytearray(end)
     struct.pack_into("<II", data, 0, 8, 2)
     struct.pack_into("<III", data, OBJECT_REFERENCE_DATA_OFFSET, 1, count, 1)
     struct.pack_into("<iii", data, OBJECT_REFERENCE_DATA_OFFSET + 12, 0, -1, 0)
     struct.pack_into("<iii", data, OBJECT_REFERENCE_DATA_OFFSET + 24, 0, -1, 0)
-    if fixed_offset is not None:
+    if encoded is not None:
         struct.pack_into(
             "<iii",
             data,
             OBJECT_REFERENCE_DATA_OFFSET + 36,
             1,
             9,
-            -fixed_offset,
+            encoded,
         )
     data += struct.pack(
         "<I3f3fiiB4fi",
@@ -762,6 +764,58 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(report.verdict("compatibility"), "PASS")
         self.assertIn("CUS07", {finding.check_id for finding in report.findings})
         self.assertIn("REF08", {finding.check_id for finding in report.findings})
+
+    def test_nonfixed_reference_beyond_the_payload_is_out_of_bounds(self) -> None:
+        processes = _processes(nonfixed_offset=0x2060)
+        (self.save / "processes.dat").write_bytes(processes)
+        (self.save / "u9game4.sav").write_bytes(_archive(processes, _nonfixed()))
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+        ids = {finding.check_id for finding in report.findings}
+        self.assertIn("REF02", ids)
+        self.assertNotIn("REF04", ids)
+        self.assertEqual(report.verdict("custody"), "PASS")
+        self.assertEqual(report.verdict("structure"), "PASS")
+        self.assertEqual(report.verdict("compatibility"), "FATAL")
+        self.assertEqual(report.overall, "FATAL")
+        finding = next(f for f in report.findings if f.check_id == "REF02")
+        self.assertEqual(finding.details["reference_indices"], [2])
+        self.assertEqual(finding.details["handle_indices"], [2])
+
+    def test_nonfixed_reference_payload_boundary_keeps_in_bounds_free_slots(
+        self,
+    ) -> None:
+        for payload_size, offset, expected in (
+            (0x1000, 0xFE0, "REF04"),
+            (0x2060, 0x2060, "REF02"),
+        ):
+            with self.subTest(payload_size=payload_size, offset=offset):
+                nonfixed = _nonfixed() + bytes(payload_size)
+                processes = _processes(nonfixed_offset=offset)
+                (self.save / "nonfixed.9").write_bytes(nonfixed)
+                (self.save / "processes.dat").write_bytes(processes)
+                (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
+                report = check_save(self.root, fixed_reference_directory=self.reference)
+                ids = {finding.check_id for finding in report.findings}
+                self.assertIn(expected, ids)
+                self.assertNotIn("REF04" if expected == "REF02" else "REF02", ids)
+
+    def test_nonfixed_reference_outside_uncertain_page_is_out_of_bounds(self) -> None:
+        nonfixed = bytearray(_nonfixed() + bytes(0x80))
+        struct.pack_into("<I", nonfixed, 0x20, 1)  # First page at payload offset 0.
+        struct.pack_into("<I", nonfixed, 40 + 0x14, 1)  # Missing declared entity.
+        for offset in (0x80, 0xA0):
+            with self.subTest(offset=offset):
+                processes = _processes(nonfixed_offset=offset)
+                (self.save / "nonfixed.9").write_bytes(nonfixed)
+                (self.save / "processes.dat").write_bytes(processes)
+                (self.save / "u9game4.sav").write_bytes(
+                    _archive(processes, bytes(nonfixed))
+                )
+                report = check_save(self.root, fixed_reference_directory=self.reference)
+                ids = {finding.check_id for finding in report.findings}
+                self.assertIn("REF02", ids)
+                self.assertNotIn("REF04", ids)
+                self.assertNotIn("REF07", ids)
 
     def test_fixed_reference_resolves_live_slot_and_rejects_free_slot(self) -> None:
         fixed = _fixed(live_slot=0)

@@ -731,7 +731,7 @@ def _resolve_object_references(
     nonfixed_free: list[int] = []
     unknown: list[int] = []
 
-    nonfixed_state: dict[int, tuple[set[int], set[int]]] = {}
+    nonfixed_state: dict[int, tuple[set[int], set[int], int]] = {}
     for map_number, heap in nonfixed.items():
         chunks = heap.chunks()
         live = {
@@ -743,7 +743,7 @@ def _resolve_object_references(
             if not chunk.allocation_is_complete
             for page in chunk.pages
         }
-        nonfixed_state[map_number] = live, uncertain_pages
+        nonfixed_state[map_number] = live, uncertain_pages, heap.payload_size
 
     fixed_state: dict[int, tuple[set[int], dict[int, bool], int]] = {}
     for map_number, heap in fixed.items():
@@ -782,9 +782,14 @@ def _resolve_object_references(
             if state is None:
                 missing_maps.add(("nonfixed", entry.map_number))
                 continue
-            live, uncertain_pages = state
+            live, uncertain_pages, heap_size = state
             slot_delta = offset - page_offset - 0x60
-            if slot_delta < 0 or slot_delta % 32 or slot_delta // 32 >= 125:
+            if (
+                offset >= heap_size
+                or slot_delta < 0
+                or slot_delta % 32
+                or slot_delta // 32 >= 125
+            ):
                 invalid_slots.append(entry.index)
             elif offset in live:
                 continue
