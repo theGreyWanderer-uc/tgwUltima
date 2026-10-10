@@ -20,6 +20,14 @@ def validate_u9_save_wording(catalog: Mapping[str, Any]) -> None:
     if catalog.get("schema_version") != 1:
         raise ValueError("U9 save wording: unsupported schema version")
     actions = catalog["actions"]
+    try_load = actions["try_load"]
+    if (
+        try_load.get("requires_explicit_activation") is not True
+        or try_load.get("launch_on_activation_allowed") is not True
+        or try_load.get("automatic_launch_allowed") is not False
+        or set(try_load.get("allowed_overall_results", [])) != {"PASS", "WARN"}
+    ):
+        raise ValueError("U9 save wording: unsafe try_load activation contract")
     for key, entry in {
         **catalog["findings"],
         **catalog["summaries"],
@@ -31,6 +39,10 @@ def validate_u9_save_wording(catalog: Mapping[str, Any]) -> None:
             raise ValueError(f"U9 save wording: invalid finding key {key}")
         if entry["load_policy"] not in LOAD_POLICIES:
             raise ValueError(f"U9 save wording: invalid loading policy for {key}")
+        if not isinstance(entry.get("affects_verdict", True), bool):
+            raise ValueError(f"U9 save wording: invalid verdict flag for {key}")
+        if entry.get("display_kind", "finding") not in {"finding", "note"}:
+            raise ValueError(f"U9 save wording: invalid display kind for {key}")
         if any(action not in actions for action in entry["actions"]):
             raise ValueError(f"U9 save wording: unknown action for {key}")
         found: set[str] = set()
@@ -95,7 +107,7 @@ def describe_u9_browser_map(map_number: int) -> dict[str, Any]:
     return {
         "map_number": map_number,
         **record,
-        "display_name": f"{record['name']} [map {map_number}]{suffix}",
+        "display_name": f"{record.get('player_name', record['name'])} [map {map_number}]{suffix}",
     }
 
 
@@ -154,22 +166,30 @@ def describe_u9_save_integrity(report: IntegrityReport) -> dict[str, Any]:
         actions = [
             action
             for action in entry["actions"]
-            if action != "try_load" or report.overall in ("PASS", "WARN")
+            if action != "try_load"
+            or report.overall
+            in catalog["actions"]["try_load"]["allowed_overall_results"]
         ]
+        blocks_loading = report.overall in ("ERROR", "FATAL")
+        affects_verdict = any(finding["affects_verdict"] for finding in findings)
         cards.append(
             {
                 "key": key,
                 "check_id": check_id,
                 "severity": severity,
+                "affects_verdict": affects_verdict,
+                "display_kind": "finding" if affects_verdict else "note",
                 "title": entry["title"],
                 "meanings": meanings,
-                "what_to_do": fill_u9_save_wording(entry["what_to_do"], contexts[0]),
+                "what_to_do": summary["what_to_do"]
+                if blocks_loading and entry["load_policy"] != "do_not_load"
+                else fill_u9_save_wording(entry["what_to_do"], contexts[0]),
                 "finding_load_policy": entry["load_policy"],
                 "load_policy": summary["load_policy"]
-                if report.overall in ("ERROR", "FATAL")
+                if blocks_loading
                 else entry["load_policy"],
                 "load_text": summary["load_text"]
-                if report.overall in ("ERROR", "FATAL")
+                if blocks_loading
                 else entry["load_text"],
                 "actions": actions,
                 "contexts": contexts,
@@ -211,10 +231,11 @@ def render_u9_plain_integrity(plain: Mapping[str, Any]) -> str:
     for note in plain["notes"]:
         lines.append(note)
     for card in plain["cards"]:
+        prefix = "Note: " if card["display_kind"] == "note" else ""
         lines.extend(
             (
                 "",
-                f"{card['title']} ({card['key']})",
+                f"{prefix}{card['title']} ({card['key']})",
                 *(f"  What this means: {meaning}" for meaning in card["meanings"]),
                 f"  What you can do: {card['what_to_do']}",
                 f"  Loading: {card['load_text']}",

@@ -7,7 +7,8 @@
     "0": {
       "name": "The Lunch Room",
       "category": "fixture",
-      "development": false
+      "development": false,
+      "player_name": "Setup area"
     },
     "2": {
       "name": "Asylum",
@@ -74,7 +75,8 @@
     "14": {
       "name": "Avatar's House Earth",
       "category": "surface",
-      "development": false
+      "development": false,
+      "player_name": "Avatar's home"
     },
     "15": {
       "name": "Asylum Underground",
@@ -209,7 +211,8 @@
     "41": {
       "name": "Stonegate Fix",
       "category": "dungeon",
-      "development": false
+      "development": false,
+      "player_name": "Stonegate"
     },
     "42": {
       "name": "Map 42",

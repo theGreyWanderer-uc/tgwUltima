@@ -20,6 +20,8 @@ This project uses [Semantic Versioning](https://semver.org/):
   Preserve backups containing the selected archive, loose files and selector.
   Show missing selection neutrally, hide plain self-comparison confirmations,
   and check historical archives with working-file custody marked N/A.
+  Keep unavailable original-map comparisons as notes so healthy saves pass;
+  give actionable warning advice and friendlier map labels.
 
 - **U9 save-check advice:** select next steps by exact check ID and severity.
   Distinguish advisory nonfixed watermark

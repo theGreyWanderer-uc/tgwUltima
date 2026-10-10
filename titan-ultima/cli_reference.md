@@ -8008,6 +8008,10 @@ maps/NPCs/activities, archive members, hex inspection, and JSON/CSV exports.
 Details retain the complete checker evidence. Findings and overall loading
 advice come from the shipped `titan/u9/resources/save_wording.json`, keyed by
 check ID and severity; map names include development/test qualifications.
+Missing original map files leave a comparison note without raising the result;
+actual map differences and integrity problems still do. Warning advice gives
+the backup, try, recover and share-report path. Errors or unsafe results prohibit
+trying the save, including advice on otherwise harmless findings.
 
 ```powershell
 titan u9 save-browse [SOURCE] [--game-dir DIR] [--slot N]

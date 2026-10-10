@@ -116,6 +116,49 @@ def test_self_comparison_is_hidden_only_in_plain_view(save_install):
     assert "LAY01" in browser.render_integrity_report(report)
 
 
+def test_missing_reference_is_a_note_without_raising_any_verdict(save_install):
+    root, _, static, _ = save_install
+    report = check_save(root)
+    assert report.overall == report.verdict("compatibility") == "PASS"
+    plain = describe_u9_save_integrity(report)
+    (card,) = plain["cards"]
+    assert plain["summary"]["title"] == "No problems found"
+    assert card["key"] == "LAY04/WARN" and card["display_kind"] == "note"
+    assert card["affects_verdict"] is False
+    (finding,) = [f for f in report.to_dict()["findings"] if f["check_id"] == "LAY04"]
+    assert finding["severity"] == "WARN" and finding["affects_verdict"] is False
+    rendered = browser.render_integrity_report(report)
+    assert "Problems (0)\n  None" in rendered and "Comparison notes (1)" in rendered
+    assert "Note: Original map layout" in render_u9_plain_integrity(plain)
+    assert check_save(root, fixed_reference_directory=static).overall == report.overall
+
+
+@pytest.mark.parametrize(
+    "problem,expected",
+    [("difference", "ERROR"), ("missing", "FATAL"), ("size", "WARN")],
+)
+def test_optional_reference_note_does_not_hide_real_problems(
+    save_install, problem, expected
+):
+    root, save, static, reference = save_install
+    if problem == "difference":
+        original = bytearray((reference / "fixed.9").read_bytes())
+        original[-1] ^= 1
+        (reference / "fixed.9").write_bytes(original)
+        report = check_save(root, fixed_reference_directory=reference)
+    elif problem == "missing":
+        (static / "fixed.9").unlink()
+        report = check_save(root)
+    else:
+        mismatched = bytearray(_nonfixed())
+        struct.pack_into("<I", mismatched, 0x0C, 4096)
+        (save / "nonfixed.9").write_bytes(mismatched)
+        (save / "u9game4.sav").write_bytes(_archive(_processes(), bytes(mismatched)))
+        report = check_save(root)
+    assert report.overall == expected
+    assert describe_u9_save_integrity(report)["summary"]["result"] == expected
+
+
 def test_historical_archives_do_not_check_current_loose_files(save_install):
     root, save, static, reference = save_install
     (save / "processes.dat").write_bytes(b"another slot's state")
@@ -160,7 +203,7 @@ def test_unreadable_map_files_remain_reportable(save_install, monkeypatch, unrea
 
     monkeypatch.setattr(type(target), "read_bytes", read_bytes)
     report = check_save(root, fixed_reference_directory=reference)
-    assert report.overall == ("WARN" if unreadable == "reference" else "FATAL")
+    assert report.overall == ("PASS" if unreadable == "reference" else "FATAL")
     plain = describe_u9_save_integrity(report)
     assert plain["summary"]["result"] == report.overall
     assert any(
@@ -222,6 +265,7 @@ def test_portable_known_save_expectations_replay_from_structured_details(
                 "structure",
                 card["severity"],
                 "Technical message is deliberately irrelevant",
+                affects_verdict=card["affects_verdict"],
                 **context,
             )
     plain = describe_u9_save_integrity(report)
@@ -232,6 +276,68 @@ def test_portable_known_save_expectations_replay_from_structured_details(
         assert {
             key: value for key, value in actual.items() if key != "paths"
         } == expected
+
+
+@pytest.mark.parametrize(
+    "check_id", ["ARC10", "CUS04", "NFS01", "NFS07", "PRC02", "REF07"]
+)
+def test_warning_cards_offer_player_recovery_path_and_obey_loading_prohibition(
+    check_id,
+):
+    report = IntegrityReport("fixture", slot=4)
+    report.add(
+        check_id, "structure", "WARN", "technical", declared=4096, actual=0, maps=[9]
+    )
+    (card,) = describe_u9_save_integrity(report)["cards"]
+    assert "Keep a backup, then try loading" in card["what_to_do"]
+    assert "things are missing or out of place" in card["what_to_do"]
+    assert "an older save and save a report to share" in card["what_to_do"]
+    assert card["load_policy"] == "try_after_backup"
+    assert card["actions"] == ["backup", "try_load", "load_older_save", "send_report"]
+    report.add("NFS01", "structure", "FATAL", "unreadable", maps=[9])
+    blocked = next(
+        card
+        for card in describe_u9_save_integrity(report)["cards"]
+        if card["key"] == f"{check_id}/WARN"
+    )
+    assert "try loading" not in blocked["what_to_do"]
+    assert "before loading this save" in blocked["what_to_do"]
+    assert (
+        blocked["load_policy"] == "do_not_load" and "try_load" not in blocked["actions"]
+    )
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"requires_explicit_activation": False},
+        {"automatic_launch_allowed": True},
+        {"allowed_overall_results": ["PASS", "WARN", "ERROR"]},
+        {"allowed_overall_results": ["PASS", "WARN", "FATAL"]},
+    ],
+)
+def test_try_load_contract_requires_explicit_safe_activation(change):
+    catalog = json.loads(json.dumps(load_u9_save_wording()))
+    assert catalog["actions"]["try_load"]["launch_on_activation_allowed"] is True
+    catalog["actions"]["try_load"].update(change)
+    with pytest.raises(ValueError, match="unsafe try_load"):
+        validate_u9_save_wording(catalog)
+
+
+def test_player_map_names_preserve_catalogue_identity_and_classification():
+    for number, stored, player in [
+        (0, "The Lunch Room", "Setup area"),
+        (14, "Avatar's House Earth", "Avatar's home"),
+        (41, "Stonegate Fix", "Stonegate"),
+    ]:
+        record = describe_u9_browser_map(number)
+        assert record["name"] == stored and record["player_name"] == player
+        assert record["display_name"].startswith(f"{player} [map {number}]")
+        assert (
+            record["development"]
+            == load_u9_region_catalogue()["maps"][str(number)]["development"]
+        )
+    assert describe_u9_browser_map(9)["display_name"] == "Britannia [map 9]"
 
 
 def test_wording_covers_all_emitted_advice_and_information():

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "comparison_mode": "archive_only_no_creation_time_reference",
-  "note": "No original map reference is supplied, so healthy and cosmetic-only saves also report LAY04/WARN. Broken maps use the installed fixed set with the known damaged FIXED.9 substituted. Working-file custody is N/A.",
+  "note": "Without an original map reference, LAY04/WARN is a comparison note and does not raise the verdict. Healthy and cosmetic-only saves pass in both comparison modes. Broken maps use the installed fixed set with the known damaged FIXED.9 substituted. Working-file custody is N/A.",
   "cases": {
     "healthy_slot_4": {
       "archive_filename": "u9game4.sav",
@@ -11,17 +11,16 @@
         "9": "3e0a2d05beda571fc2183c69617f83ccedd88f1b0a520c6f2458fc727f77439b"
       },
       "slot": 4,
-      "overall": "WARN",
+      "overall": "PASS",
       "summary": {
-        "result": "WARN",
-        "title": "Review advised",
-        "meaning": "Some evidence is missing or uncertain. The save may still load; read the findings before deciding.",
-        "load_policy": "review_first",
-        "load_text": "Back up first, review the warnings, then decide whether to try loading.",
+        "result": "PASS",
+        "title": "No problems found",
+        "meaning": "The checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.",
+        "load_policy": "try_after_backup",
+        "load_text": "It is reasonable to try loading after making a backup.",
         "actions": [
           "backup",
           "try_load",
-          "load_older_save",
           "send_report"
         ]
       },
@@ -30,14 +29,16 @@
           "key": "LAY04/WARN",
           "check_id": "LAY04",
           "severity": "WARN",
+          "affects_verdict": false,
+          "display_kind": "note",
           "title": "Original map layout is unverified",
           "meanings": [
-            "There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9]."
+            "There is no trusted creation-time copy available for comparison with these installed maps: Setup area [map 0], Britannia [map 9]."
           ],
-          "what_to_do": "Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.",
-          "finding_load_policy": "review_first",
-          "load_policy": "review_first",
-          "load_text": "The save may still load; back up and review the available evidence first.",
+          "what_to_do": "An original map comparison is optional. Keep a backup before trying the save; if loading causes problems, use the backup or an older save and save a report to share.",
+          "finding_load_policy": "try_after_backup",
+          "load_policy": "try_after_backup",
+          "load_text": "It is reasonable to try loading after backup if no more serious findings apply.",
           "actions": [
             "backup",
             "choose_reference",
@@ -59,16 +60,15 @@
       "actions": [
         "backup",
         "try_load",
-        "load_older_save",
         "send_report",
         "choose_reference"
       ],
       "axes": {
         "custody": "N/A",
         "structure": "PASS",
-        "compatibility": "WARN"
+        "compatibility": "PASS"
       },
-      "plain_text": "Review advised\nSome evidence is missing or uncertain. The save may still load; read the findings before deciding.\nBack up first, review the warnings, then decide whether to try loading.\n\nOriginal map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9].\n  What you can do: Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.\n  Loading: The save may still load; back up and review the available evidence first."
+      "plain_text": "No problems found\nThe checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.\nIt is reasonable to try loading after making a backup.\n\nNote: Original map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: Setup area [map 0], Britannia [map 9].\n  What you can do: An original map comparison is optional. Keep a backup before trying the save; if loading causes problems, use the backup or an older save and save a report to share.\n  Loading: It is reasonable to try loading after backup if no more serious findings apply."
     },
     "broken_slot_631": {
       "archive_filename": "u9game631.sav",
@@ -122,13 +122,16 @@
           "backup",
           "load_older_save",
           "send_report"
-        ]
+        ],
+        "what_to_do": "Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save."
       },
       "cards": [
         {
           "key": "FXS04/FATAL",
           "check_id": "FXS04",
           "severity": "FATAL",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Installed map storage is damaged",
           "meanings": [
             "The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9]."
@@ -158,12 +161,14 @@
           "key": "LAY04/WARN",
           "check_id": "LAY04",
           "severity": "WARN",
+          "affects_verdict": false,
+          "display_kind": "note",
           "title": "Original map layout is unverified",
           "meanings": [
-            "There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Covetous Level 0 & 1 [map 16], Covetous Level 2 [map 17], Covetous Level 3 [map 18], Covetous Level 4 [map 19], Covetous Lift Shaft [map 20], Ethereal Void [map 22], Britain Sewers [map 24], New Despise [map 25], New Shame [map 27], Deceit 1 [map 35], Fake Moon Triggers [map 39], Ambrosia Sweet Ambrosia [map 40], Stonegate Fix [map 41], Deceit 2 [map 43], Abyss Dungeon Map [map 44], Wrong [map 45], Terfin dungeon [map 46], New Destard [map 47], Castle Prison [map 49], Hythloth Upper Levels [map 50], Valley of souls [map 51], Lb/Blackthorn fight [map 52], DropInAbyss [map 54], Bone Armor Ritual Map [map 55], Shame 2 [map 57], Ambrosia Sweet Ambrosia copy [map 58] (development/test), Water [map 61], Air [map 62], Earth [map 63], Fire [map 64], Buc2NewMag [map 89], Mariah's Basement [map 90]."
+            "There is no trusted creation-time copy available for comparison with these installed maps: Setup area [map 0], Britannia [map 9], Avatar's home [map 14], Covetous Level 0 & 1 [map 16], Covetous Level 2 [map 17], Covetous Level 3 [map 18], Covetous Level 4 [map 19], Covetous Lift Shaft [map 20], Ethereal Void [map 22], Britain Sewers [map 24], New Despise [map 25], New Shame [map 27], Deceit 1 [map 35], Fake Moon Triggers [map 39], Ambrosia Sweet Ambrosia [map 40], Stonegate [map 41], Deceit 2 [map 43], Abyss Dungeon Map [map 44], Wrong [map 45], Terfin dungeon [map 46], New Destard [map 47], Castle Prison [map 49], Hythloth Upper Levels [map 50], Valley of souls [map 51], Lb/Blackthorn fight [map 52], DropInAbyss [map 54], Bone Armor Ritual Map [map 55], Shame 2 [map 57], Ambrosia Sweet Ambrosia copy [map 58] (development/test), Water [map 61], Air [map 62], Earth [map 63], Fire [map 64], Buc2NewMag [map 89], Mariah's Basement [map 90]."
           ],
-          "what_to_do": "Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.",
-          "finding_load_policy": "review_first",
+          "what_to_do": "Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.",
+          "finding_load_policy": "try_after_backup",
           "load_policy": "do_not_load",
           "load_text": "Do not load or overwrite this save until the problem is resolved.",
           "actions": [
@@ -219,30 +224,33 @@
           "key": "NFS07/WARN",
           "check_id": "NFS07",
           "severity": "WARN",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Some saved map objects could not be checked",
           "meanings": [
-            "The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].",
-            "The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].",
-            "The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].",
-            "The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].",
-            "The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].",
-            "The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].",
-            "The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].",
-            "The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].",
-            "The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].",
-            "The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].",
-            "The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].",
-            "The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].",
-            "The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].",
-            "The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].",
-            "The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]."
+            "The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Stonegate [map 41]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]. Objects that could not be checked are not proven damaged or deleted."
           ],
-          "what_to_do": "Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.",
-          "finding_load_policy": "review_first",
+          "what_to_do": "Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.",
+          "finding_load_policy": "try_after_backup",
           "load_policy": "do_not_load",
           "load_text": "Do not load or overwrite this save until the problem is resolved.",
           "actions": [
             "backup",
+            "load_older_save",
             "send_report"
           ],
           "contexts": [
@@ -372,16 +380,19 @@
           "key": "REF07/WARN",
           "check_id": "REF07",
           "severity": "WARN",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Some linked objects could not be verified",
           "meanings": [
-            "The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]."
+            "The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]. These objects are unknown, not proven missing or damaged."
           ],
-          "what_to_do": "Review the uncertain map areas. These objects are unknown, not proven missing or damaged.",
-          "finding_load_policy": "review_first",
+          "what_to_do": "Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.",
+          "finding_load_policy": "try_after_backup",
           "load_policy": "do_not_load",
           "load_text": "Do not load or overwrite this save until the problem is resolved.",
           "actions": [
             "backup",
+            "load_older_save",
             "send_report"
           ],
           "contexts": [
@@ -407,7 +418,7 @@
         "structure": "FATAL",
         "compatibility": "WARN"
       },
-      "plain_text": "Unsafe to load\nA required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.\nDo not load or overwrite this save until the problem is resolved.\n\nInstalled map storage is damaged (FXS04/FATAL)\n  What this means: The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9].\n  What you can do: Preserve the maps and restore intact copies matching the save's original installation.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nOriginal map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Covetous Level 0 & 1 [map 16], Covetous Level 2 [map 17], Covetous Level 3 [map 18], Covetous Level 4 [map 19], Covetous Lift Shaft [map 20], Ethereal Void [map 22], Britain Sewers [map 24], New Despise [map 25], New Shame [map 27], Deceit 1 [map 35], Fake Moon Triggers [map 39], Ambrosia Sweet Ambrosia [map 40], Stonegate Fix [map 41], Deceit 2 [map 43], Abyss Dungeon Map [map 44], Wrong [map 45], Terfin dungeon [map 46], New Destard [map 47], Castle Prison [map 49], Hythloth Upper Levels [map 50], Valley of souls [map 51], Lb/Blackthorn fight [map 52], DropInAbyss [map 54], Bone Armor Ritual Map [map 55], Shame 2 [map 57], Ambrosia Sweet Ambrosia copy [map 58] (development/test), Water [map 61], Air [map 62], Earth [map 63], Fire [map 64], Buc2NewMag [map 89], Mariah's Basement [map 90].\n  What you can do: Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome saved map objects could not be checked (NFS07/WARN)\n  What this means: The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].\n  What this means: The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].\n  What this means: The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].\n  What this means: The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].\n  What this means: The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].\n  What this means: The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90].\n  What you can do: Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome linked objects could not be verified (REF07/WARN)\n  What this means: The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9].\n  What you can do: Review the uncertain map areas. These objects are unknown, not proven missing or damaged.\n  Loading: Do not load or overwrite this save until the problem is resolved."
+      "plain_text": "Unsafe to load\nA required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.\nDo not load or overwrite this save until the problem is resolved.\n\nInstalled map storage is damaged (FXS04/FATAL)\n  What this means: The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9].\n  What you can do: Preserve the maps and restore intact copies matching the save's original installation.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nNote: Original map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: Setup area [map 0], Britannia [map 9], Avatar's home [map 14], Covetous Level 0 & 1 [map 16], Covetous Level 2 [map 17], Covetous Level 3 [map 18], Covetous Level 4 [map 19], Covetous Lift Shaft [map 20], Ethereal Void [map 22], Britain Sewers [map 24], New Despise [map 25], New Shame [map 27], Deceit 1 [map 35], Fake Moon Triggers [map 39], Ambrosia Sweet Ambrosia [map 40], Stonegate [map 41], Deceit 2 [map 43], Abyss Dungeon Map [map 44], Wrong [map 45], Terfin dungeon [map 46], New Destard [map 47], Castle Prison [map 49], Hythloth Upper Levels [map 50], Valley of souls [map 51], Lb/Blackthorn fight [map 52], DropInAbyss [map 54], Bone Armor Ritual Map [map 55], Shame 2 [map 57], Ambrosia Sweet Ambrosia copy [map 58] (development/test), Water [map 61], Air [map 62], Earth [map 63], Fire [map 64], Buc2NewMag [map 89], Mariah's Basement [map 90].\n  What you can do: Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome saved map objects could not be checked (NFS07/WARN)\n  What this means: The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Stonegate [map 41]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]. Objects that could not be checked are not proven damaged or deleted.\n  What you can do: Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome linked objects could not be verified (REF07/WARN)\n  What this means: The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]. These objects are unknown, not proven missing or damaged.\n  What you can do: Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.\n  Loading: Do not load or overwrite this save until the problem is resolved."
     },
     "f14": {
       "archive_filename": "u9game14_f14_before_load.sav",
@@ -419,17 +430,16 @@
         "41": "186214dd2fc30c4d915cf00f300f276e55e9602da5427d360589d4d02811203e"
       },
       "slot": 14,
-      "overall": "WARN",
+      "overall": "PASS",
       "summary": {
-        "result": "WARN",
-        "title": "Review advised",
-        "meaning": "Some evidence is missing or uncertain. The save may still load; read the findings before deciding.",
-        "load_policy": "review_first",
-        "load_text": "Back up first, review the warnings, then decide whether to try loading.",
+        "result": "PASS",
+        "title": "No problems found",
+        "meaning": "The checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.",
+        "load_policy": "try_after_backup",
+        "load_text": "It is reasonable to try loading after making a backup.",
         "actions": [
           "backup",
           "try_load",
-          "load_older_save",
           "send_report"
         ]
       },
@@ -438,14 +448,16 @@
           "key": "LAY04/WARN",
           "check_id": "LAY04",
           "severity": "WARN",
+          "affects_verdict": false,
+          "display_kind": "note",
           "title": "Original map layout is unverified",
           "meanings": [
-            "There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Stonegate Fix [map 41]."
+            "There is no trusted creation-time copy available for comparison with these installed maps: Setup area [map 0], Britannia [map 9], Avatar's home [map 14], Stonegate [map 41]."
           ],
-          "what_to_do": "Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.",
-          "finding_load_policy": "review_first",
-          "load_policy": "review_first",
-          "load_text": "The save may still load; back up and review the available evidence first.",
+          "what_to_do": "An original map comparison is optional. Keep a backup before trying the save; if loading causes problems, use the backup or an older save and save a report to share.",
+          "finding_load_policy": "try_after_backup",
+          "load_policy": "try_after_backup",
+          "load_text": "It is reasonable to try loading after backup if no more serious findings apply.",
           "actions": [
             "backup",
             "choose_reference",
@@ -469,6 +481,8 @@
           "key": "PRC04/INFO",
           "check_id": "PRC04",
           "severity": "INFO",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Creeper plant growth stops after loading",
           "meanings": [
             "Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing."
@@ -494,16 +508,15 @@
       "actions": [
         "backup",
         "try_load",
-        "load_older_save",
         "send_report",
         "choose_reference"
       ],
       "axes": {
         "custody": "N/A",
         "structure": "PASS",
-        "compatibility": "WARN"
+        "compatibility": "PASS"
       },
-      "plain_text": "Review advised\nSome evidence is missing or uncertain. The save may still load; read the findings before deciding.\nBack up first, review the warnings, then decide whether to try loading.\n\nOriginal map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Stonegate Fix [map 41].\n  What you can do: Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.\n  Loading: The save may still load; back up and review the available evidence first.\n\nCreeper plant growth stops after loading (PRC04/INFO)\n  What this means: Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing.\n  What you can do: Keep a backup if you want to preserve the plants' current appearance. The rest of the save can load normally.\n  Loading: It is OK to try loading after backup; this is a cosmetic game issue."
+      "plain_text": "No problems found\nThe checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.\nIt is reasonable to try loading after making a backup.\n\nNote: Original map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: Setup area [map 0], Britannia [map 9], Avatar's home [map 14], Stonegate [map 41].\n  What you can do: An original map comparison is optional. Keep a backup before trying the save; if loading causes problems, use the backup or an older save and save a report to share.\n  Loading: It is reasonable to try loading after backup if no more serious findings apply.\n\nCreeper plant growth stops after loading (PRC04/INFO)\n  What this means: Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing.\n  What you can do: Keep a backup if you want to preserve the plants' current appearance. The rest of the save can load normally.\n  Loading: It is OK to try loading after backup; this is a cosmetic game issue."
     }
   },
   "self_reference_cases": {
@@ -594,13 +607,16 @@
           "backup",
           "load_older_save",
           "send_report"
-        ]
+        ],
+        "what_to_do": "Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save."
       },
       "cards": [
         {
           "key": "FXS04/FATAL",
           "check_id": "FXS04",
           "severity": "FATAL",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Installed map storage is damaged",
           "meanings": [
             "The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9]."
@@ -630,30 +646,33 @@
           "key": "NFS07/WARN",
           "check_id": "NFS07",
           "severity": "WARN",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Some saved map objects could not be checked",
           "meanings": [
-            "The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].",
-            "The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].",
-            "The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].",
-            "The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].",
-            "The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].",
-            "The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].",
-            "The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].",
-            "The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].",
-            "The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].",
-            "The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].",
-            "The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].",
-            "The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].",
-            "The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].",
-            "The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].",
-            "The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]."
+            "The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Stonegate [map 41]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50]. Objects that could not be checked are not proven damaged or deleted.",
+            "The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]. Objects that could not be checked are not proven damaged or deleted."
           ],
-          "what_to_do": "Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.",
-          "finding_load_policy": "review_first",
+          "what_to_do": "Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.",
+          "finding_load_policy": "try_after_backup",
           "load_policy": "do_not_load",
           "load_text": "Do not load or overwrite this save until the problem is resolved.",
           "actions": [
             "backup",
+            "load_older_save",
             "send_report"
           ],
           "contexts": [
@@ -783,16 +802,19 @@
           "key": "REF07/WARN",
           "check_id": "REF07",
           "severity": "WARN",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Some linked objects could not be verified",
           "meanings": [
-            "The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]."
+            "The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]. These objects are unknown, not proven missing or damaged."
           ],
-          "what_to_do": "Review the uncertain map areas. These objects are unknown, not proven missing or damaged.",
-          "finding_load_policy": "review_first",
+          "what_to_do": "Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.",
+          "finding_load_policy": "try_after_backup",
           "load_policy": "do_not_load",
           "load_text": "Do not load or overwrite this save until the problem is resolved.",
           "actions": [
             "backup",
+            "load_older_save",
             "send_report"
           ],
           "contexts": [
@@ -817,7 +839,7 @@
         "structure": "FATAL",
         "compatibility": "WARN"
       },
-      "plain_text": "Unsafe to load\nA required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.\nDo not load or overwrite this save until the problem is resolved.\nThe installed map files were compared with themselves. The map layout used when this save was made has not been verified.\n\nInstalled map storage is damaged (FXS04/FATAL)\n  What this means: The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9].\n  What you can do: Preserve the maps and restore intact copies matching the save's original installation.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome saved map objects could not be checked (NFS07/WARN)\n  What this means: The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].\n  What this means: The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].\n  What this means: The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].\n  What this means: The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].\n  What this means: The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].\n  What this means: The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90].\n  What you can do: Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome linked objects could not be verified (REF07/WARN)\n  What this means: The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9].\n  What you can do: Review the uncertain map areas. These objects are unknown, not proven missing or damaged.\n  Loading: Do not load or overwrite this save until the problem is resolved.",
+      "plain_text": "Unsafe to load\nA required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.\nDo not load or overwrite this save until the problem is resolved.\nThe installed map files were compared with themselves. The map layout used when this save was made has not been verified.\n\nInstalled map storage is damaged (FXS04/FATAL)\n  What this means: The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9].\n  What you can do: Preserve the maps and restore intact copies matching the save's original installation.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome saved map objects could not be checked (NFS07/WARN)\n  What this means: The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Stonegate [map 41]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50]. Objects that could not be checked are not proven damaged or deleted.\n  What this means: The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]. Objects that could not be checked are not proven damaged or deleted.\n  What you can do: Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome linked objects could not be verified (REF07/WARN)\n  What this means: The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]. These objects are unknown, not proven missing or damaged.\n  What you can do: Keep a backup, choose an older save to inspect, and save a report to share. Resolve the reported problems before loading this save.\n  Loading: Do not load or overwrite this save until the problem is resolved.",
       "self_reference": true
     },
     "f14": {
@@ -848,6 +870,8 @@
           "key": "PRC04/INFO",
           "check_id": "PRC04",
           "severity": "INFO",
+          "affects_verdict": true,
+          "display_kind": "finding",
           "title": "Creeper plant growth stops after loading",
           "meanings": [
             "Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing."

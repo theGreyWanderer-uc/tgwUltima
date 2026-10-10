@@ -328,8 +328,9 @@ def _u9_save_browser_html(report: dict[str, Any], technical_text: str) -> str:
             if (finding["check_id"], finding["severity"])
             == (card["check_id"], card["severity"])
         ]
+        prefix = "Note: " if card["display_kind"] == "note" else ""
         cards.append(
-            f"<article class='finding'><h2>{escaped(card['title'])} <small>{escaped(card['key'])}</small></h2>"
+            f"<article class='finding'><h2>{prefix}{escaped(card['title'])} <small>{escaped(card['key'])}</small></h2>"
             + "".join(
                 f"<p><b>What this means:</b> {escaped(meaning)}</p>"
                 for meaning in card["meanings"]

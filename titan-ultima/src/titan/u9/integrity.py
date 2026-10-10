@@ -93,7 +93,7 @@ RECOMMENDATIONS: dict[tuple[str, str], str] = {
     (
         "ARC10",
         "WARN",
-    ): "Inspect the archived maps numbered 240-255 and their provenance; these legal members alone do not establish corruption.",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
     (
         "CUS01",
         "FATAL",
@@ -109,7 +109,7 @@ RECOMMENDATIONS: dict[tuple[str, str], str] = {
     (
         "CUS04",
         "WARN",
-    ): "Inspect the unmatched loose nonfixed maps and establish their provenance before changing the working files.",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
     (
         "NFS01",
         "FATAL",
@@ -117,11 +117,11 @@ RECOMMENDATIONS: dict[tuple[str, str], str] = {
     (
         "NFS01",
         "WARN",
-    ): "Review the nonfixed payload watermark against the physical size; this advisory mismatch alone does not require repair.",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
     (
         "NFS07",
         "WARN",
-    ): "Preserve the nonfixed maps and investigate incomplete allocator recovery; unclassified slots remain unknown.",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
     (
         "FXS01",
         "FATAL",
@@ -149,7 +149,7 @@ RECOMMENDATIONS: dict[tuple[str, str], str] = {
     (
         "PRC02",
         "WARN",
-    ): "Preserve processes.dat and inspect the unreadable post-process sections; confirm the layout and parser coverage before deciding on repair.",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
     (
         "REF01",
         "FATAL",
@@ -169,7 +169,7 @@ RECOMMENDATIONS: dict[tuple[str, str], str] = {
     (
         "REF07",
         "WARN",
-    ): "Investigate allocator recovery for the named target pages; valid bounds do not prove target liveness, and unknown targets are not proven corrupt.",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
     (
         "LAY02",
         "ERROR",
@@ -177,7 +177,7 @@ RECOMMENDATIONS: dict[tuple[str, str], str] = {
     (
         "LAY04",
         "WARN",
-    ): "Supply a trusted creation-time fixed directory with --fixed-reference; missing comparison evidence alone does not establish corruption.",
+    ): "An original map comparison is optional. Keep a backup before trying the save; if loading causes problems, use the backup or an older save and save a report to share.",
 }
 
 
@@ -584,6 +584,7 @@ class IntegrityFinding:
     path: str | None = None
     offset: int | None = None
     details: dict[str, object] = field(default_factory=dict)
+    affects_verdict: bool = True
 
 
 @dataclass
@@ -606,6 +607,7 @@ class IntegrityReport:
         *,
         path: str | Path | None = None,
         offset: int | None = None,
+        affects_verdict: bool = True,
         **details: object,
     ) -> None:
         details.setdefault("slot", self.slot)
@@ -620,13 +622,18 @@ class IntegrityReport:
                 str(path) if path is not None else None,
                 offset,
                 details,
+                affects_verdict,
             )
         )
 
     def verdict(self, axis: str | None = None) -> str:
         if axis == "custody" and not self.custody_applicable:
             return "N/A"
-        relevant = [f for f in self.findings if axis is None or f.axis == axis]
+        relevant = [
+            f
+            for f in self.findings
+            if f.affects_verdict and (axis is None or f.axis == axis)
+        ]
         rank = max((SEVERITY_RANK[f.severity] for f in relevant), default=0)
         return ("PASS", "WARN", "ERROR", "FATAL")[rank]
 
@@ -1430,6 +1437,7 @@ def _check_save_archive(
                     "compatibility",
                     "WARN",
                     f"fixed.{map_number} cannot be compared with a trusted reference",
+                    affects_verdict=False,
                     path=reference or current,
                     map_number=map_number,
                     maps=[map_number],
@@ -1463,6 +1471,7 @@ def _check_save_archive(
             "compatibility",
             "WARN",
             "no creation-time fixed reference directory was supplied",
+            affects_verdict=False,
             count=len(relevant_maps),
             maps=sorted(relevant_maps),
         )
@@ -1870,9 +1879,18 @@ def render_integrity_report(report: IntegrityReport) -> str:
             f"  {axis.title():13} {report.verdict(axis):5}  {AXIS_DESCRIPTIONS[axis]}"
         )
 
-    actionable = [finding for finding in report.findings if finding.severity != "INFO"]
+    actionable = [
+        finding
+        for finding in report.findings
+        if finding.severity != "INFO" and finding.affects_verdict
+    ]
+    comparison_notes = [
+        finding for finding in report.findings if not finding.affects_verdict
+    ]
     confirmations = [
-        finding for finding in report.findings if finding.severity == "INFO"
+        finding
+        for finding in report.findings
+        if finding.severity == "INFO" and finding.affects_verdict
     ]
     problem_groups: dict[tuple[str, str, str, str], list[IntegrityFinding]] = {}
     for finding in actionable:
@@ -1927,6 +1945,14 @@ def render_integrity_report(report: IntegrityReport) -> str:
         if len(target_records) > 8:
             lines.append(
                 f"        Evidence: {len(target_records) - 8} more target records in JSON"
+            )
+
+    if comparison_notes:
+        lines.extend(("", f"Comparison notes ({len(comparison_notes)})"))
+        for finding in comparison_notes:
+            location = f" [{finding.path}]" if finding.path else ""
+            lines.append(
+                f"  {finding.severity} {finding.check_id}: {finding.message}{location}"
             )
 
     recommendations = report.recommendations()

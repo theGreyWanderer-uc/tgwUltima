@@ -713,8 +713,8 @@ class IntegrityTests(unittest.TestCase):
         evidence = report.artifacts["archive/processes.dat"]
         self.assertIsNone(evidence["process_sections"])
         rendered = render_integrity_report(report)
-        self.assertIn("PRC02 / WARN: Preserve processes.dat", rendered)
-        self.assertIn("confirm the layout and parser coverage", rendered)
+        self.assertIn("PRC02 / WARN: Keep a backup", rendered)
+        self.assertIn("an older save and save a report to share", rendered)
         self.assertNotIn("Do not load", rendered)
 
     def test_nonfixed_advice_distinguishes_watermark_from_unreadable_data(self) -> None:
@@ -724,7 +724,7 @@ class IntegrityTests(unittest.TestCase):
             (
                 "WARN",
                 bytes(watermark_mismatch),
-                "Review the nonfixed payload watermark",
+                "Keep a backup, then try loading",
             ),
             ("FATAL", b"unreadable", "Do not load the affected nonfixed maps"),
         ):
@@ -770,8 +770,8 @@ class IntegrityTests(unittest.TestCase):
         for item in recommendations:
             label = f"{item['check_id']} / {item['severity']}: {item['message']}"
             self.assertEqual(rendered.count(label), 1)
-        self.assertIn("establish their provenance before changing", rendered)
-        self.assertIn("advisory mismatch alone does not require repair", rendered)
+        self.assertIn("try loading if no more serious findings apply", rendered)
+        self.assertIn("things are missing or out of place", rendered)
         self.assertEqual(report.overall, "FATAL")
         self.assertEqual(len(report.findings), 6)
 
@@ -847,7 +847,7 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(report.verdict("structure"), "PASS")
         self.assertEqual(report.verdict("compatibility"), "PASS")
         rendered = render_integrity_report(report)
-        self.assertIn("ARC10 / WARN: Inspect the archived maps", rendered)
+        self.assertIn("ARC10 / WARN: Keep a backup, then try loading", rendered)
         self.assertNotIn("recover", rendered)
 
     def test_missing_fixed_map_is_a_compatibility_failure(self) -> None:
