@@ -8001,6 +8001,40 @@ titan u9 color-cube-csv static/yiqccube.dat
 
 ### Save integrity commands
 
+#### `u9 save-browse`
+
+Open a U7/U8-style save browser with plain integrity findings, paged searchable
+maps/NPCs/activities, archive members, hex inspection, and JSON/CSV exports.
+Details retain the complete checker evidence. Findings and overall loading
+advice come from the shipped `titan/u9/resources/save_wording.json`, keyed by
+check ID and severity; map names include development/test qualifications.
+
+```powershell
+titan u9 save-browse [SOURCE] [--game-dir DIR] [--slot N]
+                     [--static DIR] [--fixed-reference DIR] [-o DIR] [--report]
+```
+
+A folder checks the current working selection; an explicit `.sav` file checks
+that archive independently, with loose-file custody N/A. `--slot` applies only
+to folders. Without SOURCE the browser offers a save picker. Missing `start.dat`
+shows “No save selected”; damaged existing selectors remain errors. Refresh
+rereads selection unless `--slot` was explicit.
+
+`--report` writes an offline HTML report without interactive prompts. The report
+includes plain findings, Details expanders, Copy report, and complete JSON.
+Interactive backups copy the selected archive and all current top-level loose
+files, including `start.dat`, into a fresh `u9-save-slot-N-<UTC timestamp>` folder
+with a verified manifest. Historical archives' loose files are identified as
+today's working snapshot. Extracting a save creates a separate inspection copy.
+Earlier exports and backups are preserved; source data cannot be an output.
+
+```powershell
+titan u9 save-browse --game-dir C:\Ultima\Ultima9
+titan u9 save-browse C:\archives\u9game4.sav --static C:\Ultima\Ultima9\static --report -o C:\reports\u9
+```
+
+---
+
 #### `u9 save-check`
 
 Verify the selected save archive, its extracted working files, nonfixed/fixed
@@ -9201,6 +9235,7 @@ A value on the command line always wins.
 | `u9 color-cube-lookup` | Show the palette index chosen for one colour |
 | `u9 color-cube-csv` | Export colour-cube tree nodes to CSV |
 | `u9 save-check` | Verify a save archive and its working files: allocator structure, every stored item handle's target, and fixed-file compatibility, reported as separate custody, structure and compatibility verdicts |
+| `u9 save-browse` | Browse selected or historical saves, plain integrity findings, maps, NPCs and activities; export offline reports and verified preserving backups |
 | `uo art-export` | Export UO land/static art to PNG |
 | `uo gump-export` | Export UO gumps to PNG |
 | `uo texture-export` | Export UO land textures to PNG |

@@ -1,0 +1,887 @@
+{
+  "schema_version": 1,
+  "comparison_mode": "archive_only_no_creation_time_reference",
+  "note": "No original map reference is supplied, so healthy and cosmetic-only saves also report LAY04/WARN. Broken maps use the installed fixed set with the known damaged FIXED.9 substituted. Working-file custody is N/A.",
+  "cases": {
+    "healthy_slot_4": {
+      "archive_filename": "u9game4.sav",
+      "archive_sha256": "c8894b1b69f971d46f18ae8c2406e158693bef2f82f1b3fa6fb196f7961c3634",
+      "fixed_sha256": {
+        "0": "9a47829396408d943f69a1ada2c37d1e1cbf3fd56c801ef740771857cf8601f2",
+        "9": "3e0a2d05beda571fc2183c69617f83ccedd88f1b0a520c6f2458fc727f77439b"
+      },
+      "slot": 4,
+      "overall": "WARN",
+      "summary": {
+        "result": "WARN",
+        "title": "Review advised",
+        "meaning": "Some evidence is missing or uncertain. The save may still load; read the findings before deciding.",
+        "load_policy": "review_first",
+        "load_text": "Back up first, review the warnings, then decide whether to try loading.",
+        "actions": [
+          "backup",
+          "try_load",
+          "load_older_save",
+          "send_report"
+        ]
+      },
+      "cards": [
+        {
+          "key": "LAY04/WARN",
+          "check_id": "LAY04",
+          "severity": "WARN",
+          "title": "Original map layout is unverified",
+          "meanings": [
+            "There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9]."
+          ],
+          "what_to_do": "Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.",
+          "finding_load_policy": "review_first",
+          "load_policy": "review_first",
+          "load_text": "The save may still load; back up and review the available evidence first.",
+          "actions": [
+            "backup",
+            "choose_reference",
+            "try_load",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 2,
+              "maps": [
+                0,
+                9
+              ],
+              "slot": 4
+            }
+          ]
+        }
+      ],
+      "actions": [
+        "backup",
+        "try_load",
+        "load_older_save",
+        "send_report",
+        "choose_reference"
+      ],
+      "axes": {
+        "custody": "N/A",
+        "structure": "PASS",
+        "compatibility": "WARN"
+      },
+      "plain_text": "Review advised\nSome evidence is missing or uncertain. The save may still load; read the findings before deciding.\nBack up first, review the warnings, then decide whether to try loading.\n\nOriginal map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9].\n  What you can do: Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.\n  Loading: The save may still load; back up and review the available evidence first."
+    },
+    "broken_slot_631": {
+      "archive_filename": "u9game631.sav",
+      "archive_sha256": "ea36e3d80d3146fa4fdaf9906e491e491cc1ac7c88ec4dfe290cca5de1c62260",
+      "fixed_sha256": {
+        "0": "9a47829396408d943f69a1ada2c37d1e1cbf3fd56c801ef740771857cf8601f2",
+        "9": "96ab858841cacfb78fdc3b36ee96d753be5eab220a8aabbd7e54eceee0a8fd24",
+        "14": "890cde641c4b844e6b3ddb9f6cb42c749e9e67584b2b27282ece03d564356ccb",
+        "16": "dd2c82a3990d6e4f1e422efeed6d3f4bb2afca0eb440e6f974a1a7750bbe28c3",
+        "17": "bef8b3a01bef79f3716d8d02623cc6f1fad2f8dfc281608d506a42c8d6e6aa4a",
+        "18": "00d5d403844ea51cb2573d185808af90882c39f23019fcf87b38dcc8c9aeeca0",
+        "19": "f41ab29abe0424208bb08ce410541531fd0c519fd5f8e3f037dcbc65e63b5e68",
+        "20": "dbc66eaf71e128970a83965416596c5456b72a91a69bb37313e880e97bbbed3c",
+        "22": "78f8bef00e1bee11c35cdf58d4e861a8aa37a47ae8e38d158fab1356b0c94799",
+        "24": "e8acaa9687cee8891140ddbd5d9ef2716ef7686b7d0de3e511ea83e93b79eb86",
+        "25": "875fce87eb03ea25d32f63b93f8c474a47acf11868c0d250378f271dea7e6dac",
+        "27": "15bf91888cbbbf53bbf889cd4406809278beee73c900405ed81496f6d71aed6a",
+        "35": "ab3f9eb3d795403f75a40ac6b6398eafc1c5c7c7a8fadd5c0cab4ff5a9d12e67",
+        "39": "de99a0bb525adfa2d3643816409d8247adb2fda70b9f9203cb82c6cdaaf9b681",
+        "40": "1e78222244fdf77554ae1550932eb4b584390cb44d6c4bc2f7593fc5ef7ff46a",
+        "41": "186214dd2fc30c4d915cf00f300f276e55e9602da5427d360589d4d02811203e",
+        "43": "55cc829545b5a647930aaf894761eb856bf67584d15e6fa9bc65156fbc6bf9b8",
+        "44": "3ea4675ee91b6339b92232e1bf056c9ba001532cc4f0a567696eb53fb72cf08f",
+        "45": "cc36ea87bd0538dd92ddcaedf3b44be123a740287617a8c77ad9f7efe743cb36",
+        "46": "f82c9e4c84f23837d915125d21c25a62affb21eb19f9913ce118fbe41fc19d88",
+        "47": "5e541477c6a7b28ecc5e29e7c9c45c0c56df3a179720c179823b30112c77f4a9",
+        "49": "add7526364b9f5de178da365a880c2e6fb94ae462f06990806248727f63d58ba",
+        "50": "1ea3efc60dc194045a9855ce79c2bacc461142c656ee4efc8beed2aa5d5a9f8e",
+        "51": "93abb2dd8914380db1352d86d3fae7b5bbb45eb3a1cf79b1fbd8f264d66f2aa0",
+        "52": "14db8a04e927a6b060ce75df26ad873620986685f18b32447c661fdfb8615afe",
+        "54": "5bea322abd5cc1a6b39d4a1a8633bd50701967d6729aa7b27fde2e0037014540",
+        "55": "b961ffb2a4591499955fa4a934ee4149319643ab1b870a46b65bfd977e44ffad",
+        "57": "86c173b3c1b24922c7349cb0c3be96eb4c1ebff0482cd5b1d9b9f0317c81b044",
+        "58": "9baad636e09c1280d60f47c5360672ded48b7c609509bce47dc2619f4b8d5fe8",
+        "61": "0febb409dd93dee6848bc4279e95ec13ac9e68851933d925653bd92200ad1423",
+        "62": "77c79149fb3d88436c8145fe94850c3855d03acea2153067e1d30cb26ef2de10",
+        "63": "7b3ec113d589b9564580230f3ef55d1865bfd03f4e2b32d3524e948f1d641354",
+        "64": "ad0c932afb9f6600dc0eaf198c140a96d77b55a77ed70a8d5fae0077983efcb0",
+        "89": "42425d6af740bbc45f0fdf366e9cf7ce8dcdb70894d33ea0d1edd26495a244eb",
+        "90": "ce7cd3d862c71d888afb3a94797e4f4687e49d11fd98f93976c9405a7d6e3168"
+      },
+      "slot": 631,
+      "overall": "FATAL",
+      "summary": {
+        "result": "FATAL",
+        "title": "Unsafe to load",
+        "meaning": "A required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.",
+        "load_policy": "do_not_load",
+        "load_text": "Do not load or overwrite this save until the problem is resolved.",
+        "actions": [
+          "backup",
+          "load_older_save",
+          "send_report"
+        ]
+      },
+      "cards": [
+        {
+          "key": "FXS04/FATAL",
+          "check_id": "FXS04",
+          "severity": "FATAL",
+          "title": "Installed map storage is damaged",
+          "meanings": [
+            "The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9]."
+          ],
+          "what_to_do": "Preserve the maps and restore intact copies matching the save's original installation.",
+          "finding_load_policy": "do_not_load",
+          "load_policy": "do_not_load",
+          "load_text": "Do not load or overwrite this save until the problem is resolved.",
+          "actions": [
+            "backup",
+            "restore_install",
+            "load_older_save",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 307,
+              "map_number": 9,
+              "maps": [
+                9
+              ],
+              "slot": 631
+            }
+          ]
+        },
+        {
+          "key": "LAY04/WARN",
+          "check_id": "LAY04",
+          "severity": "WARN",
+          "title": "Original map layout is unverified",
+          "meanings": [
+            "There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Covetous Level 0 & 1 [map 16], Covetous Level 2 [map 17], Covetous Level 3 [map 18], Covetous Level 4 [map 19], Covetous Lift Shaft [map 20], Ethereal Void [map 22], Britain Sewers [map 24], New Despise [map 25], New Shame [map 27], Deceit 1 [map 35], Fake Moon Triggers [map 39], Ambrosia Sweet Ambrosia [map 40], Stonegate Fix [map 41], Deceit 2 [map 43], Abyss Dungeon Map [map 44], Wrong [map 45], Terfin dungeon [map 46], New Destard [map 47], Castle Prison [map 49], Hythloth Upper Levels [map 50], Valley of souls [map 51], Lb/Blackthorn fight [map 52], DropInAbyss [map 54], Bone Armor Ritual Map [map 55], Shame 2 [map 57], Ambrosia Sweet Ambrosia copy [map 58] (development/test), Water [map 61], Air [map 62], Earth [map 63], Fire [map 64], Buc2NewMag [map 89], Mariah's Basement [map 90]."
+          ],
+          "what_to_do": "Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.",
+          "finding_load_policy": "review_first",
+          "load_policy": "do_not_load",
+          "load_text": "Do not load or overwrite this save until the problem is resolved.",
+          "actions": [
+            "backup",
+            "choose_reference",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 35,
+              "maps": [
+                0,
+                9,
+                14,
+                16,
+                17,
+                18,
+                19,
+                20,
+                22,
+                24,
+                25,
+                27,
+                35,
+                39,
+                40,
+                41,
+                43,
+                44,
+                45,
+                46,
+                47,
+                49,
+                50,
+                51,
+                52,
+                54,
+                55,
+                57,
+                58,
+                61,
+                62,
+                63,
+                64,
+                89,
+                90
+              ],
+              "slot": 631
+            }
+          ]
+        },
+        {
+          "key": "NFS07/WARN",
+          "check_id": "NFS07",
+          "severity": "WARN",
+          "title": "Some saved map objects could not be checked",
+          "meanings": [
+            "The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].",
+            "The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].",
+            "The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].",
+            "The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].",
+            "The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].",
+            "The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].",
+            "The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].",
+            "The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].",
+            "The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].",
+            "The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].",
+            "The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].",
+            "The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].",
+            "The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].",
+            "The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].",
+            "The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]."
+          ],
+          "what_to_do": "Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.",
+          "finding_load_policy": "review_first",
+          "load_policy": "do_not_load",
+          "load_text": "Do not load or overwrite this save until the problem is resolved.",
+          "actions": [
+            "backup",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 136,
+              "map_number": 9,
+              "maps": [
+                9
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 17,
+              "maps": [
+                17
+              ],
+              "slot": 631
+            },
+            {
+              "count": 6,
+              "map_number": 19,
+              "maps": [
+                19
+              ],
+              "slot": 631
+            },
+            {
+              "count": 3,
+              "map_number": 20,
+              "maps": [
+                20
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 22,
+              "maps": [
+                22
+              ],
+              "slot": 631
+            },
+            {
+              "count": 9,
+              "map_number": 25,
+              "maps": [
+                25
+              ],
+              "slot": 631
+            },
+            {
+              "count": 13,
+              "map_number": 35,
+              "maps": [
+                35
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 41,
+              "maps": [
+                41
+              ],
+              "slot": 631
+            },
+            {
+              "count": 3,
+              "map_number": 43,
+              "maps": [
+                43
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 44,
+              "maps": [
+                44
+              ],
+              "slot": 631
+            },
+            {
+              "count": 9,
+              "map_number": 45,
+              "maps": [
+                45
+              ],
+              "slot": 631
+            },
+            {
+              "count": 3,
+              "map_number": 46,
+              "maps": [
+                46
+              ],
+              "slot": 631
+            },
+            {
+              "count": 17,
+              "map_number": 47,
+              "maps": [
+                47
+              ],
+              "slot": 631
+            },
+            {
+              "count": 8,
+              "map_number": 50,
+              "maps": [
+                50
+              ],
+              "slot": 631
+            },
+            {
+              "count": 2,
+              "map_number": 90,
+              "maps": [
+                90
+              ],
+              "slot": 631
+            }
+          ]
+        },
+        {
+          "key": "REF07/WARN",
+          "check_id": "REF07",
+          "severity": "WARN",
+          "title": "Some linked objects could not be verified",
+          "meanings": [
+            "The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]."
+          ],
+          "what_to_do": "Review the uncertain map areas. These objects are unknown, not proven missing or damaged.",
+          "finding_load_policy": "review_first",
+          "load_policy": "do_not_load",
+          "load_text": "Do not load or overwrite this save until the problem is resolved.",
+          "actions": [
+            "backup",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 34,
+              "maps": [
+                9
+              ],
+              "slot": 631
+            }
+          ]
+        }
+      ],
+      "actions": [
+        "backup",
+        "load_older_save",
+        "send_report",
+        "restore_install",
+        "choose_reference"
+      ],
+      "axes": {
+        "custody": "N/A",
+        "structure": "FATAL",
+        "compatibility": "WARN"
+      },
+      "plain_text": "Unsafe to load\nA required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.\nDo not load or overwrite this save until the problem is resolved.\n\nInstalled map storage is damaged (FXS04/FATAL)\n  What this means: The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9].\n  What you can do: Preserve the maps and restore intact copies matching the save's original installation.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nOriginal map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Covetous Level 0 & 1 [map 16], Covetous Level 2 [map 17], Covetous Level 3 [map 18], Covetous Level 4 [map 19], Covetous Lift Shaft [map 20], Ethereal Void [map 22], Britain Sewers [map 24], New Despise [map 25], New Shame [map 27], Deceit 1 [map 35], Fake Moon Triggers [map 39], Ambrosia Sweet Ambrosia [map 40], Stonegate Fix [map 41], Deceit 2 [map 43], Abyss Dungeon Map [map 44], Wrong [map 45], Terfin dungeon [map 46], New Destard [map 47], Castle Prison [map 49], Hythloth Upper Levels [map 50], Valley of souls [map 51], Lb/Blackthorn fight [map 52], DropInAbyss [map 54], Bone Armor Ritual Map [map 55], Shame 2 [map 57], Ambrosia Sweet Ambrosia copy [map 58] (development/test), Water [map 61], Air [map 62], Earth [map 63], Fire [map 64], Buc2NewMag [map 89], Mariah's Basement [map 90].\n  What you can do: Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome saved map objects could not be checked (NFS07/WARN)\n  What this means: The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].\n  What this means: The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].\n  What this means: The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].\n  What this means: The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].\n  What this means: The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].\n  What this means: The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90].\n  What you can do: Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome linked objects could not be verified (REF07/WARN)\n  What this means: The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9].\n  What you can do: Review the uncertain map areas. These objects are unknown, not proven missing or damaged.\n  Loading: Do not load or overwrite this save until the problem is resolved."
+    },
+    "f14": {
+      "archive_filename": "u9game14_f14_before_load.sav",
+      "archive_sha256": "b3e6be3356e7a3737a968a44b1cc64888363fd93d64a72b41b73d3381e1ca119",
+      "fixed_sha256": {
+        "0": "9a47829396408d943f69a1ada2c37d1e1cbf3fd56c801ef740771857cf8601f2",
+        "9": "3e0a2d05beda571fc2183c69617f83ccedd88f1b0a520c6f2458fc727f77439b",
+        "14": "890cde641c4b844e6b3ddb9f6cb42c749e9e67584b2b27282ece03d564356ccb",
+        "41": "186214dd2fc30c4d915cf00f300f276e55e9602da5427d360589d4d02811203e"
+      },
+      "slot": 14,
+      "overall": "WARN",
+      "summary": {
+        "result": "WARN",
+        "title": "Review advised",
+        "meaning": "Some evidence is missing or uncertain. The save may still load; read the findings before deciding.",
+        "load_policy": "review_first",
+        "load_text": "Back up first, review the warnings, then decide whether to try loading.",
+        "actions": [
+          "backup",
+          "try_load",
+          "load_older_save",
+          "send_report"
+        ]
+      },
+      "cards": [
+        {
+          "key": "LAY04/WARN",
+          "check_id": "LAY04",
+          "severity": "WARN",
+          "title": "Original map layout is unverified",
+          "meanings": [
+            "There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Stonegate Fix [map 41]."
+          ],
+          "what_to_do": "Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.",
+          "finding_load_policy": "review_first",
+          "load_policy": "review_first",
+          "load_text": "The save may still load; back up and review the available evidence first.",
+          "actions": [
+            "backup",
+            "choose_reference",
+            "try_load",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 4,
+              "maps": [
+                0,
+                9,
+                14,
+                41
+              ],
+              "slot": 14
+            }
+          ]
+        },
+        {
+          "key": "PRC04/INFO",
+          "check_id": "PRC04",
+          "severity": "INFO",
+          "title": "Creeper plant growth stops after loading",
+          "meanings": [
+            "Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing."
+          ],
+          "what_to_do": "Keep a backup if you want to preserve the plants' current appearance. The rest of the save can load normally.",
+          "finding_load_policy": "try_after_backup",
+          "load_policy": "try_after_backup",
+          "load_text": "It is OK to try loading after backup; this is a cosmetic game issue.",
+          "actions": [
+            "backup",
+            "try_load",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 1,
+              "slot": 14,
+              "maps": []
+            }
+          ]
+        }
+      ],
+      "actions": [
+        "backup",
+        "try_load",
+        "load_older_save",
+        "send_report",
+        "choose_reference"
+      ],
+      "axes": {
+        "custody": "N/A",
+        "structure": "PASS",
+        "compatibility": "WARN"
+      },
+      "plain_text": "Review advised\nSome evidence is missing or uncertain. The save may still load; read the findings before deciding.\nBack up first, review the warnings, then decide whether to try loading.\n\nOriginal map layout is unverified (LAY04/WARN)\n  What this means: There is no trusted creation-time copy available for comparison with these installed maps: The Lunch Room [map 0], Britannia [map 9], Avatar's House Earth [map 14], Stonegate Fix [map 41].\n  What you can do: Choose a trusted copy of the map files from when this save was made. Missing comparison evidence alone does not prove damage.\n  Loading: The save may still load; back up and review the available evidence first.\n\nCreeper plant growth stops after loading (PRC04/INFO)\n  What this means: Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing.\n  What you can do: Keep a backup if you want to preserve the plants' current appearance. The rest of the save can load normally.\n  Loading: It is OK to try loading after backup; this is a cosmetic game issue."
+    }
+  },
+  "self_reference_cases": {
+    "healthy_slot_4": {
+      "archive_filename": "u9game4.sav",
+      "archive_sha256": "c8894b1b69f971d46f18ae8c2406e158693bef2f82f1b3fa6fb196f7961c3634",
+      "fixed_sha256": {
+        "0": "9a47829396408d943f69a1ada2c37d1e1cbf3fd56c801ef740771857cf8601f2",
+        "9": "3e0a2d05beda571fc2183c69617f83ccedd88f1b0a520c6f2458fc727f77439b"
+      },
+      "slot": 4,
+      "overall": "PASS",
+      "summary": {
+        "result": "PASS",
+        "title": "No problems found",
+        "meaning": "The checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.",
+        "load_policy": "try_after_backup",
+        "load_text": "It is reasonable to try loading after making a backup.",
+        "actions": [
+          "backup",
+          "try_load",
+          "send_report"
+        ]
+      },
+      "cards": [],
+      "actions": [
+        "backup",
+        "try_load",
+        "send_report"
+      ],
+      "axes": {
+        "custody": "N/A",
+        "structure": "PASS",
+        "compatibility": "PASS"
+      },
+      "plain_text": "No problems found\nThe checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.\nIt is reasonable to try loading after making a backup.\nThe installed map files were compared with themselves. The map layout used when this save was made has not been verified.",
+      "self_reference": true
+    },
+    "broken_slot_631": {
+      "archive_filename": "u9game631.sav",
+      "archive_sha256": "ea36e3d80d3146fa4fdaf9906e491e491cc1ac7c88ec4dfe290cca5de1c62260",
+      "fixed_sha256": {
+        "0": "9a47829396408d943f69a1ada2c37d1e1cbf3fd56c801ef740771857cf8601f2",
+        "9": "96ab858841cacfb78fdc3b36ee96d753be5eab220a8aabbd7e54eceee0a8fd24",
+        "14": "890cde641c4b844e6b3ddb9f6cb42c749e9e67584b2b27282ece03d564356ccb",
+        "16": "dd2c82a3990d6e4f1e422efeed6d3f4bb2afca0eb440e6f974a1a7750bbe28c3",
+        "17": "bef8b3a01bef79f3716d8d02623cc6f1fad2f8dfc281608d506a42c8d6e6aa4a",
+        "18": "00d5d403844ea51cb2573d185808af90882c39f23019fcf87b38dcc8c9aeeca0",
+        "19": "f41ab29abe0424208bb08ce410541531fd0c519fd5f8e3f037dcbc65e63b5e68",
+        "20": "dbc66eaf71e128970a83965416596c5456b72a91a69bb37313e880e97bbbed3c",
+        "22": "78f8bef00e1bee11c35cdf58d4e861a8aa37a47ae8e38d158fab1356b0c94799",
+        "24": "e8acaa9687cee8891140ddbd5d9ef2716ef7686b7d0de3e511ea83e93b79eb86",
+        "25": "875fce87eb03ea25d32f63b93f8c474a47acf11868c0d250378f271dea7e6dac",
+        "27": "15bf91888cbbbf53bbf889cd4406809278beee73c900405ed81496f6d71aed6a",
+        "35": "ab3f9eb3d795403f75a40ac6b6398eafc1c5c7c7a8fadd5c0cab4ff5a9d12e67",
+        "39": "de99a0bb525adfa2d3643816409d8247adb2fda70b9f9203cb82c6cdaaf9b681",
+        "40": "1e78222244fdf77554ae1550932eb4b584390cb44d6c4bc2f7593fc5ef7ff46a",
+        "41": "186214dd2fc30c4d915cf00f300f276e55e9602da5427d360589d4d02811203e",
+        "43": "55cc829545b5a647930aaf894761eb856bf67584d15e6fa9bc65156fbc6bf9b8",
+        "44": "3ea4675ee91b6339b92232e1bf056c9ba001532cc4f0a567696eb53fb72cf08f",
+        "45": "cc36ea87bd0538dd92ddcaedf3b44be123a740287617a8c77ad9f7efe743cb36",
+        "46": "f82c9e4c84f23837d915125d21c25a62affb21eb19f9913ce118fbe41fc19d88",
+        "47": "5e541477c6a7b28ecc5e29e7c9c45c0c56df3a179720c179823b30112c77f4a9",
+        "49": "add7526364b9f5de178da365a880c2e6fb94ae462f06990806248727f63d58ba",
+        "50": "1ea3efc60dc194045a9855ce79c2bacc461142c656ee4efc8beed2aa5d5a9f8e",
+        "51": "93abb2dd8914380db1352d86d3fae7b5bbb45eb3a1cf79b1fbd8f264d66f2aa0",
+        "52": "14db8a04e927a6b060ce75df26ad873620986685f18b32447c661fdfb8615afe",
+        "54": "5bea322abd5cc1a6b39d4a1a8633bd50701967d6729aa7b27fde2e0037014540",
+        "55": "b961ffb2a4591499955fa4a934ee4149319643ab1b870a46b65bfd977e44ffad",
+        "57": "86c173b3c1b24922c7349cb0c3be96eb4c1ebff0482cd5b1d9b9f0317c81b044",
+        "58": "9baad636e09c1280d60f47c5360672ded48b7c609509bce47dc2619f4b8d5fe8",
+        "61": "0febb409dd93dee6848bc4279e95ec13ac9e68851933d925653bd92200ad1423",
+        "62": "77c79149fb3d88436c8145fe94850c3855d03acea2153067e1d30cb26ef2de10",
+        "63": "7b3ec113d589b9564580230f3ef55d1865bfd03f4e2b32d3524e948f1d641354",
+        "64": "ad0c932afb9f6600dc0eaf198c140a96d77b55a77ed70a8d5fae0077983efcb0",
+        "89": "42425d6af740bbc45f0fdf366e9cf7ce8dcdb70894d33ea0d1edd26495a244eb",
+        "90": "ce7cd3d862c71d888afb3a94797e4f4687e49d11fd98f93976c9405a7d6e3168"
+      },
+      "slot": 631,
+      "overall": "FATAL",
+      "summary": {
+        "result": "FATAL",
+        "title": "Unsafe to load",
+        "meaning": "A required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.",
+        "load_policy": "do_not_load",
+        "load_text": "Do not load or overwrite this save until the problem is resolved.",
+        "actions": [
+          "backup",
+          "load_older_save",
+          "send_report"
+        ]
+      },
+      "cards": [
+        {
+          "key": "FXS04/FATAL",
+          "check_id": "FXS04",
+          "severity": "FATAL",
+          "title": "Installed map storage is damaged",
+          "meanings": [
+            "The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9]."
+          ],
+          "what_to_do": "Preserve the maps and restore intact copies matching the save's original installation.",
+          "finding_load_policy": "do_not_load",
+          "load_policy": "do_not_load",
+          "load_text": "Do not load or overwrite this save until the problem is resolved.",
+          "actions": [
+            "backup",
+            "restore_install",
+            "load_older_save",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 307,
+              "map_number": 9,
+              "maps": [
+                9
+              ],
+              "slot": 631
+            }
+          ]
+        },
+        {
+          "key": "NFS07/WARN",
+          "check_id": "NFS07",
+          "severity": "WARN",
+          "title": "Some saved map objects could not be checked",
+          "meanings": [
+            "The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].",
+            "The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].",
+            "The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].",
+            "The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].",
+            "The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].",
+            "The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].",
+            "The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].",
+            "The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].",
+            "The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].",
+            "The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].",
+            "The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].",
+            "The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].",
+            "The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].",
+            "The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].",
+            "The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90]."
+          ],
+          "what_to_do": "Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.",
+          "finding_load_policy": "review_first",
+          "load_policy": "do_not_load",
+          "load_text": "Do not load or overwrite this save until the problem is resolved.",
+          "actions": [
+            "backup",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 136,
+              "map_number": 9,
+              "maps": [
+                9
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 17,
+              "maps": [
+                17
+              ],
+              "slot": 631
+            },
+            {
+              "count": 6,
+              "map_number": 19,
+              "maps": [
+                19
+              ],
+              "slot": 631
+            },
+            {
+              "count": 3,
+              "map_number": 20,
+              "maps": [
+                20
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 22,
+              "maps": [
+                22
+              ],
+              "slot": 631
+            },
+            {
+              "count": 9,
+              "map_number": 25,
+              "maps": [
+                25
+              ],
+              "slot": 631
+            },
+            {
+              "count": 13,
+              "map_number": 35,
+              "maps": [
+                35
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 41,
+              "maps": [
+                41
+              ],
+              "slot": 631
+            },
+            {
+              "count": 3,
+              "map_number": 43,
+              "maps": [
+                43
+              ],
+              "slot": 631
+            },
+            {
+              "count": 4,
+              "map_number": 44,
+              "maps": [
+                44
+              ],
+              "slot": 631
+            },
+            {
+              "count": 9,
+              "map_number": 45,
+              "maps": [
+                45
+              ],
+              "slot": 631
+            },
+            {
+              "count": 3,
+              "map_number": 46,
+              "maps": [
+                46
+              ],
+              "slot": 631
+            },
+            {
+              "count": 17,
+              "map_number": 47,
+              "maps": [
+                47
+              ],
+              "slot": 631
+            },
+            {
+              "count": 8,
+              "map_number": 50,
+              "maps": [
+                50
+              ],
+              "slot": 631
+            },
+            {
+              "count": 2,
+              "map_number": 90,
+              "maps": [
+                90
+              ],
+              "slot": 631
+            }
+          ]
+        },
+        {
+          "key": "REF07/WARN",
+          "check_id": "REF07",
+          "severity": "WARN",
+          "title": "Some linked objects could not be verified",
+          "meanings": [
+            "The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9]."
+          ],
+          "what_to_do": "Review the uncertain map areas. These objects are unknown, not proven missing or damaged.",
+          "finding_load_policy": "review_first",
+          "load_policy": "do_not_load",
+          "load_text": "Do not load or overwrite this save until the problem is resolved.",
+          "actions": [
+            "backup",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 34,
+              "maps": [
+                9
+              ],
+              "slot": 631
+            }
+          ]
+        }
+      ],
+      "actions": [
+        "backup",
+        "load_older_save",
+        "send_report",
+        "restore_install"
+      ],
+      "axes": {
+        "custody": "N/A",
+        "structure": "FATAL",
+        "compatibility": "WARN"
+      },
+      "plain_text": "Unsafe to load\nA required part of the save or its matching map files is missing or broken. Loading could crash the game or damage the saved world.\nDo not load or overwrite this save until the problem is resolved.\nThe installed map files were compared with themselves. The map layout used when this save was made has not been verified.\n\nInstalled map storage is damaged (FXS04/FATAL)\n  What this means: The checker found invalid unused-space lists on 307 pages in the installed maps: Britannia [map 9].\n  What you can do: Preserve the maps and restore intact copies matching the save's original installation.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome saved map objects could not be checked (NFS07/WARN)\n  What this means: The checker could not fully identify used and unused space in 136 map areas: Britannia [map 9].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Covetous Level 2 [map 17].\n  What this means: The checker could not fully identify used and unused space in 6 map areas: Covetous Level 4 [map 19].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Covetous Lift Shaft [map 20].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Ethereal Void [map 22].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: New Despise [map 25].\n  What this means: The checker could not fully identify used and unused space in 13 map areas: Deceit 1 [map 35].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Stonegate Fix [map 41].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Deceit 2 [map 43].\n  What this means: The checker could not fully identify used and unused space in 4 map areas: Abyss Dungeon Map [map 44].\n  What this means: The checker could not fully identify used and unused space in 9 map areas: Wrong [map 45].\n  What this means: The checker could not fully identify used and unused space in 3 map areas: Terfin dungeon [map 46].\n  What this means: The checker could not fully identify used and unused space in 17 map areas: New Destard [map 47].\n  What this means: The checker could not fully identify used and unused space in 8 map areas: Hythloth Upper Levels [map 50].\n  What this means: The checker could not fully identify used and unused space in 2 map areas: Mariah's Basement [map 90].\n  What you can do: Keep a backup and review the uncertain areas. Objects that could not be classified are not proven damaged or deleted.\n  Loading: Do not load or overwrite this save until the problem is resolved.\n\nSome linked objects could not be verified (REF07/WARN)\n  What this means: The checker found 34 object links within map bounds but could not prove the objects are still in use: Britannia [map 9].\n  What you can do: Review the uncertain map areas. These objects are unknown, not proven missing or damaged.\n  Loading: Do not load or overwrite this save until the problem is resolved.",
+      "self_reference": true
+    },
+    "f14": {
+      "archive_filename": "u9game14_f14_before_load.sav",
+      "archive_sha256": "b3e6be3356e7a3737a968a44b1cc64888363fd93d64a72b41b73d3381e1ca119",
+      "fixed_sha256": {
+        "0": "9a47829396408d943f69a1ada2c37d1e1cbf3fd56c801ef740771857cf8601f2",
+        "9": "3e0a2d05beda571fc2183c69617f83ccedd88f1b0a520c6f2458fc727f77439b",
+        "14": "890cde641c4b844e6b3ddb9f6cb42c749e9e67584b2b27282ece03d564356ccb",
+        "41": "186214dd2fc30c4d915cf00f300f276e55e9602da5427d360589d4d02811203e"
+      },
+      "slot": 14,
+      "overall": "PASS",
+      "summary": {
+        "result": "PASS",
+        "title": "No problems found",
+        "meaning": "The checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.",
+        "load_policy": "try_after_backup",
+        "load_text": "It is reasonable to try loading after making a backup.",
+        "actions": [
+          "backup",
+          "try_load",
+          "send_report"
+        ]
+      },
+      "cards": [
+        {
+          "key": "PRC04/INFO",
+          "check_id": "PRC04",
+          "severity": "INFO",
+          "title": "Creeper plant growth stops after loading",
+          "meanings": [
+            "Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing."
+          ],
+          "what_to_do": "Keep a backup if you want to preserve the plants' current appearance. The rest of the save can load normally.",
+          "finding_load_policy": "try_after_backup",
+          "load_policy": "try_after_backup",
+          "load_text": "It is OK to try loading after backup; this is a cosmetic game issue.",
+          "actions": [
+            "backup",
+            "try_load",
+            "send_report"
+          ],
+          "contexts": [
+            {
+              "count": 1,
+              "slot": 14,
+              "maps": []
+            }
+          ]
+        }
+      ],
+      "actions": [
+        "backup",
+        "try_load",
+        "send_report"
+      ],
+      "axes": {
+        "custody": "N/A",
+        "structure": "PASS",
+        "compatibility": "PASS"
+      },
+      "plain_text": "No problems found\nThe checks completed without finding an integrity problem. This does not guarantee that the game will load the save successfully.\nIt is reasonable to try loading after making a backup.\nThe installed map files were compared with themselves. The map layout used when this save was made has not been verified.\n\nCreeper plant growth stops after loading (PRC04/INFO)\n  What this means: Growing creeper plants in this save: 1. The game forgets their growth start time when loading, so they stop growing.\n  What you can do: Keep a backup if you want to preserve the plants' current appearance. The rest of the save can load normally.\n  Loading: It is OK to try loading after backup; this is a cosmetic game issue.",
+      "self_reference": true
+    }
+  }
+}

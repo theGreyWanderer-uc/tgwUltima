@@ -1,16 +1,32 @@
 # Changelog
 
 All notable changes to **titan-ultima** are documented here.
+Entries cover user-visible features, fixes, documentation and compatibility changes.
 
 This project uses [Semantic Versioning](https://semver.org/):
 
 - **MAJOR** (1.0, 2.0, ...): breaking API or CLI changes
 - **MINOR** (0.5, 0.6, ...): new features, new commands, new format support
-- **PATCH** (0.4.1, 0.4.2, ...): bug fixes, docs, internal improvements
+- **PATCH** (0.4.1, 0.4.2, ...): bug fixes and documentation updates
 
 ---
 
 ## [0.7.8]
+
+- **U9 save browser:** add `u9 save-browse` with U7/U8-style selection,
+  paging, filters, archive hex/extraction, maps, NPCs, saved activities,
+  plain integrity findings and offline reports. Ship shared check/severity
+  wording, action IDs and region names as JSON.
+  Preserve backups containing the selected archive, loose files and selector.
+  Show missing selection neutrally, hide plain self-comparison confirmations,
+  and check historical archives with working-file custody marked N/A.
+
+- **U9 save-check advice:** select next steps by exact check ID and severity.
+  Distinguish advisory nonfixed watermark
+  mismatches from unreadable maps and tailor provenance, process, reference,
+  and fixed-layout advice to each finding. Terminal and JSON reports include
+  severity-specific advice; JSON adds keyed `recommendations` without changing
+  verdicts.
 
 - **U8 world and egg search:** add `world-query` / `egg-query` paged browsers,
   all-map item/name/area/flag filters, authoritative live-cache replacement,
@@ -18,11 +34,6 @@ This project uses [Semantic Versioning](https://semver.org/):
   links and monster count/chance fields. Connect sprite/shape, inventory/NPC,
   parent/stamp and stored-map views; export fresh offline HTML, full CSV/JSON
   and bounded native PNG previews without editing earlier reports.
-
-- **U8 colour experiment cleanup:** keep magic-item cycle generators, HTML
-  templates, prototype tests and notes under `titan-out/u8_magic_red_cycle/prototype`
-  rather than the shipped package and regular test suite. Preserve generated
-  previews and retain local build/test instructions.
 
 - **U8 palette browser:** add `u8 palette-browse` with shared U7/U8 numbered
   swatches, native byte/word palette layouts, RGB inspection/matching and
@@ -229,11 +240,6 @@ This project uses [Semantic Versioning](https://semver.org/):
   phase roles, and expose action meanings in research exports. Add duration
   and special-action record views; preserve every original byte. Runtime
   execution of these actions remains unverified.
-
-- **U9 short-trigger loader documentation:** retail reads 510 bytes without
-  an entry-length clamp, so unterminated IDs 58/631 include commands from
-  59/632. Correct the prior standalone-valid classification; retain exact
-  entry parsing and on-disk diagnostics.
 
 - **U9 trigger operand decoding:** all 101 operand layouts now have confirmed
   retail masks. Correct sound/status masks, link flags, radius encodings,
@@ -519,7 +525,7 @@ This project uses [Semantic Versioning](https://semver.org/):
   fixed sparse `fixed.*` page enumeration and 8-bit `sdInfo` selection, and
   hardened truncated texture, multi-frame icon, duplicate-limb, and Windows
   path handling; fixed GLB sea-level depth fighting and non-finite model UVs;
-  and added a `glb` install extra used by release tests.
+  and added a `glb` install extra.
 
 ---
 ## [0.7.5]
@@ -876,10 +882,6 @@ This project uses [Semantic Versioning](https://semver.org/):
     of armor, blood vs. a cleaver/knife, a magic bow vs. a map
     fragment) was hidden by same-tier objects it should visually sit on
     top of.
-- Fixed several of the above by promoting the confirmed *winning* tile
-  to the foreground tier rather than demoting the loser, after an
-  earlier attempt at the latter regressed unrelated matchups (a
-  demoted "loser" losing to supporting furniture it should still beat).
 
 ---
 
@@ -903,9 +905,7 @@ This project uses [Semantic Versioning](https://semver.org/):
     `mountain_top`), plus a `U7ShapeInfo` facade exposing
     `becomes_field_object` (contact-effect bit plus a typed field).
   - Object model (`titan.u7.ireg.U7ObjectFlags`: invisible,
-    okay_to_take, temporary), replacing three divergent, partial IREG
-    decoders in `map.py`, `save.py`, and `container.py` with one
-    implementation.
+    okay_to_take, temporary).
     `world-query` and `container-browse` now show real
     `quality_raw`/`quality`/`flags` instead of a bare, sometimes-wrong
     quality integer.
@@ -1063,9 +1063,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 - Expanded `npc-equipment` location labels with `ready.dat` preferred ready
   slots, and expanded `monster-equipment` with runtime-generated ammo rows for
   ammo-using monster weapons in Exult-format data.
-- Cleaned U7 `build_exclude_set(no_building=True)` control flow so building
-  exclusion uses the same decision path as bit-flag filters.
-- Cleaned U7 typeflag statistics so the flag section counts only actual
+- Corrected U7 typeflag statistics so the flag section counts only actual
   TFA/occlusion/obstacle flags, while shape classes and animation types remain
   separate.
 
@@ -1107,8 +1105,7 @@ This project uses [Semantic Versioning](https://semver.org/):
   keeping Resurrection out of the castable Spell Catalog.
 - Corrected Spell Catalog content reporting so metadata-backed spell entries
   are no longer presented as having no readable content.
-- Centralized NPC, Object, and Util classification so sidebar and header
-  counts remain consistent.
+- Fixed inconsistent NPC, Object, and Util counts between the sidebar and header.
 
 ---
 
@@ -1175,9 +1172,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
-- Replaced CSV serialisation in `typeflag.py`, `save.py`,
-  and `cli.py` with Python's standard `csv.writer` module for robust export
-  output.
+- Corrected CSV escaping in U7 type-flag and save exports.
 - Corrected U7 NPC and inventory parsing edge cases in runtime data paths,
   including IREG special-entry skipping so `npc.dat` parsing continues past
   Avatar inventory and exports all declared NPC records.
@@ -1343,8 +1338,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 ### Changed
 
 - **CLI restructure:** U8 commands moved under `titan u8 <cmd>` with
-  deprecated root-level aliases. Modules relocated to `titan.u8.*` with
-  backward-compatible shims.
+  deprecated root-level aliases.
 
 ### Fixed
 
@@ -1387,8 +1381,6 @@ This project uses [Semantic Versioning](https://semver.org/):
   false positives).
 - Sidecar extension changed from `.txt` to `.meta.txt` to avoid overwriting data.
 - `from_directory()` rebuild updated for `.meta.txt` sidecars.
-- Build: fix duplicate `.npy` LUT files in wheel (hatchling config).
-- CI: Trusted Publishers (OIDC) for PyPI; remove duplicate trigger.
 
 ---
 

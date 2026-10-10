@@ -82,9 +82,11 @@ exclude = [
     "src/titan/dialogue/webbundle",
     "src/titan/third_party/fold",
     "src/titan/uo/resources",
+    "src/titan/u9/resources",
 ]
 
 [tool.hatch.build.targets.wheel.force-include]
+"src/titan/u9/resources" = "titan/u9/resources"
 "src/titan/adaptive_resample/luts" = "titan/adaptive_resample/luts"
 "src/titan/fonts/bundled" = "titan/fonts/bundled"
 "src/titan/dialogue/pipeline/resources" = "titan/dialogue/pipeline/resources"
@@ -112,6 +114,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.sdist.force-include]
+"src/titan/u9/resources" = "src/titan/u9/resources"
 "src/titan/dialogue/webbundle" = "src/titan/dialogue/webbundle"
 "src/titan/uo/resources" = "src/titan/uo/resources"
 
