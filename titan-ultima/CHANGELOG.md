@@ -11,7 +11,7 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ---
 
-## [0.7.8]
+## [0.7.9]
 
 - **U8 shape import:** never quantise an opaque pixel to palette index 255,
   titan's "no pixel" marker (no retail U8 shape draws with it). A pixel in
@@ -221,6 +221,10 @@ This project uses [Semantic Versioning](https://semver.org/):
   text/JSON/CSV reports. Decode signed nine-bit movement, four-bit repeat,
   callbacks and unknown fields using the decoded U8 source and Pentagram.
 
+---
+
+## [0.7.8]
+
 - **U7 shape properties:** add detailed physics/equipment metadata, property
   filters, and JSON reports to the shape browser.
 
@@ -252,6 +256,11 @@ This project uses [Semantic Versioning](https://semver.org/):
   phase roles, and expose action meanings in research exports. Add duration
   and special-action record views; preserve every original byte. Runtime
   execution of these actions remains unverified.
+
+- **U9 short-trigger loader documentation:** retail reads 510 bytes without
+  an entry-length clamp, so unterminated IDs 58/631 include commands from
+  59/632. Correct the prior standalone-valid classification; retain exact
+  entry parsing and on-disk diagnostics.
 
 - **U9 trigger operand decoding:** all 101 operand layouts now have confirmed
   retail masks. Correct sound/status masks, link flags, radius encodings,
