@@ -225,15 +225,16 @@ def _quantize_to_palette(rgba_img: Image.Image, palette) -> np.ndarray:
     Same approach as :meth:`titan.u8.shape.U8Shape.quantize_to_palette`,
     generalized to work with either :class:`titan.palette.U8Palette` or
     :class:`titan.u7.palette.U7Palette` (both expose ``.colors``, a
-    256-entry list of RGB tuples).
+    256-entry list of RGB tuples). Index 0xFF is the transparent marker,
+    so opaque pixels are matched against indices 0-254 only.
     """
     arr = np.asarray(rgba_img)
     h, w = arr.shape[:2]
     rgb = arr[:, :, :3].astype(np.int32)
     alpha = arr[:, :, 3]
 
-    pal_arr = np.array(palette.colors, dtype=np.int32)
-    diff = rgb.reshape(-1, 1, 3) - pal_arr.reshape(1, 256, 3)
+    pal_arr = np.array(palette.colors[:255], dtype=np.int32)
+    diff = rgb.reshape(-1, 1, 3) - pal_arr.reshape(1, 255, 3)
     dist_sq = (diff * diff).sum(axis=2)
     nearest = dist_sq.argmin(axis=1).astype(np.uint8)
     result = nearest.reshape(h, w)

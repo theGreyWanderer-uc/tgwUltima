@@ -16,7 +16,7 @@ def source_bytes(version: int | None) -> bytes:
         archive.comment = "Pagan archive  "
         archive.records = [b"first", b"", b"last"]
         raw = bytearray(archive.to_bytes())
-        raw[0x60:0x64] = b"keep"
+        raw[0x64:0x68] = b"keep"
         return bytes(raw)
     archive = U7FlexArchive()
     archive.title = "Retail or Exult archive"
@@ -56,7 +56,7 @@ def test_generic_update_preserves_source_header_and_other_records(version, tmp_p
     else:
         assert struct.unpack_from("<I", updated, 0x50)[0] == 0x1A1A
         assert updated[:0x5C] == raw[:0x5C]
-        assert updated[0x60:128] == raw[0x60:128]
+        assert updated[0x64:128] == raw[0x64:128]
     assert FlexArchive.from_file(str(output)).records == [
         b"first",
         b"replacement",

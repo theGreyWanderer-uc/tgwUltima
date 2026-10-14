@@ -13,6 +13,16 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ## [0.7.8]
 
+- **U8 shape import:** never quantise an opaque pixel to palette index 255,
+  titan's "no pixel" marker (no retail U8 shape draws with it). A pixel in
+  index 255's colour (teal 24,125,125) now takes the nearest other colour
+  instead of silently turning transparent. Same for U8-to-U7 conversion.
+
+- **U8 Flex writing:** recalculate the native signed-byte checksum after
+  building, repacking or replacing records, including manifest rebuilds.
+  Correct the header descriptions for zero padding, version and checksum;
+  preserve U7/Exult reserved header bytes.
+
 - **U9 save browser:** add `u9 save-browse` with U7/U8-style selection,
   paging, filters, archive hex/extraction, maps, NPCs, saved activities,
   plain integrity findings and offline reports. Ship shared check/severity
