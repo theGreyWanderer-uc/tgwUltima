@@ -5809,6 +5809,183 @@ def font_create_cmd(
 # ============================================================================
 
 
+@u7_app.command("map-inventory")
+def map_inventory_cmd(
+    static: Annotated[
+        Optional[str],
+        typer.Argument(help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"),
+    ] = None,
+    game: Annotated[
+        Optional[Literal["bg", "si"]],
+        typer.Option("--game", help="Use config section for BG or SI (default: bg)"),
+    ] = None,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Output folder (default: u7data/map-inventory/<game>-map<NN>)"),
+    ] = None,
+    map_num: Annotated[
+        int,
+        typer.Option("--map-num", help="Map number: 0 = world map, 1+ = mapNN/ inside STATIC"),
+    ] = 0,
+    gamedat: Annotated[
+        Optional[str],
+        typer.Option("--gamedat", help="Count movable objects from this GAMEDAT folder instead of INITGAME.DAT"),
+    ] = None,
+    initgame: Annotated[
+        Optional[str],
+        typer.Option("--initgame", help="INITGAME.DAT to read movable objects from (default: STATIC/INITGAME.DAT)"),
+    ] = None,
+    no_ireg: Annotated[
+        bool,
+        typer.Option("--no-ireg", help="Skip movable objects (u7ireg); count terrain, chunk and fixed objects only"),
+    ] = False,
+    contents: Annotated[
+        bool,
+        typer.Option("--contents", help="Also count objects inside containers and bodies"),
+    ] = False,
+    no_previews: Annotated[
+        bool,
+        typer.Option("--no-previews", help="Skip sprite PNGs and index.html"),
+    ] = False,
+    palette: Annotated[
+        int,
+        typer.Option("--palette", help="PALETTES.FLX index for sprite previews"),
+    ] = 0,
+    base_static: Annotated[
+        Optional[str],
+        typer.Option("--base-static", help="Original STATIC for a mod patch"),
+    ] = None,
+    patch: Annotated[
+        Optional[str],
+        typer.Option("--patch", help="Mod patch overriding the base STATIC"),
+    ] = None,
+    mod_data: Annotated[
+        Optional[str],
+        typer.Option("--mod-data", help="Mod textmsg.txt and shape_info.txt directory"),
+    ] = None,
+    text: Annotated[
+        Optional[str],
+        typer.Option("--text", help="Path to TEXT.FLX for shape names"),
+    ] = None,
+    superchunk: Annotated[
+        Optional[list[str]],
+        typer.Option("--sc", help="Limit to a superchunk, hex or decimal (repeatable): 0x55"),
+    ] = None,
+    tile_rect: Annotated[
+        Optional[list[str]],
+        typer.Option("--tile-rect", help="Limit to a tile rectangle tx0,ty0,tx1,ty1 (repeatable)"),
+    ] = None,
+    cx0: Annotated[Optional[int], typer.Option("--cx0", help="Limit to chunks from X (0-191)")] = None,
+    cy0: Annotated[Optional[int], typer.Option("--cy0", help="Limit to chunks from Y (0-191)")] = None,
+    cx1: Annotated[Optional[int], typer.Option("--cx1", help="Limit to chunks to X (inclusive; default cx0)")] = None,
+    cy1: Annotated[Optional[int], typer.Option("--cy1", help="Limit to chunks to Y (inclusive; default cy0)")] = None,
+) -> None:
+    """Inventory every ground tile and object a U7 map uses, ranked by placements.
+
+    Counts flat ground from the chunk templates, objects stored in chunk
+    templates, fixed objects (U7IFIX) and the starting world's movable
+    objects (u7ireg in INITGAME.DAT, or a GAMEDAT folder). Writes
+    objects.csv, flats.csv, shapes.csv, summary.json and, unless
+    --no-previews, sprite PNGs with a filterable index.html.
+
+    --sc, --tile-rect and --cx0/--cy0/--cx1/--cy1 limit the inventory to an
+    area (several combine) and add placements.csv, listing every placement
+    in it. Objects count when their footprint overlaps the area.
+
+    \b
+    Examples:
+      titan u7 map-inventory
+      titan u7 map-inventory --sc 0x55
+      titan u7 map-inventory --cx0 60 --cy0 72 --cx1 62 --cy1 74
+      titan u7 map-inventory --game si --contents
+      titan u7 map-inventory STATIC/ --gamedat gamedat/ -o inventory/
+    """
+    from titan.u7.map_inventory import (
+        build_u7_map_inventory,
+        chunk_rect,
+        superchunk_rect,
+        write_u7_map_inventory,
+    )
+    from titan.u7.world import parse_rectangle
+
+    area: list[tuple[int, int, int, int]] = []
+    labels: list[str] = []
+    try:
+        for raw in superchunk or []:
+            sc = int(raw, 0)
+            if not 0 <= sc < 144:
+                raise ValueError(f"Superchunk must be 0-143 (0x00-0x8F): {raw}")
+            area.append(superchunk_rect(sc))
+            labels.append(f"sc{sc:02X}")
+        for raw in tile_rect or []:
+            rect = parse_rectangle(raw)
+            area.append(rect)
+            labels.append("t{}_{}_{}_{}".format(*rect))
+        if cx0 is not None or cy0 is not None:
+            if cx0 is None or cy0 is None:
+                raise ValueError("Give both --cx0 and --cy0")
+            x1 = cx0 if cx1 is None else cx1
+            y1 = cy0 if cy1 is None else cy1
+            if not all(0 <= v <= 191 for v in (cx0, cy0, x1, y1)):
+                raise ValueError("Chunk coordinates must be 0-191")
+            area.append(chunk_rect(cx0, cy0, x1, y1))
+            labels.append(f"c{min(cx0, x1)}_{min(cy0, y1)}_{max(cx0, x1)}_{max(cy0, y1)}")
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1)
+
+    game = game or "bg"
+    configured_static, _ = _resolve_u7_paths(game)
+    static_dir = static or configured_static
+    if not static_dir:
+        print("ERROR: Provide a STATIC directory or configure one in titan.toml", file=sys.stderr)
+        raise SystemExit(1)
+    text_flx = text or (None if patch else _resolve_u7_text_flx(game, static_dir))
+    try:
+        inventory = build_u7_map_inventory(
+            static_dir,
+            game=game,
+            map_num=map_num,
+            gamedat_dir=gamedat,
+            initgame=initgame,
+            include_ireg=not no_ireg,
+            include_contents=contents,
+            base_static=base_static,
+            patch_dir=patch,
+            mod_data_dir=mod_data,
+            text_flx_path=text_flx,
+            area=area or None,
+        )
+        stem = f"{game}-map{map_num:02d}" + "".join(f"-{label}" for label in labels)
+        outdir = Path(output or Path("u7data") / "map-inventory" / stem)
+        summary = write_u7_map_inventory(
+            inventory, outdir, previews=not no_previews, palette_index=palette
+        )
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1)
+
+    objects, flats = summary["objects"], summary["flats"]
+    print(f"Sources: " + "; ".join(f"{k}: {v}" for k, v in summary["sources"].items()))
+    print(
+        f"Objects: {objects['placements']:,} placements, {objects['shapes']} shapes, "
+        f"{objects['shape_frames']} shape:frames "
+        f"({', '.join(f'{k} {v:,}' for k, v in objects['by_source'].items())})"
+    )
+    print(
+        "  coverage by top shapes: "
+        + ", ".join(f"{k.replace('top_', '')}: {v}%" for k, v in objects["coverage_by_top_shapes_pct"].items())
+    )
+    print(f"Ground: {flats['cells']:,} cells, {flats['shapes']} flat shapes, {flats['shape_frames']} shape:frames")
+    if contents:
+        print(f"Container contents: {summary['contents']:,}")
+    if area:
+        print(f"Area: {len(inventory.placements):,} placements listed in placements.csv")
+    for warning in summary["warnings"]:
+        print(f"WARNING: {warning}", file=sys.stderr)
+    print(f"Wrote {outdir}")
+
+
 @u7_app.command("world-query")
 def world_query_cmd(
     static: Annotated[

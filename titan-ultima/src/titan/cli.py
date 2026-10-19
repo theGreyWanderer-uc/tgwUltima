@@ -652,7 +652,25 @@ def cmd_config(args: SimpleNamespace) -> int:
                 check_exists=True,
                 base=si_base,
             )
-        _print_kv_section("[uo.game]", uo.get("game", {}), check_exists=True)
+        uo_path_keys = {"base", "path", "output"}
+        uo_sections = [("[uo.game]", uo.get("game", {}))] + [
+            (f"[uo.installs.{name}]", entry)
+            for name, entry in uo.get("installs", {}).items()
+            if isinstance(entry, dict)
+        ]
+        for title, section in uo_sections:
+            _print_kv_section(
+                title,
+                {k: v for k, v in section.items() if k in uo_path_keys},
+                check_exists=True,
+            )
+            settings = {k: v for k, v in section.items() if k not in uo_path_keys}
+            if settings:
+                if not any(k in uo_path_keys for k in section):
+                    print()
+                    print(title)
+                for key, value in settings.items():
+                    print(f"  {key:<12} = {value!r}")
         _print_kv_section("[exult.paths]", exult.get("paths", {}), check_exists=True)
     else:
         game = config.get("game", {})

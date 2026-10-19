@@ -316,6 +316,34 @@ class TriggerAuditTests(unittest.TestCase):
         self.assertEqual(trigger.unresolved_branch_labels(), [(2, 2)])
         self.assertEqual(triggers.unresolved_branch_labels(), {1: [(2, 2)]})
 
+    def test_unreachable_mark_is_reported(self) -> None:
+        # Minoc's 1.19F music trigger: the shrine branch goes to label 0, so
+        # mark 1 (and MinocPos after it) is never reached. 1.19H's 0x20EC fixes it.
+        def minoc(branch_word: int) -> bytes:
+            return (
+                _record(0x0E, 16, 0, branch_word)
+                + _record(0x35, 16, 0, 0x1408)
+                + _record(0x17, 0, 0, 0)
+                + _record(0x16, 16, 0, 1)
+                + _record(0x35, 16, 0, 0x1409)
+                + TERMINATOR
+            )
+
+        triggers = U9Triggers(_archive({1: minoc(0x00EC), 2: minoc(0x20EC)}))
+        self.assertEqual(triggers.trigger(1).unreachable_marks(), [(3, 1)])
+        self.assertEqual(triggers.trigger(2).unreachable_marks(), [])
+        self.assertEqual(triggers.unreachable_marks(), {1: [(3, 1)]})
+
+        # The other branch forms also count as targets: 0x1A bits 1-3, 0x4F label 1.
+        body = (
+            _record(0x1A, 16, 0, 2 << 1)
+            + _record(0x4F, 16, 0, 0x8000)
+            + _record(0x16, 16, 0, 1)
+            + _record(0x16, 16, 0, 2)
+            + TERMINATOR
+        )
+        self.assertEqual(U9Triggers(_archive({1: body})).trigger(1).unreachable_marks(), [])
+
 
 class RetailCorpusTests(unittest.TestCase):
     def test_views_are_lossless_on_every_shipped_record(self) -> None:

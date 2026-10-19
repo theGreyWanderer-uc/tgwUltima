@@ -334,7 +334,8 @@ class ProcessSectionsTests(unittest.TestCase):
         self.assertEqual(s.books.chapter_bookmarks, (3, 4))
         self.assertEqual(s.sounds.version, 2)
         first, second = s.sounds.music_nodes
-        self.assertEqual((second.track, second.priority, second.piece), (1, 3, 7))
+        self.assertEqual((second.key, second.priority, second.piece), (1, 3, 7))
+        self.assertEqual(second.track, second.key)
         self.assertEqual((first.start_volume, first.target_volume), (0, 100))
         self.assertEqual(
             (first.fade_start_tick, first.fade_end_tick, first.last_update_tick),

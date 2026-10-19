@@ -804,6 +804,8 @@ class U7MapRenderer:
         ireg_path: str,
         schunk_num: int,
         tfa: "U7TypeFlags | None" = None,
+        *,
+        data: bytes | None = None,
     ) -> "list[U7MapObject]":
         """
         Parse a u7iregNN file with full recursive container nesting.
@@ -812,15 +814,18 @@ class U7MapRenderer:
         ``U7MapObject.children``.  Children inside a container use gump
         slot coordinates in tx/ty (not world tiles).
 
+        ``data`` supplies the file's bytes directly (for example an entry
+        of ``INITGAME.DAT``); ``ireg_path`` is then only a label.
+
         ``tfa`` is optional but improves accuracy — without it, containers
         are still detected by entry-length (testlen == 12) as Exult writes
         them, and bodies/barges with children are also handled.
         """
-        if not os.path.isfile(ireg_path):
-            return []
-
-        with open(ireg_path, "rb") as f:
-            data = f.read()
+        if data is None:
+            if not os.path.isfile(ireg_path):
+                return []
+            with open(ireg_path, "rb") as f:
+                data = f.read()
 
         scx = C_CHUNKS_PER_SCHUNK * (schunk_num % C_NUM_SCHUNKS)
         scy = C_CHUNKS_PER_SCHUNK * (schunk_num // C_NUM_SCHUNKS)

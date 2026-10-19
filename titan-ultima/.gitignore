@@ -39,3 +39,6 @@ _orig_backup/
 # Environment
 .venv/
 venv/
+
+# Developer-only tools and server-side scripts (not part of the package)
+dev-scripts/

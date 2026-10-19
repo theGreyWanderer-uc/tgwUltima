@@ -120,4 +120,33 @@ nonfixed  = "U8SAVE.000"
 # archive  = "C:/Path/To/Ultima7/SERPENT/mods/<mod-name>/patch/initgame.dat"
 #
 # [uo.game]
+# # Single install: the client directory used when CLIENT is omitted.
 # base     = "C:/Program Files (x86)/Electronic Arts/Ultima Online Classic"
+# # Several installs: name the default [uo.installs.*] entry instead.
+# install  = "classic"
+#
+# # Named installs. A uo command's CLIENT argument may be one of these names
+# # (e.g. `titan uo map-export uof`) or a directory. Each install can set its
+# # own default output root and source preferences.
+# [uo.installs.classic]
+# label    = "EA Ultima Online Classic Client"
+# path     = "C:/Ultima/UltimaOnlineClassicClient"
+# output   = "D:/data/uodata/classic"
+#
+# [uo.installs.uof]
+# label    = "UO Forever freeshard client"
+# path     = "G:/Games/UOForever/UO"
+# output   = "D:/data/uodata/uof"
+# multis   = "mul"     # multi source: auto | uop | mul
+# server_profile = "D:/data/uodata/server-profiles/servuo.json"  # per-install override
+# maps     = "auto"    # terrain source: auto | uop | mul
+#
+# [uo.reference]
+# # Server profile for `titan uo house-footprints` / `house-capacity`: regions,
+# # region rules and the house menu in one JSON file. Without one, Titan uses
+# # its built-in house list and cannot exclude towns or dungeons.
+# server_profile = "D:/data/uodata/server-profiles/servuo.json"
+# # Alternatively, point at an emulator's files directly:
+# # house_placement_tool = "C:/src/servuo/Scripts/Multis/HousePlacementTool.cs"
+# # regions_xml          = "C:/src/servuo/Data/Regions.xml"
+# # emulator_scripts     = "C:/src/servuo/Scripts"

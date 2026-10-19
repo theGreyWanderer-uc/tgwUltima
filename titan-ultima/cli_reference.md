@@ -2402,6 +2402,7 @@ game or world, including installed Exult mods and custom games.
 | [Browse saves](#u7-npc-save-browsers) | `titan u7 save-browse` | Choose a save and browse its NPCs and their state. |
 | [Browse monsters](#u7-monster-browse) | `titan u7 monster-browse` | Inspect monster definitions, saved actors, equipment, and spawn eggs. |
 | [Search the world](#u7-world-query) | `titan u7 world-query` | Choose a map, object filters, search area, and output. |
+| [Inventory a map](#u7-map-inventory) | `titan u7 map-inventory` | Count every ground tile and object a map uses, ranked, with sprite previews. |
 | [Browse containers](#u7-container-browse) | `titan u7 container-browse` | Find containers and inspect their nested contents. |
 | [Search eggs](#u7-egg-query) | `titan u7 egg-query` | Find trigger eggs by type, usecode function, or area. |
 
@@ -3135,6 +3136,70 @@ reports use new files outside game data folders. **D/W** change source/world;
 **Q** quits. Known BG/SI identity mismatches disable foreign world metadata.
 
 ---
+
+#### `u7 map-inventory`
+
+Counts every shape and frame a map uses, from every place the world is
+stored, and ranks them by placements with cumulative coverage:
+
+- **terrain:** flat ground cells (shapes below 150) in the `U7CHUNKS`
+  templates, multiplied by how often `U7MAP` uses each template;
+- **chunk:** objects stored inside chunk templates (shapes 150 and up), one
+  placement per template cell. A multi-tile shape is stored once, at its
+  anchor;
+- **ifix:** fixed objects (`U7IFIXnn`);
+- **ireg:** the starting world's movable objects, top level only (`u7iregNN`
+  in `STATIC/INITGAME.DAT`, or a `--gamedat` folder);
+- **contents:** objects inside containers and bodies (`--contents`).
+
+```
+titan u7 map-inventory [STATIC] [--game bg|si] [--map-num N] [-o DIR]
+                       [--gamedat DIR | --initgame FILE] [--no-ireg] [--contents]
+                       [--no-previews] [--palette N]
+                       [--base-static DIR] [--patch DIR] [--mod-data DIR] [--text FILE]
+                       [--sc N ...] [--tile-rect tx0,ty0,tx1,ty1 ...]
+                       [--cx0 X --cy0 Y [--cx1 X --cy1 Y]]
+```
+
+Writes to `u7data/map-inventory/<game>-map<NN>/` by default:
+- `objects.csv` and `flats.csv`, one row per shape:frame. Each row has its
+  name, TFA class and flags, footprint, placements, share, cumulative
+  coverage, per-source counts, lift range, superchunk spread and a sample
+  tile;
+- `shapes.csv`, rolled up per shape;
+- `summary.json`, with totals and coverage of the top 10/25/50/100/200/400;
+- `sprites/` and `index.html`: a filterable page with a preview of every
+  shape:frame (skip with `--no-previews`).
+
+Paths, mods and names resolve as in `u7 world-query`.
+
+To audit part of the map, use these options (any mix combines):
+- `--sc` (repeatable, hex or decimal) for superchunks;
+- `--tile-rect` (repeatable) for tile rectangles;
+- `--cx0/--cy0[/--cx1/--cy1]` for a chunk or chunk range.
+
+Every source is limited to the area, including objects stored in chunk
+templates and ground cells. An object counts when its footprint overlaps the
+area. U7 anchors objects at their south-east tile, so a wall anchored just
+outside the area can still reach into it.
+
+An area run also writes `placements.csv`, with one row per placement:
+- source, shape, frame and name;
+- kind, class and footprint;
+- `tx`/`ty`/`tz` and a preview path.
+
+Rows are sorted by lift, then north to south. The default folder gets the
+area appended, e.g. `bg-map00-sc55` or `bg-map00-c60_72_62_74`. Superchunk
+0x55 takes about 6 seconds: 1,076 objects and 64,690 ground cells.
+
+Black Gate (retail, map 0):
+- objects: 232,994 placements (chunk 166,573, fixed 37,542, movable
+  28,879) over 681 shapes and 2,992 shape:frames;
+- the top 100 shapes cover 88% of placements, the top 200 cover 96%;
+- ground: 9,270,611 cells over 123 flat shapes.
+
+Serpent Isle: 292,162 object placements over 657 shapes; ground uses 146
+flat shapes.
 
 #### `u7 world-query`
 
@@ -8869,6 +8934,14 @@ is configured in `titan.toml`.
 titan uo <command> [client] [-o DIR] [command options]
 ```
 
+### Installs and output folders
+
+CLIENT may be a directory or a name from `[uo.installs.<name>]` in
+`titan.toml`; omitted, it is `[uo.game] install` (or the older
+`[uo.game] base`). Without `-o`, output goes to that install's `output`
+folder, else `uodata`. An install's `multis` and `maps` keys set the default
+for `--container`.
+
 ### Core extraction commands
 
 | Command | Output | Notes |
@@ -8880,6 +8953,46 @@ titan uo <command> [client] [-o DIR] [command options]
 | `font-export` | PNG atlases, optional glyph PNGs, CSV | ASCII fonts from `fonts.mul` |
 | `sound-export` | WAV + manifest CSV | Sound effects from UOP or MUL/IDX |
 | `animation-export` | PNG frames + manifest CSV | Legacy `anim*.mul/idx` frames; named/grouped/raw layouts |
+| `map-tiles` | JPEG tile pyramid + `index.html` viewer | Whole facet at 1:1 client scale, zoomable offline; parallel and resumable |
+| `map-render` | One PNG | Client-style isometric view centred on a cell: land art, stretched/shaded texmaps, statics in draw order, hues |
+| `map-inventory` | CSVs, `summary.json`, art PNGs + `index.html` per facet | Every land and static tile a facet uses, ranked by placements, with statics rolled up by tiledata name |
+| `map-export` | One PNG per facet + summary CSV | One pixel per tile from `mapN` (UOP or MUL) and `staidxN`/`staticsN`, coloured by `radarcol.mul` |
+
+`map-export` exports every facet with a `staidxN.mul` unless `--facet`/`-f`
+is repeated. `--container auto|uop|mul` picks the terrain source (auto prefers
+`mapNLegacyMUL.uop`), `--suffix x` reads alternate sets such as
+`map0x`/`staidx0x`/`statics0x`, `--patches` applies `mapdif`/`stadif` files,
+`--no-statics` renders terrain only and `--heightmap` adds a greyscale
+land-altitude PNG. Output goes to `<output>/maps/`.
+
+`map-inventory` counts every land and static tile on each facet (all
+facets with a `staidxN.mul` unless `--facet`/`-f` is repeated) and writes
+`<output>/map-inventory/mapN/`; with `-o DIR` it writes `DIR/mapN/`. It takes
+the same `--container`, `--suffix` and `--patches` options as `map-export`:
+- `statics.csv` and `land.csv` have one row per tile ID with name, category,
+  flags, height or texture, placements, coverage, altitude range, block
+  spread and a sample cell;
+- `names.csv` rolls statics up by tiledata name, since every orientation of
+  a `plaster wall` is its own ID;
+- `summary.json` holds the totals;
+- `--no-previews` skips the art PNGs and `index.html`.
+
+Classic facet 0 has 2,912,345 statics over 6,023 IDs but only 1,139 names;
+the top 100 names cover 97%. See
+[`reference/uo/map/uo_map_inventory.md`](reference/uo/map/uo_map_inventory.md).
+
+`map-render --center X,Y[,Z]` draws a `--size` (default `1600x1200`) view of
+facet `--facet`/`-f` to `<output>/maps/render/mapN_X_Y.png` (or `--name`).
+It accepts the same `--container`, `--suffix` and `--patches` options plus
+`--no-statics`, `--no-roofs`, `--no-shading` and `--no-hues`.
+
+`map-tiles -f N` renders facet N at full resolution into
+`<output>/maps/tiles/mapN/{level}/{x}/{y}.jpg` plus `index.html`, a viewer
+that works straight from disk. It takes the same rendering switches as
+`map-render` plus `--workers/-j` (default CPU count − 2, at most 16),
+`--tile-size` (512) and `--quality` (JPEG, 85). Finished chunks are logged in
+`chunks_done.txt`; re-running the command resumes. Delete the folder to
+start over.
 
 Common range/limit options are available on image/sound/animation exports:
 `--limit`, `--range-start`, and `--range-end`. `animation-export` also accepts
@@ -8897,7 +9010,9 @@ Common range/limit options are available on image/sound/animation exports:
 | `artdef-export` | CSV | `art.def` art redirects |
 | `def-export` | CSV | All supported `.def` redirects, including body/equipment/gump/sound/texture data |
 | `localization-export` | CSV | `Cliloc.*`, speech, skills, and system text/name files |
-| `multi-export` | CSV | Multi/component records from UOP or `multi.mul` |
+| `multi-export` | CSV | Multi/component records from UOP or `multi.mul`; `--container auto\|uop\|mul` |
+| `house-capacity` | JSON summary, packed CSV, overlay PNG, `viewer/index.html` | Legal centres, coverable cells and greedy packing for each `--multi` (default: smallest house); regions and houses from `--server-profile` or `server_profile` (else `--regions`/`regions_xml`; without either, no regions); `--window X0,Y0,X1,Y1` (default x < 5120 on facets 0/1) |
+| `house-footprints` | CSV + JSON + PNG sheet | Occupied/foundation/border/yard cells per house, drawn at `--scale` px per tile; houses from `--server-profile`/`server_profile`, `--placement-source`, or the client's multis |
 | `animation-resolution-export` | CSV | Body/action/direction resolution, DEF redirection, sequence replacements |
 | `animation-body-names-export` | CSV | Packaged body-name metadata plus client DEF comments |
 
@@ -9246,6 +9361,12 @@ A value on the command line always wins.
 | `uo light-export` | Export UO light masks to PNG |
 | `uo hue-export` | Export UO hue ramps to PNG/CSV |
 | `uo radar-export` | Export UO radar/minimap color lookup data |
+| `uo map-export` | Render UO facets as one-pixel-per-tile radar map PNGs |
+| `uo map-render` | Render a client-style isometric view of a UO facet |
+| `uo map-tiles` | Render a whole UO facet as a zoomable tile pyramid with an offline viewer |
+| `uo map-inventory` | Inventory every land and static tile a UO facet uses, ranked by placements |
+| `uo house-footprints` | Export house placement footprints from an emulator house table and client multis |
+| `uo house-capacity` | Simulate legal house placement on a facet and greedily pack houses |
 | `uo tiledata-export` | Export UO land/static tile metadata |
 | `uo animdata-export` | Export UO static-art animation metadata |
 | `uo artdef-export` | Export UO `art.def` redirect metadata |
