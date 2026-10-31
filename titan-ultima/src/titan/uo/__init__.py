@@ -18,6 +18,8 @@ __all__ = [
     "UOIndexedFile",
     "UOLightDecoder",
     "UOCliloc",
+    "UOMap",
+    "UOMapRenderer",
     "UOMultis",
     "UORadarColors",
     "UOSoundDecoder",
@@ -51,8 +53,10 @@ from titan.uo.hue import UOHuesFile
 from titan.uo.indexed import UOIndexedFile
 from titan.uo.light import UOLightDecoder
 from titan.uo.localization import UOCliloc
+from titan.uo.map import UOMap
 from titan.uo.multi import UOMultis
 from titan.uo.radar import UORadarColors
+from titan.uo.render import UOMapRenderer
 from titan.uo.sound import UOSoundDecoder
 from titan.uo.tiledata import UOTileData
 from titan.uo.texture import UOTextureDecoder

@@ -1,2 +1,14 @@
 [uo.game]
-base = "C:/Program Files (x86)/Electronic Arts/Ultima Online Classic"
+# Default install when a uo command's CLIENT argument is omitted.
+install = "classic"
+
+[uo.installs.classic]
+label  = "EA Ultima Online Classic Client"
+path   = "C:/Ultima/UltimaOnlineClassicClient"
+output = "D:/_Repos/tgwUltima/uodata/classic"
+
+[uo.reference]
+# Server profile used by `uo house-footprints` / `uo house-capacity` for every
+# install without its own: regions, region rules and the house menu, built
+# from ServUO by dev-scripts/build_server_profile.py.
+server_profile = "D:/_Repos/tgwUltima/uodata/server-profiles/servuo-d76bf4443c.json"

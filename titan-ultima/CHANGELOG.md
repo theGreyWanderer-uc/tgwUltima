@@ -10,6 +10,56 @@ work for the next release.
 
 ### Added
 
+- **UO map inventory:** added `uo map-inventory`, the UO counterpart of
+  `u7 map-inventory`. It counts every land and static tile a facet uses,
+  ranked by placements, with the tiledata name, a derived category (wall,
+  floor, roof, door…), altitude, spread and a sample cell. It also rolls
+  statics up by name, since one name such as `plaster wall` covers dozens of
+  tile IDs. It writes CSV, JSON and a filterable page with art previews.
+- **U7 map inventory:** added `u7 map-inventory`, which counts every ground
+  tile and object a U7 map uses: chunk templates, fixed objects, starting
+  movable objects and optionally container contents. Shapes and frames are
+  ranked by placements with coverage, footprint, lift and spread, and
+  written to CSV, JSON and a filterable page with sprite previews.
+  `--sc`, `--tile-rect` and `--cx0/--cy0/--cx1/--cy1` audit part of the
+  map and list every placement in it.
+- **U9 unreachable trigger marks:** `U9Trigger.unreachable_marks()` lists
+  `0x16` marks no branch in the trigger targets (28 in 1.19F, 25 in 1.19H).
+- **UO facet maps:** added `uo map-export`, which renders each facet as a
+  one-pixel-per-tile radar map from `mapN` (UOP or MUL) and its statics,
+  with optional difference-file patches, terrain-only output and heightmaps.
+- **UO isometric map views:** added `uo map-render`, which draws any facet
+  location like the client: land art, stretched and shaded terrain, statics
+  in client draw order, hues and see-through water. Roofs, statics, hues
+  and shading can be turned off.
+- **UO named installs:** several client installs can be configured as
+  `[uo.installs.<name>]` with their own output folder and source
+  preferences, and any `uo` command's CLIENT can be an install name
+  (`titan uo map-export uof`). `titan config` lists them.
+- **UO server profiles:** house placement's server-side rules (regions,
+  region rules and the house menu) can come from one JSON server profile
+  (`--server-profile` or `server_profile` in `titan.toml`). Without one,
+  houses come from the client's multis and regions are skipped with a
+  warning.
+- **UO house footprints:** added `uo house-footprints`, which joins a
+  RunUO/ServUO house placement table to the client's multis and exports
+  each house's occupied, foundation, border and yard cells, plus a
+  contact sheet drawing every footprint.
+- **UO house capacity:** added `uo house-capacity`, which applies RunUO's
+  map-based house placement rules and regions to every location on a facet,
+  reports how much ground is legal for a house, and greedily packs as many
+  houses as fit, with an overlay map.
+  Region rules follow the emulator's own `Region.Find` (priority, nesting,
+  z ranges) and its scripts' `AllowHousing` overrides; checked against a
+  running ServUO shard, map rules agree on all 725,971 sampled centres.
+  An offline viewer shows legal ground, why each spot fails, regions and
+  the packed houses, with hover details. A second, mixed packing places a
+  seeded mix of house sizes: small near towns, larger further out, and
+  workshops near mountains.
+- **UO whole-facet maps:** added `uo map-tiles`, which renders an entire
+  facet at full client resolution into a zoomable tile pyramid with an
+  offline HTML viewer (pan, zoom, cell coordinates, go-to). Rendering runs
+  in parallel and resumes after interruption.
 - **U8 shape browser:** added `u8 shape-browse` for world, gump and font
   archives and standalone shapes, with search, property filters, animation
   playback and weapon/glow overlays. Export PNGs, GIFs, JSON reports and
@@ -83,6 +133,14 @@ work for the next release.
 
 ### Fixed
 
+- **U9 music:** the saved music node's first field is now `key` (the link of
+  the trigger object that started the music), not `track`; `track` remains
+  as an alias. The trigger references correct the music opcodes' call
+  targets and decode the 1.19H music fix (Minoc's branch to label 0).
+- **UO multis:** `multi.mul` record size (12 or 16 bytes) is now detected
+  once per file and ambiguous files are reported, instead of guessing per
+  entry, which could misread 12-byte files. `multi-export` gains
+  `--container auto|uop|mul` and reports the source and layout it read.
 - **U8 shape import:** opaque pixels no longer become transparent when their
   nearest palette colour is index 255. Also applies to U8-to-U7 conversion.
 - **U8 Flex writing:** building, repacking and replacing records now update

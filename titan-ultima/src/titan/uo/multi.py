@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__ = ["UOMulti", "UOMultiComponent", "UOMultis"]
+__all__ = ["UOMulti", "UOMultiComponent", "UOMultis", "detect_mul_stride"]
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,10 +56,18 @@ class UOMulti:
 
 
 class UOMultis:
-    """Parsed UO multis from legacy MUL/IDX and/or MultiCollection.uop."""
+    """Parsed UO multis from legacy MUL/IDX or MultiCollection.uop.
 
-    def __init__(self, multis: dict[int, UOMulti]) -> None:
+    ``source`` names the file read and ``layout`` the record format detected
+    (``uop``, ``mul16`` or ``mul12``).
+    """
+
+    def __init__(
+        self, multis: dict[int, UOMulti], *, source: str = "", layout: str = ""
+    ) -> None:
         self.multis = multis
+        self.source = source
+        self.layout = layout
 
     @classmethod
     def from_client(
@@ -70,33 +78,36 @@ class UOMultis:
         range_end: int | None = None,
         limit: int | None = None,
         prefer_uop: bool = True,
+        container: str | None = None,
     ) -> UOMultis:
+        """Load multis from a client directory.
+
+        ``container`` is ``auto`` (``MultiCollection.uop`` when present, else
+        ``multi.mul``), ``uop`` or ``mul``. When omitted, ``prefer_uop=False``
+        means ``mul``.
+        """
         root = Path(client)
-        multis: dict[int, UOMulti] = {}
-        if prefer_uop and (root / "MultiCollection.uop").is_file():
-            multis.update(
-                _load_uop_multis(
-                    root / "MultiCollection.uop",
-                    range_start=range_start,
-                    range_end=range_end,
-                    limit=limit,
-                )
+        if container is None:
+            container = "auto" if prefer_uop else "mul"
+        if container not in ("auto", "uop", "mul"):
+            raise ValueError(f"unknown multi container: {container}")
+        uop = root / "MultiCollection.uop"
+        idx, mul = root / "multi.idx", root / "multi.mul"
+
+        if container == "uop" or (container == "auto" and uop.is_file()):
+            if not uop.is_file():
+                raise FileNotFoundError("MultiCollection.uop not found")
+            multis = _load_uop_multis(
+                uop, range_start=range_start, range_end=range_end, limit=limit
             )
-        if (
-            not multis
-            and (root / "multi.idx").is_file()
-            and (root / "multi.mul").is_file()
-        ):
-            multis.update(
-                _load_mul_multis(
-                    root / "multi.idx",
-                    root / "multi.mul",
-                    range_start=range_start,
-                    range_end=range_end,
-                    limit=limit,
-                )
-            )
-        return cls(multis)
+            return cls(multis, source=uop.name, layout="uop")
+
+        if not (idx.is_file() and mul.is_file()):
+            raise FileNotFoundError("multi.mul/multi.idx not found")
+        multis, layout = _load_mul_multis(
+            idx, mul, range_start=range_start, range_end=range_end, limit=limit
+        )
+        return cls(multis, source=mul.name, layout=layout)
 
 
 def _load_mul_multis(
@@ -106,8 +117,12 @@ def _load_mul_multis(
     range_start: int | None,
     range_end: int | None,
     limit: int | None,
-) -> dict[int, UOMulti]:
+) -> tuple[dict[int, UOMulti], str]:
     indexed = UOIndexedFile.from_mul_idx(mul_path, idx_path)
+    # The record size is a property of the file, so detect it from every
+    # entry before applying a range or limit.
+    stride = detect_mul_stride([entry.data for entry in indexed.entries.values()])
+    layout = f"mul{stride}"
     multis: dict[int, UOMulti] = {}
     start = 0 if range_start is None else range_start
     end = (
@@ -121,7 +136,7 @@ def _load_mul_multis(
             continue
         if limit is not None and len(multis) >= limit:
             break
-        components, layout = _decode_mul_components(entry.data)
+        components = _decode_mul_components(entry.data, stride)
         if components:
             multis[multi_id] = UOMulti(
                 multi_id=multi_id,
@@ -129,21 +144,67 @@ def _load_mul_multis(
                 layout=layout,
                 components=tuple(components),
             )
-    return multis
+    return multis, layout
 
 
-def _decode_mul_components(data: bytes) -> tuple[list[UOMultiComponent], str]:
-    if len(data) % 16 == 0:
-        stride = 16
-        layout = "mul16"
-    elif len(data) % 12 == 0:
-        stride = 12
-        layout = "mul12"
-    else:
-        return [], "unknown"
+# Component offsets and altitudes beyond these are not plausible in any
+# shipped multi; misaligned reads produce them in roughly a quarter of records.
+_MAX_OFFSET = 128
+_Z_RANGE = (-256, 512)
+_ACCEPT_BAD_RATE = 0.01
+_REJECT_BAD_RATE = 0.05
 
+
+def detect_mul_stride(entries: list[bytes]) -> int:
+    """Return the multi.mul record size (12 or 16) for a whole file.
+
+    A size is a candidate only if every entry length divides by it. Each
+    candidate is scored by the share of records with implausible offsets or
+    altitudes. The best must be clean and any other candidate clearly worse;
+    otherwise the file is ambiguous and ``ValueError`` is raised.
+    """
+    entries = [data for data in entries if data]
+    if not entries:
+        return 16
+    rates: dict[int, float] = {}
+    for stride in (16, 12):
+        if any(len(data) % stride for data in entries):
+            continue
+        rates[stride] = _implausible_rate(entries, stride)
+    if not rates:
+        raise ValueError("multi.mul entries fit neither 12- nor 16-byte records")
+    best = min(rates, key=rates.get)
+    if rates[best] > _ACCEPT_BAD_RATE:
+        raise ValueError(
+            f"multi.mul does not decode cleanly: {rates[best]:.1%} implausible "
+            f"records at {best} bytes"
+        )
+    rivals = [rate for stride, rate in rates.items() if stride != best]
+    if rivals and min(rivals) < _REJECT_BAD_RATE:
+        raise ValueError(
+            "multi.mul record size is ambiguous: both 12 and 16 bytes decode cleanly"
+        )
+    return best
+
+
+def _implausible_rate(entries: list[bytes], stride: int) -> float:
+    bad = total = 0
+    for data in entries:
+        for pos in range(0, len(data), stride):
+            _item, x, y, z = struct.unpack_from("<Hhhh", data, pos)
+            total += 1
+            if (
+                abs(x) > _MAX_OFFSET
+                or abs(y) > _MAX_OFFSET
+                or not _Z_RANGE[0] <= z <= _Z_RANGE[1]
+            ):
+                bad += 1
+    return bad / total if total else 0.0
+
+
+def _decode_mul_components(data: bytes, stride: int) -> list[UOMultiComponent]:
     components: list[UOMultiComponent] = []
-    for pos in range(0, len(data), stride):
+    for pos in range(0, len(data) - stride + 1, stride):
         item_id, x, y, z = struct.unpack_from("<Hhhh", data, pos)
         if stride == 16:
             flags, extra = struct.unpack_from("<II", data, pos + 8)
@@ -161,7 +222,7 @@ def _decode_mul_components(data: bytes) -> tuple[list[UOMultiComponent], str]:
                 is_visible=flags != 0,
             )
         )
-    return components, layout
+    return components
 
 
 def _load_uop_multis(

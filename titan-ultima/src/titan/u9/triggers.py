@@ -505,6 +505,26 @@ class U9Trigger:
                     unresolved.append((index, view.label))
         return unresolved
 
+    def unreachable_marks(self) -> list[tuple[int, int]]:
+        """``(record index, label)`` for ``0x16`` marks no branch here targets.
+
+        Branch forms counted: on-match bits 13-15, ``0x17`` whole value,
+        count-compare bits 5-7, ``0x1A`` bits 1-3 and ``0x4F`` label 1. Such a
+        mark is dead code unless the trigger is started at that label: the
+        executor (1.19F ``0x0054F850``) begins at a matching mark when given a
+        non-zero label, but egg entry and exit always start at label 0.
+        """
+        targets = set()
+        for record in self.records:
+            view = record.branch
+            if view is not None and view.form != "label" and view.label:
+                targets.add(view.label)
+        return [
+            (index, record.arg2)
+            for index, record in enumerate(self.records)
+            if record.opcode == 0x16 and record.arg2 not in targets
+        ]
+
     def to_bytes(self) -> bytes:
         """Return the complete original FLX-entry payload byte for byte."""
         if self.raw_data:
@@ -621,6 +641,15 @@ class U9Triggers:
             unresolved = trigger.unresolved_branch_labels()
             if unresolved:
                 found[trigger.trigger_id] = unresolved
+        return found
+
+    def unreachable_marks(self) -> dict[int, list[tuple[int, int]]]:
+        """Per trigger ID, ``0x16`` marks that no branch in the trigger targets."""
+        found = {}
+        for trigger in self.triggers():
+            marks = trigger.unreachable_marks()
+            if marks:
+                found[trigger.trigger_id] = marks
         return found
 
     def unterminated_trigger_ids(self) -> list[int]:

@@ -1438,11 +1438,13 @@ class U9BookState:
 class U9MusicNode:
     """One entry of the music list (30 bytes).
 
+    ``key`` is the link of the trigger object whose ``0x35`` started the
+    music; ``0x36`` stops only the node carrying its own object's key.
     Tick values are absolute engine ticks; the game rebases them on load.
     ``unused`` is a byte nothing sets.
     """
 
-    track: int
+    key: int
     priority: int
     playing: int
     piece: int
@@ -1454,6 +1456,11 @@ class U9MusicNode:
     fading_in: int
     remove_after_fade: int
     unused: int
+
+    @property
+    def track(self) -> int:
+        """Former name of ``key`` (it was never a track number)."""
+        return self.key
 
 
 @dataclass(frozen=True)
