@@ -82,6 +82,7 @@ from titan.u9.gameplay_zones import (
 from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.icon import icon_entry_indices
 from titan.u9.integrity import check_save, render_integrity_report
+from titan.u9.save_browser_ui import register_u9_save_browser
 from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.model_geometry import (
@@ -215,6 +216,7 @@ u9_app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
+register_u9_save_browser(u9_app)
 
 
 # ============================================================================

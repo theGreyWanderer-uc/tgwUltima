@@ -585,7 +585,7 @@ def test_container_wizard_uses_selected_mod_metadata_gamedat_and_map(
     target, parsed = owned_world
     scripted_menus(
         monkeypatch,
-        ["si", target, str(target.gamedat), 1, "", "", "", "", True, "tree", False],
+        ["si", target, str(target.gamedat), 1, "I", "IREG:1:0:0:root", "T", "B", "Q"],
     )
     assert container.run_wizard() == 0
     assert parsed == [str(target.gamedat / "MAP01/U7IREG00")]

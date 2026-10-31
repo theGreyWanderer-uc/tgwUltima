@@ -1,305 +1,199 @@
 # Changelog
 
-All notable changes to **titan-ultima** are documented here.
+Notable user-visible features, fixes, documentation and compatibility changes
+in **titan-ultima**, grouped by version. Entries marked **Unreleased** describe
+work for the next release.
 
-This project uses [Semantic Versioning](https://semver.org/):
+---
 
-- **MAJOR** (1.0, 2.0, ...): breaking API or CLI changes
-- **MINOR** (0.5, 0.6, ...): new features, new commands, new format support
-- **PATCH** (0.4.1, 0.4.2, ...): bug fixes, docs, internal improvements
+## [0.7.9] — Unreleased
+
+### Added
+
+- **U8 shape browser:** added `u8 shape-browse` for world, gump and font
+  archives and standalone shapes, with search, property filters, animation
+  playback and weapon/glow overlays. Export PNGs, GIFs, JSON reports and
+  contact sheets grouped by animation or frame range.
+- **U8 NPC browser:** added `u8 npc-browse` for save archives, GAMEDAT and
+  loose files, with character names, search, filters, sprite previews,
+  equipment inspection and animation browsing. Export HTML, CSV and JSON.
+- **U8 NPC animation reports:** added `u8 npc-animation-report` for one NPC
+  or all allocated NPCs, with named actions, contact sheets and offline
+  HTML/CSV reports. Optional name CSVs can override character labels.
+- **U8 save browser:** added `u8 save-browse` with searchable archive entries,
+  hex inspection, extraction, NPCs, equipment, animations and saved-state
+  views. Compare snapshots and export offline reports; state inspection
+  works without graphics assets.
+- **U8 map browser:** added `u8 map-browse` with object/container inspection,
+  NPC and shape browsing, map filters, colour overviews and isometric
+  previews. Export HTML, PNG, CSV and JSON.
+- **U8 container browser:** added `u8 container-browse` for nested inventories
+  and NPC owners across loaded and stored maps. Filter containers and their
+  contents separately, inspect quantities and equipment, and preview item
+  sprites and composed container artwork. Previews support saved or random
+  layouts and containers without an open-gump record; exports include
+  HTML, CSV, JSON and images.
+- **U8 inventory access:** NPC details now open container previews and nested
+  inventories directly, including empty inventories.
+- **U8 world and egg search:** added `u8 world-query` and `u8 egg-query` paged
+  browsers with all-map filters, nested searches, teleport links and monster
+  spawn details. Open related shapes, NPCs and inventories, and export
+  HTML, CSV, JSON and PNG previews.
+- **U8 palette browser:** added `u8 palette-browse` with numbered swatches,
+  RGB matching, gradients, palette effects and PNG previews. Export
+  searchable HTML, CSV, JSON, effect sheets and original palette bytes.
+- **U8 saved-state inspection:** added `u8 flags-dump`, `u8 avatar-dump`,
+  `u8 gumps-dump`, `u8 kernel-dump`, `u8 itemcach-dump` and `u8 npcdata-dump`
+  with text, JSON and CSV views, including `kernel-dump --view decoded`.
+  `u8 save-info` shows state and game-clock overviews; `u8 save-diff` compares
+  flags, items, NPCs, avatar, UI and process state. Detailed kernel decoding
+  is limited to supported native builds; other records remain identified.
+- **U8 map data:** added `u8 fixed-dump` and `u8 nonfixed-dump` with summary
+  and item views, nested inventories, filters and text/JSON/CSV exports.
+- **U8 animation data:** added `u8 anim-dump` and `u8 wpnovlay-dump` to inspect
+  actor actions, directions, movement and weapon/glow overlays, with filters
+  and text/JSON/CSV exports.
+- **U7 container previews:** added composed inventory artwork with saved or
+  random layouts, BG/SI and mod support, locked-container labels, and
+  HTML/PNG/JSON exports.
+- **U7 imported shape animation:** shape creation and import now let users
+  choose whether multi-frame artwork animates. Scripted workflows accept
+  `--animate`, `--no-animate` and recipe `conversion.animated`; standalone
+  imports retain the choice in metadata sidecars.
+- **U9 save browser:** added `u9 save-browse` with selection, paging, filters,
+  hex inspection, extraction, maps, NPCs, saved activities, integrity
+  findings and offline reports. Backups include the selected archive,
+  loose files and selector.
+
+### Changed
+
+- **U7/U8 container navigation:** added persistent result lists, nested
+  navigation, separate container/contents filters and clearer item identities.
+  Existing U7 batch tree and CSV queries remain available.
+- **U8 previews:** static shape, NPC and equipment previews retain native
+  detail when space permits and show rendered dimensions. Playback fits the
+  terminal window and updates on resize; solid colour cells reduce font seams.
+- **U8 state labels:** browsers and exports now show character names and
+  additional NPC and animation flag meanings, while retaining unknown values.
+- **U9 save-check advice:** terminal and JSON reports provide advice specific
+  to each finding and severity. JSON adds keyed `recommendations`; integrity
+  verdicts are unchanged. Unavailable map comparisons are reported as notes.
+- **Browser exports:** new U7/U8 reports use new output paths rather than
+  replacing earlier reports or changing game data.
+
+### Fixed
+
+- **U8 shape import:** opaque pixels no longer become transparent when their
+  nearest palette colour is index 255. Also applies to U8-to-U7 conversion.
+- **U8 Flex writing:** building, repacking and replacing records now update
+  the native checksum, including manifest rebuilds. U7/Exult reserved header
+  bytes remain intact.
+- **U8 maps and inventories:** the active map's live state takes precedence
+  over stored records. Maps populated only by NONFIXED are included, nested
+  inventory items are excluded from world renders, and reflected sprites
+  have corrected placement and depth sorting.
+- **Container selection and exports:** desktop menus retain complete item
+  IDs and filter text; U7 IDs accept either case. U8 result exports honour
+  all active filters and record the exported selection.
+- **Windows image previews:** restore minimized viewers and bring requested
+  previews forward, including reused Photos windows. Viewer launch/focus
+  failures now provide clearer feedback and generated image paths.
 
 ---
 
 ## [0.7.8]
 
-- **U7 shape properties:** add detailed physics/equipment metadata, property
-  filters, and JSON reports to the shape browser.
-
-- **U7 palette browser:** add game/mod palettes, colour swatches, cycling,
-  palette-aware gradient tests, and exports.
-
-- **U7 monster browser:** add game/mod and source selection, search, colour
-  previews, equipment, spawn eggs, and report exports.
-
-- **U7 previews:** use solid colour cells to avoid terminal font seams in NPC
-  and shape previews, including playback.
-
-- **Interactive menus:** show hotkeys throughout selection/action menus and
-  paging. Fix next/previous NPC navigation after searching for one NPC.
-
-- **U7 NPC/save browsers:** add game/mod and source selection, NPC search,
-  stats, colour shape previews at frame 16, schedules, nested inventory,
-  save details, and report exports.
-
-- **U7 shape browser:** add game/mod and archive selection, colour frame previews,
-  shape search, action hotkeys, live terminal playback, PNG export, and GIF previews.
-
-- **U7 map-render wizard:** add game/world and map selection, render options,
-  a 20% preview before full rendering, percentage progress, and safe PNG saving.
-  Resolve the selected world's base and patch data together.
-
-- **U9 trigger behavior:** correct deferred movement retry/collision fields,
-  name follow timing `time_per_unit`, catalogue 24 special actions and four
-  phase roles, and expose action meanings in research exports. Add duration
-  and special-action record views; preserve every original byte. Runtime
-  execution of these actions remains unverified.
-
-- **U9 short-trigger loader documentation:** retail reads 510 bytes without
-  an entry-length clamp, so unterminated IDs 58/631 include commands from
-  59/632. Correct the prior standalone-valid classification; retain exact
-  entry parsing and on-disk diagnostics.
-
-- **U9 trigger operand decoding:** all 101 operand layouts now have confirmed
-  retail masks. Correct sound/status masks, link flags, radius encodings,
-  mana/no-op labels, audio-instance IDs, projectile fields and fade units.
-  Target views include random collection and conditional speech; `search_radius`
-  reports decoded world units. Several parameter keys now name confirmed roles
-  (`below`, `instance_id`, `subtract`, `source_only`, fade intervals); raw words
-  and six-byte records retain identical serialization.
-
-- **U9 activity and combatant decoder follow-ups:** begin-action steps expose
-  lossless, kind-specific argument views, including the 121 retail gesture
-  selectors, speed/repeat packing, links, furniture selection and combat
-  assistance. Six combatant fields now use confirmed names; the Slasher's
-  Avatar-tracking threshold decodes as a float and its saved NPC health words
-  as unsigned integers. Raw record bytes and stream widths are preserved.
-
 ### Added
 
-- **U9 text and type-name import (translation):** `text-import` rebuilds
-  `text.flx`, `misctext.flx` or a joke-dialect copy (`Tbrk.*`, `Mbrk.*`) from
-  an edited `text-export` CSV, and `typename-import` rebuilds `TYPENAME.FLX` or
-  `Tnbrk.*` from an edited `typename-csv` CSV. Entry numbering, slot counts,
-  unused slots, source-file markers and each type's text and icon references
-  are kept; every change is read back before writing. Library:
-  `U9TextArchive.rebuilt()`, `U9TypeNames.rebuilt()`. Type-name labels are now
-  decoded as Windows-1252 rather than ASCII, so accented names read back
-  correctly (the shipped labels are plain ASCII, so nothing they show changes).
+- **U7 browsers:** expanded shape, palette, monster, NPC and save browsing
+  with game/mod selection, search, filters, colour previews and report
+  exports. Shape browsing includes physics/equipment properties, playback,
+  PNG/GIF exports and JSON reports; NPC views include schedules and nested
+  inventories; monster views include equipment and spawn eggs.
+- **U7 map-render wizard:** added game/world and map selection, render
+  options, a reduced preview before full rendering, progress and safe saving.
+- **U9 translation imports:** added `text-import` and `typename-import` to
+  rebuild archives from `text-export` and `typename-csv` CSVs, including
+  dialect copies. Imports retain entry numbering and references; type-name
+  text supports Windows-1252 characters. Library import methods are available
+  as `U9TextArchive.rebuilt()` and `U9TypeNames.rebuilt()`.
+- **U9 NPC details:** `npc-show`, `npc-classes` and `npc-csv` now include
+  readable combat/movement categories, weapon/material names, known spells
+  and routine hours. CSV adds `*_name`, `routine_*_clock` and `known_spells`
+  columns; the library exposes matching names and clock-time helpers.
+- **U9 save decoding:** expanded saved-process inspection to cover movement,
+  pathfinding, spells, NPC activities, object animations, cameras and timers,
+  plus subsystem state such as NPCs, combat, weather, lights, UI and sound.
+  `save-check --json` adds `process_sections` details; `PRC02` warns when
+  subsystem sections cannot be read. Temporary-camera parsing remains
+  unverified against a save containing that record and is flagged by `PRC03`.
+  `PRC04` notes the game's failure to resume saved creeper plant growth.
+- **U9 trigger and activity inspection:** added decoded operands, target
+  selection, branch diagnostics, named action kinds, durations and special
+  actions to `trigger-show`, `activity-show` and `script-research-export`.
+  `nonfixed-entities` adds a `Triggers` column; the library also exposes
+  world-object trigger IDs. Activity reports flag missing action steps.
+  Runtime execution of special actions remains unverified.
+- **U9 dialogue keys:** added `text-keys-info`, `text-key-lookup` and
+  `text-keys-export` for dialogue-key lookup, export and target checks.
+- **U9 colour tables:** added `shade-info`, `shade-csv`, `color-cube-info`,
+  `color-cube-lookup` and `color-cube-csv` for historical authoring data.
+  These optional files are not loaded by the retail game.
+- **U9 acoustic environments:** added inspection and CSV export for
+  `sfxenv.flx`, including validation and reporting of unusual records.
+- **U9 animation exports:** added clip labels, animation events, interpolated
+  poses, single-clip OBJ/STL pose exports and animated-model bundles with GLB.
+- **Ultima Underworld textures:** added `titan uw1` texture inspection and
+  batch PNG export, with descriptions, contact sheets and CSV/JSON manifests.
 
-- **U9 NPC records -- value names:** `titan.u9.npc` now names the record's ID
-  fields: combat behaviour (64 creature kinds), movement behaviour (38
-  kinds), active weapon category and hit-sound material
-  (`combat_behavior_name`, `movement_behavior_name`,
-  `active_weapon_category_name`, `impact_material_name`). The 12-byte
-  spellbook is decoded as a bitset of spell numbers (`known_spells`,
-  `known_spell_names`, `SPELL_NAMES`), and the routine start and end times are
-  documented as minutes after midnight (`U9Npc.clock_time`). `npc-show`
-  prints the names, spells and routine hours; `npc-classes` labels each
-  group; `npc-csv` adds `*_name`, `routine_*_clock` and `known_spells`
-  columns.
+### Changed
 
-- **U9 save process stream -- temporary camera and more process types:**
-  when the camera manager saved a temporary camera, its 173-byte record
-  (`U9TemporaryCameraState`) is now read between the camera control and the
-  targeting state, so the process list is reached in such saves too. Parsing
-  has not yet been checked against a save containing this record, so it
-  carries `boundary_confirmed = False` and
-  `save-check` adds an informational finding `PRC03`. Seventeen more process
-  types are read: 17, 19, 20, 21 and 69 (straight-line path, safe item
-  rotation, explosion, missile launcher, delayed throw), the death, summon
-  daemon, earthquake, lightning storm and inferno spells (131, 137, 139, 140,
-  141), the acid-rain spell with its target list (142,
-  `U9AcidRainProcessState`), the fire-ring watcher (154), the venom effect
-  (210), the creeper plant growth (215: plant, scale, growth rate, start
-  time), and the header-less types 135, 151 (time stop and armageddon, which
-  save nothing) and 214 (delayed item teleport, `U9HeaderlessProcessState`).
-  Only type 206, which the game never saves, remains unread. A new
-  informational check `PRC04` notes a creeper plant-growth process: the retail
-  game does not restore its start time on load, so the plant stops growing
-  as soon as the save is loaded (the rest of the save loads normally, as a
-  test save confirmed).
-
-- **U9 save process stream -- sections after the process list:** new
-  `titan.u9.process_sections` reads the thirteen subsystem sections that
-  follow the process list (`U9ProcessSections.from_prefix`): fast area (the
-  loaded chunks, with display/active/collision state and water kind), NPC
-  data manager (a second NPC array, readable with `.npcs()`, and the cache
-  of each authored NPC's map record), main interface
-  (availability and visibility of each of the 11 on-screen elements, display
-  mode, and the 8,192 found-item-type flags), light system (saved lights with
-  colour, position, range and flicker), weather (clocks, current and target
-  weather, storm, wind and gusts, rain and lightning timers, sun, secondary
-  and lightning colours, Trammel and Felucca phases, sun-mask objects and
-  the screen fade), spell manager (active spell process IDs), physics (moving
-  objects and trigger overlaps), moving platforms (lifts, steps, ships, with
-  riders and lift paths), highway manager (NPCs travelling a highway while
-  unloaded: NPC, highway, node, speed, step timer, frozen position), hints,
-  combat, book bookmarks and
-  the sound system's music list (`sounds.music_nodes`: track, priority,
-  piece, volumes and fade ticks; the list is counted and must end the file).
-  Combat is read combatant by combatant
-  (`U9CombatantRecord`): the record layout follows the NPC's combat
-  behaviour ID; each record's 268-byte common part is typed
-  (`U9CombatantCommonState`: radius, home location, route settings,
-  poison, ally references, last destination and more), and so are the
-  class-specific fields before and after it (`U9CombatantClassFields`, 25
-  classes: humanoid, Avatar, wolf, guard, gazer, creeper and others; the
-  creeper's second common part is `repeated_common`). Across 251 retail
-  saves (2,655 combatants) every byte of `processes.dat` is now accounted
-  for, with object references checked against the reference table.
-  `save-check --json` reports per-section offsets, sizes and counts under
-  `process_sections` (including each combatant's classes), and a new check
-  `PRC02` warns when those sections cannot be read.
-
-- **U9 save process stream -- movement controllers:** the process-data
-  traversal now reads 40 movement-controller process types (base, flying,
-  swimming, humanoid, Avatar, NPC, brute, skeleton, spider, ghost, lich and
-  zombie variants) and the
-  Avatar's animation controller (type 213). Each record keeps its version,
-  object references, flying altitudes and animation lists, and its
-  controller-specific blocks, including the humanoid-family fields the game
-  writes ahead of the common process header. Each block keeps its raw bytes
-  and a typed `fields` view (`U9HumanoidMovementFields`,
-  `U9AvatarMovementFields`, `U9BruteMovementFields`, `U9NpcMovementFields`,
-  `U9SpiderMovementFields`, `U9SwimmingMovementFields`, ...): Avatar countdown timers and
-  levitation flags, footprints and infernal armor, idle animations, spider
-  speed, and swimming depths and animation lists.
-
-- **U9 save process stream -- skeletons, lanterns, torches, cameras:**
-  five more process types found blocking 15 older retail saves now decode:
-  the skeleton-reform process (`U9SkeletonReformProcessState`, eleven
-  `U9SkeletonBoneState` records), the floating lantern with its path
-  (`U9FloatingLanternProcessState`, `U9PathManagerState`), and the
-  turn-to-angle, poison-camera, underwater-camera, Avatar-torch and
-  arrow-projectile processes as table-driven layouts. Table-driven layouts can now be header-only (`world_state` is
-  `None`) or carry a version stored before the common header. Checked
-  against 244 retail saves (the 13 used so far plus 231 older ones): every
-  one now decodes through the process-list terminator.
-
-- **U9 save process stream -- pathfinder:** type 1 decodes as
-  `U9PathfinderProcessState`: the walking NPC and its target, origin, goal,
-  current leg and step goals, termination tests, search and walk states and
-  collision limits, plus the optional grid search (`U9PathGridState`: grid
-  geometry, from/to cells and every 40-byte `U9PathGridCell`). The grid's
-  saved queue, path and best-cell pointers convert to cell indices
-  (`cell_index`, `queue_cell_index`, `path_cell_index`, `best_cell_index`).
-  Unset positions may hold NaN; the integrity report writes those as `null`.
-  Together with the spell processes below, **all 13 retail saves checked now
-  decode through the process-list terminator.**
-
-- **U9 save process stream -- spells:** the 60-byte block every spell
-  process saves (`U9SpellState`: caster, target and effect object
-  references, spell number, stage, timer, animation, event, callback) is read
-  for table-driven spell types, exposed as `U9SimpleProcessState.spell_state`.
-  28 spell process types (teleport, fireball, meteorite, levitate, summon
-  undead, stone, create reagents and others) plus the blow-away and armor-fade
-  helpers join `SIMPLE_PROCESS_LAYOUTS`, which now covers 61 types.
-
-- **U9 save process stream -- table-driven process types:** 31 more
-  fixed-size process types are read from one declarative table
-  (`SIMPLE_PROCESS_LAYOUTS`) into `U9SimpleProcessState`: object movers,
-  turners, faders and scalers, path followers, floating objects, lever,
-  drawer, wardrobe, portcullis, bellows and windmill animations, stone
-  blocks, fireballs, magic eyes, head turns, fire damage and others. Each
-  record has a `kind`, its version, named fields (index by name, or
-  `.fields`) and its reserved words, with the same checks as the dedicated
-  readers (version, object references, flags, finite floats).
-
-- **U9 save process stream -- NPC activities and actions, scripted objects,
-  clocks and door timers:** the traversal now reads the 24 NPC-activity
-  process types (`U9NpcActivityProcessState`: NPC number, action kind, the
-  NPC's object reference, state, flags and the 64 activity variables), the 22
-  NPC-action process types that perform an NPC's current step
-  (`U9NpcActionProcessState`: pathfinding target, origin, stand time,
-  animations, collision limits and the same variables), the five process
-  types that save only scripted-object state (`U9ScriptedObjectProcessState`),
-  the type-57 clock animation (`U9ClockAnimationProcessState`) and the
-  type-197 automatic-door timer (`U9DoorTimerProcessState`). Both NPC records
-  expose `.action`, the matching `ACTION_KIND_CATALOGUE` entry. The integrity
-  report includes these records under `decoded_following_processes`.
-
-- **U9 world-object triggers:** `U9Nonfixed.entity_triggers()` returns the
-  four trigger IDs a world object runs, by phase, from its extra-data tags 62
-  and 59 (the values the retail trigger executor reads); `nonfixed-entities`
-  shows them in a new `Triggers` column.
-
-- **U9 activity values:** begin-action steps now name their NPC action kind
-  from a retail-confirmed catalogue, including which kinds the game starts
-  nothing for; `activity-show` prints the kind and flags sets that do not
-  start at ordinal 1 or call a missing ordinal; `script-research-export` adds
-  the kind columns.
-
-- **U9 trigger operands:** every trigger command now has a typed operand
-  view -- target selection (link and object type) for the 63 commands that
-  act on each object a search finds, six branch encodings, and named `arg2`
-  fields graded `retail_confirmed` or `retail_corroborated`. The views never
-  alter stored words and report bits the game does not read. `trigger-show`
-  prints a decoded line under each record and notes branches to missing
-  labels; `script-research-export` adds the views as trailing columns.
-
-- **U9 dialogue key table:** added lossless `static/text.dat` parsing and
-  serialization, the game's exact key lookup, reachability and `text.flx`
-  target checks, and recovery of each item's `"<NPC name> : <line>"` or
-  `"UI : <line>"` key from `NPC.FLX` record names (verified for 7,595 of 7,656
-  retail items), through the new
-  `text-keys-info`, `text-key-lookup`, and `text-keys-export` commands.
-
-- **U9 authoring-tool colour tables (optional; not loaded by the game):**
-  added lossless readers for `shade.tbl`, `shadegry.tbl`, `rgbccube.dat` and
-  `yiqccube.dat` with the `shade-info`, `shade-csv`, `color-cube-info`,
-  `color-cube-lookup` and `color-cube-csv` commands. Retail 1.19F never loads
-  these files; Titan exposes them as historical data only.
-
-- **U9 acoustic environments:** added lossless `sfxenv.flx` parsing, listing,
-  and forensic CSV export with standard-profile validation, inactive name-cell
-  residue, direct `spaces.flx` slot semantics, and preservation of the shipped
-  slot-13 profile-code mismatch.
-
-- **Ultima Underworld textures:** added native `titan uw1` inspection and
-  batch PNG export for all floor/ceiling and wall texture archives, with
-  original IDs, decoded descriptions, contact sheets, and CSV/JSON manifests.
-
-- **U9 animation semantics and posed export:** added clip labels read from each
-  record's authoring path, typed animation events, interpolated poses,
-  explicit single-clip rigid-limb OBJ/STL pose export, and
-  versioned animated-model bundles with local limb meshes, exact tracks,
-  hierarchy/material metadata, archive hashes, and generated animated GLB.
+- **Interactive menus:** show action and paging hotkeys throughout browsers.
+- **U7 previews:** solid colour cells reduce font seams in NPC and shape
+  previews, including playback.
+- **U9 trigger documentation:** corrected how the retail loader handles
+  unterminated short triggers; exported diagnostics retain the on-disk data.
 
 ### Fixed
 
-- **U9 save process stream -- false rejections:** two checks rejected valid
-  retail saves. Pathfinder positions and angles the walker never set can
-  hold NaN, so the pathfinder's fixed fields are no longer range-checked
-  (4 saves); a particle preset that never uses a camera filter can store 255
-  in its two camera-filter ramp counts, which are no longer capped (1 save).
-  The other ten ramp counts are still checked.
+- **U7 NPC navigation:** next/previous navigation works after searching for
+  an individual NPC.
+- **U9 decoding:** corrected trigger operands, movement timing, activity
+  arguments and combatant field labels, including saved NPC health values.
+  Trigger reports use corrected field names including `time_per_unit`,
+  `below`, `instance_id`, `subtract` and `source_only`; `search_radius`
+  is reported in world units.
+- **U9 save checking:** valid saves are no longer rejected for unused
+  pathfinder values or particle-camera fields.
+- **U9 JSON reports:** `IntegrityReport.to_dict()` and `save-check --json`
+  produce strict JSON, representing non-finite saved values as `null`.
+- **U9 animation records:** corrected signed fields, active-part reporting
+  and playback length; unusual records and trailing data remain inspectable.
+- **U9 model records:** corrected model, collision and material parsing;
+  orphaned indexed records are explicitly identified as forensic data.
+- **Flex updates:** archive updates retain comments and U7 header information,
+  preserving compatibility with U7 palette inspection.
 
-- **U9 save-check JSON:** `IntegrityReport.to_dict()` and `save-check --json`
-  now write strict JSON. Saved records can hold NaN or infinite floats in
-  unused slots (particle-preset ramp slots, an unset pathfinder position);
-  these were written as bare `NaN`, which strict JSON parsers reject. They are
-  now `null`, and the writer refuses any non-finite value that slips through.
-
-- **U9 animation records:** aligned `anim.flx` with its signed runtime layout,
-  separated active part IDs from inactive registry residue, exposed controller
-  playback length alongside the final stored sample, preserved readable
-  anomalies/trailing bytes, and added exact record round trips.
-
-- **U9 model records:** aligned `sappear.flx` parsing with the retail loader,
-  including collision/physics fields, connection geometry, sorted-face lists,
-  material padding, and explicit forensic-only handling for the sixteen
-  orphaned indexed records.
-
-- **Flex updates:** preserve generic archive comments and dispatch U7 archives
-  through the U7 writer, retaining their title, magic/version, reserved header
-  bytes, record indices, and compatibility with U7 palette inspection.
+---
 
 ## [0.7.7]
 
 ### Changed
 
-- Improved U7 game, mod, world, map, and archive selection in interactive workflows.
-- Updated interactive menus with moving highlights, Tab hints, and path completion.
+- Improved U7 game, mod, world, map and archive selection.
+- Added moving menu highlights, Tab hints and path completion.
 - Improved PNG shape previews and palette selection for Exult games.
-- Added colour font previews, custom preview text, and swatches beside gradient presets.
-- Added palette-aware ramp selection for all font gradient presets.
-- Simplified setup by removing the extraction prompt and closing command suggestions.
+- Added colour font previews, custom preview text, gradient swatches and
+  palette-aware ramp selection.
+- Simplified setup by removing the extraction prompt and closing command
+  suggestions.
 
 ### Fixed
 
 - Corrected nested U7 install detection and config path reporting.
-- Kept font and world workflows within the selected game's base, patch, and save data.
-- Preserved archive formats and allocated shape slots against combined base and patch data.
+- Font and world workflows use the selected game's base, patch and save data.
+- Archive updates preserve formats and allocate shape slots against combined
+  base and patch data.
 
 ---
 
@@ -307,89 +201,62 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **U9 world and maps:** added terrain, fixed/nonfixed placement, water, and
-  object readers; textured 2D maps and atlases with grids; shared-mesh GLB
-  export; and VTK/OpenGL south-high rendering with named resolution presets.
-
-- **U9 models, animation, textures, and palettes:** completed `sappear.flx`
-  model parsing and round-trips, `anim.flx` inspection and registry-backed
-  model candidate reports, material reports, texture decoding/replacement,
-  terrain panels, and `ankh.pal`/`sdInfo` tooling.
-
+- **U9 world and maps:** added terrain, object and water inspection, textured
+  2D maps and atlases with grids, GLB export, and 3D renders with resolution
+  presets.
+- **U9 graphics:** expanded model/animation inspection, material reports,
+  texture decoding and replacement, terrain panels and palette tools.
 - **U9 archives and audio:** added FLX pack/repack, audio metadata and link
-  reports, WAV/native extraction, and safe single/batch sound replacement.
-
-- **U9 scripts and world data:** added trigger/activity readers and Ghidra
-  research exports, NPC/savegame and highway tooling, and book/text search and
-  export commands.
-
-- **Sparse U7 mod-patch rendering:** `titan u7 map-render` now fills empty
-  records in sparse patch `SHAPES.VGA` archives from the configured BG or SI
-  base archive without modifying either source.
+  reports, WAV/native extraction, and single/batch sound replacement.
+- **U9 scripts and saves:** added trigger/activity inspection, Ghidra research
+  exports, NPC/savegame and highway tools, and book/text search and export.
+- Added a `glb` installation extra for GLB exports.
+- **Sparse U7 mod patches:** `titan u7 map-render` fills missing patch shapes
+  from the configured BG or SI base archive.
 
 ### Fixed
 
-- **U9 parsing and export correctness:** tightened FLX/`TYPES.DAT` detection,
-  fixed sparse `fixed.*` page enumeration and 8-bit `sdInfo` selection, and
-  hardened truncated texture, multi-frame icon, duplicate-limb, and Windows
-  path handling; fixed GLB sea-level depth fighting and non-finite model UVs;
-  and added a `glb` install extra used by release tests.
+- Corrected U9 archive/type detection, sparse fixed-map enumeration and
+  texture selection. Improved handling of truncated textures, multi-frame
+  icons, duplicate model limbs and Windows paths.
+- Corrected GLB sea-level depth fighting and non-finite model UVs.
 
 ---
+
 ## [0.7.5]
 
 ### Added
 
-- **Universal U7 map JSON workflows:** added `titan u7 map-export-json` to
-  preserve terrain definitions, the complete 192x192 chunk layout, fixed
-  objects, shape metadata, and source provenance in one versioned JSON file.
-  Added `titan u7 map-render-json` to render that document without consulting
-  `U7MAP`, `U7CHUNKS`, or `U7IFIX`, including single-superchunk, tiled full-map,
-  overview, projection, and grid options.
-- **Native secondary-map creation:** added `titan u7 map-create` to create an
-  empty Exult secondary-map namespace or materialize universal JSON as native
-  `u7map`, shared `u7chunks`, and `u7ifix*` files. Destinations and map numbers
-  are always explicit; existing maps require `--overwrite-map`, while shared
-  terrain expansion requires `--update-chunks`. Writes are staged and verified
-  before installation, and optional GAMEDAT namespaces use the same `mapNN`
-  naming.
-- **Ultima III NES map conversion:** added `titan u3 map-create`, backed by an
-  embedded, checksum-verified copy of the original 64x64 NES Sosaria map. It
-  deterministically expands the U3 layout into an SI-sized U7 map using the
-  selected Serpent Isle JSON construction source, seed-controlled biome,
-  coast, mountain, and rare-feature rules, and a user-selected secondary-map
-  number. Optional output includes the generated universal JSON and a classic
-  full-map render.
+- **U7 map JSON:** added `titan u7 map-export-json` for terrain, map layout,
+  fixed objects and metadata, and `titan u7 map-render-json` to render those
+  documents without the original map files. Supports cropped, tiled,
+  overview, projection and grid views.
+- **U7 map creation:** added `titan u7 map-create` for empty secondary maps
+  or maps built from universal JSON. Existing maps require `--overwrite-map`;
+  expanding shared terrain requires `--update-chunks`. Maps can also target
+  GAMEDAT namespaces.
+- **Ultima III NES conversion:** added `titan u3 map-create` to expand the
+  original Sosaria layout into a U7 secondary map using a Serpent Isle JSON
+  source, repeatable seeds and terrain rules. Optional outputs include
+  universal JSON and a full-map render.
 
 ### Changed
 
-- **Separate U7 map and graphics roots:** `titan u7 map-render` now accepts
-  `--map-root`, allowing scratch or mod `U7MAP`/`U7CHUNKS`/`U7IFIX` data to be
-  rendered with graphics, palettes, and type metadata from another STATIC
-  directory. Existing rendering behavior is unchanged when the option is
-  omitted.
-- **In-memory U7 map rendering:** `U7MapRenderer` can now receive terrain
-  definitions, map placement, and fixed objects directly, providing the shared
-  rendering path used by universal JSON documents.
+- **Separate graphics sources:** `titan u7 map-render --map-root` renders map
+  data using graphics, palettes and metadata from another directory.
+- **Library map rendering:** `U7MapRenderer` accepts terrain definitions,
+  map placement and fixed objects directly.
 
 ### Fixed
 
-- **Cross-platform U7 map filenames:** map rendering now resolves `U7MAP`,
-  `U7CHUNKS`, and `U7IFIXnn` case-insensitively, so native lowercase map files
-  work on Linux as well as Windows.
-- **SHAPES.VGA flat-record protection:** `titan u7 flex-add-shape` now begins
-  automatic allocation at shape 150 when updating `SHAPES.VGA`, preserving
-  records 0 through 149 for the format's required 8x8 flat textures. Explicit
-  `--index` placement remains available.
-- **Exult-compiled U7 Usecode parsing:** `usecode-disasm` and
-  `usecode-scan-intrinsic` now skip the optional compiled symbol table,
-  including nested class scopes and shape-function metadata. Corrected the
-  boundary calculation for legacy `0xFFFF` extended functions and added
-  support for newer `0xFFFE` records with 32-bit function IDs, allowing BG and
-  SI mod `USECODE` files to be read completely.
-- **Exult V2 IFIX record detection:** fixed ambiguous IFIX records whose byte
-  lengths are divisible by both four and five by honoring the Exult Flex V2
-  header marker before falling back to record-size detection.
+- U7 map rendering resolves native map filenames case-insensitively, including
+  lowercase files on Linux.
+- `u7 flex-add-shape` protects the flat-texture slots in `SHAPES.VGA` by
+  starting automatic allocation at shape 150. Explicit `--index` remains
+  available.
+- `usecode-disasm` and `usecode-scan-intrinsic` read Exult-compiled mod files
+  with symbol tables and extended function IDs.
+- Corrected detection of Exult V2 IFIX records with ambiguous lengths.
 
 ---
 
@@ -397,143 +264,72 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **Flexible UU2 map views:** 3D rendering gained native-resolution sizing,
-  lossless orthographic `plan`, square-on `south`/`low-s` cameras, flat
-  `map-grid` diagnostics, and `map-stack` world cutaways.
-
-- **UU2 map and texture diagnostics:** added `texture-catalog`,
-  `texture-usage`, and `map-verify`, plus `terrain-export` and contact
-  sheets for terrain and shape archives.
-
-- **Expanded UU2 3D scenes:** doors, portcullises, bridges, texture-mapped
-  walls, wall controls, levers, switches, and writing now render and export.
-  Scene metadata includes door state and direction, sign text, texture sources,
-  trigger links, wall mounting, removable walls, and enchantment state.
-
-- **UU2 instance-aware rendering:** added owner-coloured beds and the decoded
-  door-swing bit, with special-object placement and appearance carried into
-  scene and GLB metadata.
-
-- **Combined U7 shape-frame reports:** added `titan u7 shape-frame-report`
-  with CSV/JSON output that keeps frame origins, drawing hotspots, and
-  `WIHH.DAT` weapon attachment coordinates distinct.
+- **UU2 map views:** added native-resolution sizing, plan/south cameras,
+  diagnostic grids and world cutaways.
+- **UU2 diagnostics:** added `texture-catalog`, `texture-usage`, `map-verify`,
+  `terrain-export` and archive contact sheets.
+- **UU2 scenes:** doors, portcullises, bridges, walls, controls, levers,
+  switches and writing now render and export with their placement and state.
+  Scene metadata includes signs, triggers, textures and enchantment details.
+- **U7 frame reports:** added `titan u7 shape-frame-report` CSV/JSON output
+  distinguishing sprite origins, drawing anchors and weapon attachments.
 
 ### Changed
 
-- **Expanded UU2 render controls:** `map-3d-render` gained additional camera
-  presets, slot and output-size selection, zoom, fit margin, supersampling,
-  texture filtering/scaling, backend choice, and a Pillow fallback. Ceiling
-  texture rules and vertical scale are now selectable for rendering and export.
-
-- **Clearer U7 coordinate workflows:** shape frames now expose explicit origin
-  and top-left drawing-anchor helpers, while `WIHH.DAT` uses weapon-attachment
-  terminology. `shape-import` can select BG or SI and discover its configured
-  palette automatically.
+- UU2 `map-3d-render` gained camera, crop, output-size, zoom, supersampling,
+  texture, backend and Pillow fallback controls. Ceiling textures and vertical
+  scale are selectable for renders and exports.
+- U7 shape frames expose explicit origin and drawing-anchor helpers;
+  `WIHH.DAT` uses weapon-attachment terminology. `shape-import` can select
+  BG/SI and discover the configured palette.
 
 ### Fixed
 
-- **UU2 model geometry and shading:** executable models now retain face and
-  Gouraud shading, correctly triangulate concave faces, and read all four model
-  colour-table entries.
-
-- **UU2 model and instance colours:** corrected chest, moongate, table,
-  owner-coloured bed, and quest-state blackrock-gem appearance, including
-  instance-selected colours and safe handling of colour slots supplied at
-  runtime.
-
-- **UU2 scene placement:** unified sub-tile placement, aligned bridges and
-  doorways to their tiles, placed wall decals on their wall planes, kept loose
-  scenery out of adjacent walls, and made camera framing independent of object
-  adjustments.
-
-- **UU2 texture orientation:** corrected vertically inverted floors, ceilings,
-  walls, and sprite billboards in 3D renders and GLB exports.
-
-- **UU2 special-object state:** corrected full-size wall panels, ceiling-height
-  bridge visibility, and open portcullis height.
+- Corrected UU2 model geometry, triangulation and shading.
+- Corrected colours for chests, moongates, tables, owner-coloured beds and
+  quest-state blackrock gems.
+- Corrected sub-tile placement, bridges, doorways, wall decals and camera
+  framing.
+- Corrected texture orientation in 3D renders and GLB exports.
+- Corrected wall-panel sizing, bridge visibility and open-portcullis height.
 
 ---
+
 ## [0.7.3]
 
 ### Added
 
-- **U7 standalone shape import:** added `titan u7 shape-import` to create one
-  U7 RLE `.shp` from PNG frames in Windows Explorer-style Name A-Z order.
-  RGBA pixels are quantized against a selected U7 palette, alpha maps to
-  transparency index 255, and frame hotspots default to the bottom-right
-  pixel. The command writes only a standalone `.shp`, never a Flex archive.
-- **Empty U7 Flex creation:** added `titan u7 flex-create` to create a valid
-  zero-record U7/Exult `.VGA` or `.FLX` archive using the U7 header format,
-  with an optional title and guarded `--force` replacement.
-- **U7 shape archive insertion:** added `titan u7 flex-add-shape` to validate
-  and place a standalone `.shp` in the lowest empty U7 Flex record, appending
-  when no gap exists, or at a specific `--index` while filling intervening
-  records as empty. Occupied indexed records require `--replace`. The command
-  supports separate output or explicit atomic in-place updates and reports the
-  assigned record/shape number.
-- **Native Ultima Underworld II command family:** added `titan uw2` with
-  `map-extract`, `map-render`, `palette-export`, `shape-info`, `shape-export`,
-  `shape-batch`, `object-info`, and `object-dump`. The map commands migrate
-  the established `uuw2data/scripts` pipeline into Titan: `LEV.ARK` decoding,
-  level/object/automap/note/light JSON, `T64.TR` terrain, GR doors and decals,
-  and U7-style overhead cutaway rendering. `map-render` reads these sources
-  directly into memory and leaves only final PNG files by default; optional
-  `--keep-intermediates` retains diagnostic exports. It also composites normal
-  `OBJECTS.GR` sprites and `ANIMO.GR` effect frames selected through
-  `COMOBJ.DAT`/`OBJECTS.DAT`, including Castle Britannia's two-object fountain.
-  It independently decodes the supported `UW2.EXE` model-node format in memory
-  and can project common-object meshes. The U7-style renderer defaults to
-  verified `OBJECTS.GR` furniture icons instead, placing tables, chairs,
-  benches, chests, and similar items behind loose food and object sprites;
-  executable geometry remains available through `--model-style geometry`.
-  Other new library modules decode
-  `PALS.DAT`, sparse `.GR` archives and known GR bitmap encodings,
-  `ALLPALS.DAT`, `COMOBJ.DAT` render types, and `OBJECTS.DAT` animation frame
-  ranges. Commands accept `-g`/`--gamedir` or `[uw2.game] base` from
-  `titan.toml`.
-- **Standalone UU2 polygon model tools:** added `titan uw2 model-render` for
-  PyVista/VTK camera renders and `titan uw2 model-export` for individual
-  OBJ/MTL/PNG/JSON assets. Both read `UW2.EXE`, `PALS.DAT`, and `TMOBJ.GR`
-  directly. Batch export covers all 21 currently mapped built-in item IDs,
-  preserves palette-colored faces, resolves item-selected bitmap textures,
-  writes one directory per item, and records the batch in `manifest.json`.
-  Special door, bridge, lever, switch, and writing rules remain future work.
-- **Textured UU2 3D map scenes:** added `titan uw2 map-3d-render` camera PNGs
-  and `map-3d-export` GLB/JSON output from one shared in-memory scene. Tile
-  geometry uses `T64.TR`; mapped furniture uses individually placed, named
-  `UW2.EXE` model parts with palette or `TMOBJ.GR` materials; loose objects
-  and ANIMO frames use alpha billboards. Inclusive tile crops allow small
-  validation scenes. Castle dining-room food records now align with table
-  tops by preserving native model Z units. Placed meshes use native scale `1`,
-  clockwise 45-degree headings, and each executable model's `0x0078` origin
-  pivot. Individual OBJ exports use the same pivot and record both origin and
-  collision half-extents in metadata.
+- **U7 shape import:** added `titan u7 shape-import` to create standalone
+  `.shp` files from PNG frames, with palette selection, transparency and
+  default hotspots. Frames follow Windows Explorer-style Name A-Z order.
+- **U7 Flex creation and insertion:** added `titan u7 flex-create` for empty
+  archives and `titan u7 flex-add-shape` for automatic or indexed insertion.
+  Archive creation requires `--force` to replace an existing file; insertion
+  accepts `--index` and requires `--replace` for occupied records. Output can
+  be separate or explicitly in place.
+- **Ultima Underworld II tools:** added `titan uw2` commands `map-extract`,
+  `map-render`, `palette-export`, `shape-info`, `shape-export`, `shape-batch`,
+  `object-info` and `object-dump`. Map rendering includes world objects and
+  effects, writes final PNGs by default, and optionally retains diagnostic
+  exports with `--keep-intermediates`. Furniture defaults to bitmap artwork;
+  `--model-style geometry` selects executable model geometry. Commands accept
+  `-g`/`--gamedir` or `[uw2.game] base` in `titan.toml`.
+- **UU2 model tools:** added `titan uw2 model-render` and `model-export` for
+  individual models and batch OBJ/MTL/PNG/JSON exports. Special door, bridge,
+  lever, switch and writing rules are not yet supported in this release.
+- **UU2 3D maps:** added `titan uw2 map-3d-render` and `map-3d-export` for
+  textured camera PNGs and GLB/JSON scenes with furniture, loose objects and
+  animated effects. Tile crops support smaller scenes; model placement and
+  dining-table item heights are aligned with the game.
 
 ### Fixed
 
-- **U7 frame-32+ object footprints:** map rendering now matches Exult's
-  corrected frame-bit interpretation. Frame bit 5 (`0x20`) swaps a shape's
-  X/Y tile dimensions only when the shape has 32 or fewer real frames and
-  the bit denotes a generated reflection. Shapes with more than 32 real
-  `SHAPES.VGA` frames retain their stored TFA dimensions for frames 32+.
-  This fixes depth sorting and fallback bounds for extended mod shapes such
-  as the 40-frame Serpent Isle door shape 376. Door state persistence and
-  Exult's separate `frame % 4 < 2` open-door rule are unchanged.
-- **U8 embedded-name export filenames:** `titan u8 music-export` and
-  `titan u8 sound-export-all` now preserve the names Titan already parses
-  from the source archives instead of always falling back to generic archive
-  stems. `MUSIC.FLX` exports now use playlist track stems when present
-  (for example `0001_intro.mid`), and `SOUND.FLX` exports now use the
-  built-in 8-byte SFX identifiers when present (for example
-  `0001_GRUNT7A.wav`). Standalone `.xmi` and `.raw` input behavior is
-  unchanged.
-- **U8 shape export naming and full-archive batching:** `titan u8
-  shape-export` now uses bundled `usecode_classes.csv` labels for numeric
-  U8 shape IDs when available (for example `0068_DOOR_NS_f0000.png`
-  instead of plain `0068_f0000.png`). `titan u8 shape-batch` now also
-  accepts `U8SHAPES.FLX` directly, batch-exporting every non-empty shape
-  slot to PNG frames with the same naming scheme and falling back to
-  numeric stems for shapes that have no bundled class-name mapping.
+- **Extended U7 shapes:** corrected reflected footprints and depth sorting
+  for shapes with more than 32 frames, including mod doors.
+- **U8 audio filenames:** `u8 music-export` and `u8 sound-export-all` use
+  embedded track/SFX names when available, with numeric fallbacks.
+- **U8 shape exports:** `u8 shape-export` uses bundled shape labels when
+  available; `u8 shape-batch` also accepts an entire `U8SHAPES.FLX` archive.
 
 ---
 
@@ -541,53 +337,21 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added `titan uo` for Ultima Online Classic Client extraction and metadata
-  review. The new commands export 2D assets and supporting data from UOP and
-  MUL/IDX client files: art/statics, gumps, textures, lights, hues, radar
-  colors, fonts, sounds, multis, tiledata, `animdata.mul`, `art.def`, all
-  supported `.def` redirect files, localization/speech/skills/system text, and
-  legacy animation frames. Animation exports include body/action/direction
-  resolution metadata using client DEF files, `mobtypes.txt`,
-  `AnimationSequence.uop`, and a packaged body-name metadata cache. UO commands
-  accept an optional client path and can fall back to `[uo.game] base` in
-  `titan.toml`; `titan setup` can detect/prompt for that UO base.
-- Added `titan u9` 2D UI icon discovery and export (`titan.u9.icon`):
-  the texture archives already used for 3D model surface materials
-  (`bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx`) also hold a large set
-  of standalone 2D UI icons (spell-rune sigils, item icons, ...) mixed
-  into the same index space, with no format-level flag distinguishing
-  them from material textures. The one reliable signal found: every
-  entry a 3D model material actually references is a real surface
-  texture, so the complement, entries no model ever references, is
-  a solid (if not provably exhaustive) set of icon candidates. Real
-  data: 5,054 distinct texture_ids are claimed by `sappear.flx`
-  models, leaving 1,549 of `bitmapsh.flx`'s 6,597 used entries as icon
-  candidates, including a confirmed spell-rune-sigil cluster
-  (entries 568-641). Kept logically separate from existing mesh/texture
-  commands: its own module (`titan.u9.icon`), its own `icon-*` CLI
-  command group, and its own default output directory
-  (`icon_export/`, vs. `model_export/`).
-  - `titan u9` CLI: `icon-list` (candidate icons with dimensions),
-    `icon-export` (any single texture archive entry, mesh-referenced
-    or not), `icon-export-all` (batch-export every candidate icon).
-- Added `titan u8 shape-convert-u7` (`titan.u8.u7_shape_convert`) for
-  converting U8 static/scenery shapes into U7/Exult-compatible shapes.
-  Conversion uses resize, palette requantization, and hotspot adjustment
-  from U8 bottom-center to U7 bottom-right. Output size is calibrated from
-  real U7 shape footprints, based on the largest frame in each U8 shape,
-  and clamped to 64 pixels per side. Actor/NPC animation conversion is out
-  of scope.
-  - Added `shape-convert-u7-all` to batch-convert every used shape in a
-    `U8SHAPES.FLX` archive. A real Black Gate test converted 855 shapes
-    and 21,450 frames with no failures.
-  - Documented the known limitation for multi-orientation objects: changing
-    compass direction cannot be solved with a per-pixel transform because
-    the rendered sprite already bakes in one camera angle.
-- `titan u7 shape-batch` now also accepts a directory of standalone
-  `.shp` files, such as `shape-convert-u7-all` output, not just a
-  single VGA Flex archive. Titan auto-detects whether the argument is a
-  directory or a file. Matches the directory-input convention
-  `titan u8 shape-batch` already had; U7 was missing the equivalent.
+- **Ultima Online tools:** added `titan uo` for Classic Client asset export
+  and metadata inspection: art, gumps, textures, lights, hues, fonts, sounds,
+  multis, tiledata, text and legacy animations. Animation exports resolve
+  client redirects and include body/action/direction metadata. Commands use
+  an explicit client path or `[uo.game] base`; setup can detect/configure it.
+- **U9 UI icons:** added `icon-list`, `icon-export` and `icon-export-all`,
+  with separate icon output directories. Candidate detection uses textures
+  not referenced by models and may not identify every UI icon; single-entry
+  export accepts any texture entry.
+- **U8-to-U7 conversion:** added `titan u8 shape-convert-u7` and
+  `shape-convert-u7-all` for scenery shapes, with palette conversion, sizing
+  and hotspot adjustment. Actor animation conversion is unsupported;
+  conversion cannot change the viewing angle baked into a sprite.
+- **U7 shape batches:** `titan u7 shape-batch` accepts directories of
+  standalone `.shp` files as well as VGA archives.
 
 ---
 
@@ -595,105 +359,29 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added the `titan.u9` subpackage: initial format-reading support for
-  Ultima 9: Ascension.
-  - **Archives & metadata**: FLX archive directory reading (used by
-    `sound/*.flx`, `static/TYPENAME.FLX`, and other U9 containers);
-    `TYPENAME.FLX` type-ID-to-display-name decoding.
-  - **Sound**: a shared 0x3C-byte sound-record header reader covering
-    `Speech.flx`, `sfx.flx`, and `music.flx` alike (id, description,
-    frequency, bit depth, channels, encoding type); PCM repackaging;
-    stereo ADPCM decode (EA-XA, `music.flx`); mono ADPCM decode (EA-XA,
-    some `sfx.flx` entries, a distinct 15-byte block shape from the
-    stereo path); EA MicroTalk speech decode (`Speech.flx`, a multipulse
-    CELP/RELP codec ported from vgmstream's open-source reference
-    decoder). All four decode paths were validated against real game
-    archives (cross-checked against independent decodes where a
-    reference was available) before being wired up, and every
-    `sfx.flx`/`music.flx`/`Speech.flx` entry in this project's test
-    copy of the game now decodes to a playable WAV.
-  - **3D models & textures**: a `static/sappear.flx` mesh reader,
-    limb hierarchies (rigid body-part transforms, not vertex skinning),
-    per-limb LODs, per-corner vertex/UV/normal data, and materials. A bitmap-archive texture reader
-    (`bitmap16.flx`/`bitmapC.flx`/`bitmapsh.flx`: 8-bit paletted and
-    16-bit 565/5551 pixel formats) and OBJ+MTL+PNG / binary-STL
-    exporters that flatten the limb hierarchy to world space (STL is
-    geometry-only by format limitation; OBJ carries full materials and
-    textures). Checked against every real entry in this project's test
-    copy of the game: the initial hierarchical reader parsed 3,748/3,764
-    models; the remaining 16 were later identified as alternate indexed
-    records. Of those initially parsed, 3,657 export successfully and the
-    remaining 91 have no visible geometry to export, for example
-    collision-only placeholders. All initially found 5,044 distinct
-    textures referenced across every model resolved successfully from
-    `bitmap16.flx` alone. OBJ UVs are flipped (`1.0 - v`) to match
-    OBJ/OpenGL's texture-space convention, the opposite of the source
-    data's own.
-  - **Real palette colors for 8-bit textures**: `static/ankh.pal`
-    (confirmed real: 256 RGB entries, cross-validated by decoding the
-    same placeholder texture through both the 16-bit and 8-bit texture
-    sets and matching color families) recovers true colors for 8-bit
-    textures instead of the previous flat-grayscale fallback (kept as
-    the default when no palette is given). Every real 8-bit texture
-    checked across all three bitmap archives decoded to a valid,
-    in-range palette index.
-  - **Model naming**: since no file names a `sappear.flx` model
-    directly, `model-info`/`model-export` can optionally derive a
-    best-effort label through the indirect `TYPES.DAT` mapping
-    (`type_id` to `default_model_id`) and `TYPENAME.FLX` mapping
-    (`type_id` to display name), for example naming model 1805's export
-    `model_01805_lord-british`.
-    This mapping is inherently partial (about 45% of models in this
-    project's test copy of the game resolve to at least one name) and
-    not unique (several named types commonly share one generic body
-    mesh); both are reported honestly rather than papered over.
-  - **Preview rendering**: `model-export` can also render two preview
-    images (`preview.png` + `preview_front.png`, the latter the same
-    angle rotated 180 degrees) as part of the same export (on by
-    default; skips cleanly with a note if the optional `pyvista`
-    dependency isn't installed). Textured multi-material models are
-    rendered via VTK's full scene importer (`vtkOBJImporter`), not a
-    naive single-texture OBJ load, confirmed the naive approach
-    silently renders every material but one as flat gray on a real
-    16-material export, while the scene importer renders all of them
-    correctly. The second, rotated render was added after noticing the
-    default angle consistently showed the back of humanoid models.
-    Textures render with mipmapping, interpolation, and 8x anisotropic
-    filtering to avoid moire noise on high-frequency detail such as fur.
-  - `titan u9` CLI: `flx-list`, `flx-extract`, `flx-extract-all`,
-    `typename-dump`, `sound-list`, `sound-extract-pcm`, `sound-extract`,
-    `model-info`, `model-export`, `model-export-all` (same options as
-    `model-export`, batched over every used model in a `sappear.flx`).
-- Added `titan u6 map-audit-zorder`: reproduces `map-render --objects`'s
-  own anchor/overflow/layer-tier rules to flag candidate same-tier
-  object ties (the pattern behind every hidden-object bug fixed below)
-  for manual review, rather than needing to spot them by eye.
+- **Ultima IX tools:** added `titan u9` with archive listing/extraction,
+  type-name inspection, sound extraction and model exports.
+- **U9 audio:** decode PCM, stereo/mono ADPCM music and effects, and
+  MicroTalk speech to WAV.
+- **U9 models and textures:** inspect model hierarchies and materials, decode
+  paletted/16-bit textures, and export OBJ/MTL/PNG or geometry-only STL.
+  Models without visible geometry are reported rather than exported.
+- **U9 palette and names:** use `ankh.pal` for paletted texture colours;
+  grayscale remains the fallback without a palette. Optional model names
+  are inferred from type metadata and remain best-effort and non-unique.
+- **U9 model previews:** exports include previews from two opposite angles when
+  optional PyVista is installed, with support for multi-material textures.
+- **U9 commands:** added `flx-list`, `flx-extract`, `flx-extract-all`,
+  `typename-dump`, `sound-list`, `sound-extract-pcm`, `sound-extract`,
+  `model-info`, `model-export` and `model-export-all`.
+- **U6 render diagnostics:** added `titan u6 map-audit-zorder` to flag
+  overlapping-object candidates in `map-render --objects` for manual review.
 
 ### Fixed
 
-- Fixed a wide category of z-order/compositing bugs in `u6 map-render
-  --objects`, where an object sharing a map coordinate with another was
-  incorrectly hiding it (or getting hidden by it) instead of both
-  rendering correctly:
-  - A signpost was completely erasing its own directional plaque at 26+
-    map coordinates instead of merely peeking through its transparent
-    corners; the 2 spots pairing two plaques on one post needed a
-    further coordinate-specific fix so the losing plaque doesn't
-    independently repaint a second, unwanted plank next to the correct
-    one.
-  - A cookfire's logs, a basket's contents, a wall-mounted weapon, a
-    doorway's door, and carpet/secret-door floor tiles were each
-    winning or losing file-order coin-flip ties against the wrong
-    object.
-  - Ground clutter in dungeon loot piles (a dead body vs. a pile of
-    bones, a club vs. a dead gargoyle, small items vs. a dropped piece
-    of armor, blood vs. a cleaver/knife, a magic bow vs. a map
-    fragment) was hidden by same-tier objects it should visually sit on
-    top of.
-- Fixed several of the above by promoting the confirmed *winning* tile
-  to the foreground tier rather than demoting the loser, after an
-  earlier attempt at the latter regressed unrelated matchups (a
-  demoted "loser" losing to supporting furniture it should still beat).
+- Corrected U6 map object layering for signposts, plaques, cookfires,
+  container contents, wall-mounted items, doors, floor tiles and dungeon
+  loot, preventing objects from incorrectly hiding one another.
 
 ---
 
@@ -701,90 +389,39 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added `titan u7 shape-cycle-scan` to inventory a whole `SHAPES.VGA`
-  archive for colour-cycling, translucency, and TFA frame-animation
-  content, exporting indexed frames plus a JSON/CSV descriptor per
-  shape. Each entry reports flat-tile vs RLE-sprite (index 255's
-  transparency meaning depends on which) and the fully resolved
-  animation parameters (type, frame count, recycle, freeze chance,
-  frame delay), not just a yes/no animated flag.
-- Added the TFA/Extra/Object shape metadata model:
-  - `has_contact_effect` on `U7TypeFlags.ShapeEntry` (`is_poisonous`/
-    `is_field` kept as compatibility aliases), plus shape-class helper
-    properties (`has_quality`, `has_quantity`, `is_container`, etc.).
-  - Extra model (`titan.u7.shape_extra`) for non-TFA `Shape_info` data
-    from Exult's `shape_info.txt` (`field_type`, `barge_type`,
-    `mountain_top`), plus a `U7ShapeInfo` facade exposing
-    `becomes_field_object` (contact-effect bit plus a typed field).
-  - Object model (`titan.u7.ireg.U7ObjectFlags`: invisible,
-    okay_to_take, temporary), replacing three divergent, partial IREG
-    decoders in `map.py`, `save.py`, and `container.py` with one
-    implementation.
-    `world-query` and `container-browse` now show real
-    `quality_raw`/`quality`/`flags` instead of a bare, sometimes-wrong
-    quality integer.
-- Added the `titan.u6` subpackage: format-reading (and limited
-  save-editing) support for Ultima 6: The False Prophet.
-  - **Graphics & world**: LZW decompression; `lib_16`/`lib_32` library
-    reader; tile graphics (plain/transparent/pixel-block); palettes;
-    `TILEFLAG` terrain/object metadata; `MAP`/`CHUNKS` world renderer
-    with animated-tile support and correct multi-tile ("double-size")
-    object compositing (beds, banners, barrels, etc. now render as
-    complete sprites instead of a single truncated tile).
-  - **World objects & actors**: object placement (`LZOBJBLK`/
-    `LZDNGBLK`) with container/inventory resolution; egg (object
-    spawner) decoding, including spawn probability and target; the
-    256-actor identity table (position, stats, alignment, talk flags);
-    loading world/actor state directly from a real save's `SAVEGAME/`
-    folder.
-  - **Story & save state**: party roster, player state, game clock, and
-    weather; a read/compare/write tool for per-NPC talk flags and
-    global quest state, including writing changes back to a save.
-  - **Dialogue**: a CONVERSE.A/B bytecode disassembler, with known
-    global variables (karma, Gargish knowledge, party size, etc.)
-    annotated by name instead of raw numbers.
-  - **Text & reference data**: fonts (English + runic/gargoyle); object
-    names; books/signs; NPC daily schedules.
-  - `titan u6` CLI: `lzw-decompress`, `lib-list`, `lib-extract`,
-    `lib-extract-all`, `tileflag-dump`, `palette-export`, `tile-export`,
-    `tile-export-all`, `map-render` (`--objects`, `--tick`),
-    `object-list`, `egg-list`, `actor-list`, `gamestate-dump`,
-    `flags-dump`, `flags-compare`, `flags-set`, `converse-dump`,
-    `font-export`, `look-dump`, `book-dump`, `schedule-dump`.
+- **U7 animation inventory:** added `titan u7 shape-cycle-scan` with indexed
+  frames and JSON/CSV reports for colour cycling, translucency and frame
+  animation, including resolved timing and animation parameters.
+- **U7 metadata:** expanded shape and object properties, including contact
+  effects and Exult-specific metadata. `has_contact_effect` retains
+  `is_poisonous` and `is_field` as compatibility aliases. `world-query` and
+  `container-browse` report corrected `quality_raw`, `quality` and `flags`.
+- **Ultima VI tools:** added `titan u6` for graphics, world objects,
+  inventories, actors, dialogue, books, fonts, schedules and saved state.
+  Render maps with world objects and animation; inspect and compare quest
+  and NPC talk flags, or explicitly write flag changes to saves.
+- **U6 commands:** added `lzw-decompress`, `lib-list`, `lib-extract`,
+  `lib-extract-all`, `tileflag-dump`, `palette-export`, `tile-export`,
+  `tile-export-all`, `map-render`, `object-list`, `egg-list`, `actor-list`,
+  `gamestate-dump`, `flags-dump`, `flags-compare`, `flags-set`,
+  `converse-dump`, `font-export`, `look-dump`, `book-dump` and `schedule-dump`.
+  `map-render` accepts `--objects` and `--tick`.
 
 ### Changed
 
-- Corrected U7 TFA animation-type inference: a shape flagged
-  `is_animated` with no explicit nonzero animation nibble now correctly
-  defaults to type 0 (time-synchronized), instead of being reported as having no animation.
+- Animated U7 shapes without an explicit animation type now report the
+  default time-synchronized animation rather than no animation.
 
 ### Fixed
 
-- Fixed shape/frame colour-cycle scanning conflating ordinary
-  palette-cycling pixels with TFA-translucency pixels in the indices
-  they share (238-254); which one applies is now determined by the
-  shape's own translucency flag, not the pixel value alone.
-- Fixed container/body IREG records (12/13/14-byte) reading their
-  quality and lift bytes from the wrong offsets, decoding them as if
-  they were plain 6-byte objects; this corrupted container quality/lift
-  and read invisible/okay_to_take flags from the wrong byte entirely.
-- Fixed `container-browse` showing a `xN` quantity suffix on every item
-  with `quality > 1`, regardless of shape class; it now only shows for
-  actual quantity-class items (a container's own unrelated quality
-  byte, like a chest's lock difficulty, is not a count).
-- Fixed a set of translucency rendering bugs found while chasing down
-  a shape that stayed gold instead of grey in real gameplay (shape 177):
-  - `shape-animate`'s frame-sequence mode (real TFA multi-frame
-    animation) ignored `--static`'s translucency data entirely; only
-    its colour-cycle preview mode applied it.
-  - `shape-export` never auto-detected TFA translucency even with
-    `--shape N` and `--static` both given, requiring a separate
-    `--translucent` flag; it now auto-detects, keeping `--translucent`/
-    `--translucent-bg` as an explicit override for standalone `.shp`
-    input with no shape number to look up.
-  - `save_gif` snapped translucent pixels straight to fully opaque with
-    no blending, since GIF has no partial-alpha support; it now
-    pre-composites them onto a solid background first, then flattens.
+- Corrected detection of palette cycling versus translucency in U7 scans.
+- Corrected container/body quality, lift and object flags in U7 inventory
+  data. Quantity suffixes now appear only on quantity-class items.
+- U7 `shape-animate` frame playback now applies translucency data.
+  `shape-export` detects translucency automatically with `--shape` and
+  `--static`, with `--translucent` and `--translucent-bg` overrides for
+  standalone input.
+- Translucent GIF exports blend against a background before saving.
 
 ---
 
@@ -792,10 +429,8 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added `titan u7 shape-animate` to render a shape's animation to a GIF,
-  auto-detecting whether it uses TFA frame-sequence animation(a
-  moongate cycling frames) or palette colour-cycling on a single fixed
-  frame(a weapon's glowing power stroke), with real per-type timing.
+- Added `titan u7 shape-animate` to export frame animations and palette
+  colour cycling to GIFs with their game timing.
 
 ---
 
@@ -803,28 +438,24 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added `titan u7 palette-info` for palette slot occupancy, semantic names,
-  encoding, and colour-cycling range inspection.
-- Added real U7 colour-cycling and translucency compositing support, plus
-  `--indexed`, `--cycle-phase`, `--translucent`, and `--translucent-bg`
-  options on `u7 shape-export`/`shape-batch` for exact-index and
-  translucency-aware exports.
-- Added interleaved "double" palette support and an explicit `--encoding`
-  override for ambiguous 6-bit/8-bit palettes.
+- Added `titan u7 palette-info` for palette occupancy, names, encoding and
+  cycling ranges.
+- Added U7 colour-cycling and translucency exports through `shape-export`
+  and `shape-batch`, with `--indexed`, `--cycle-phase`, `--translucent`
+  and `--translucent-bg` options.
+- Added interleaved double palettes and an `--encoding` override for
+  ambiguous palettes.
 
 ### Changed
 
-- Hardened `PALETTES.FLX` slot parsing to distinguish empty from
-  invalid/truncated/overlapping records, and to preserve original palette
-  bytes losslessly.
-- `titan u7 map-render` translucency now sources real per-game
-  `XFORM.TBL`/`BLENDS.DAT` data instead of a hardcoded approximation (same
-  default output).
+- Palette inspection distinguishes empty from invalid records and retains
+  original palette bytes.
+- U7 `map-render` translucency uses the selected game's
+  `XFORM.TBL`/`BLENDS.DAT`.
 
 ### Fixed
 
-- Fixed `titan u7 palette-export` crashing with an unhandled traceback on real
-  `PALETTES.FLX` archives that contain unallocated palette slots.
+- `palette-export` no longer crashes on unallocated archive slots.
 
 ---
 
@@ -832,65 +463,32 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added U7 monster definition and spawn-data support:
-  - `MONSTERS.DAT` parser support for base and mod monster definition files,
-    including decoded stats, movement flags, immunities, vulnerabilities,
-    attack mode, equipment offset, SFX, raw bytes, and merged base/mod output.
-  - Monster `equip.dat` parsing and monster spawn reports that join monster
-    eggs to resolved `MONSTERS.DAT` definitions and equipment rows.
-  - `titan u7 monster-defs` for decoded monster definition dumps.
-  - `titan u7 monster-dump` for live `monsnpcs.dat` monster actors from
-    loose Exult-format runtime files, GAMEDAT directories, or save archives.
-  - `titan u7 monster-report` for joined monster exports covering definitions,
-    live monsters, monster eggs, and placed monster-class world objects.
-- Added `titan u7 monster-equipment` to calculate possible monster equipment
-  from `MONSTERS.DAT` plus `equip.dat`, including probability, random quantity
-  handling, and expected quantity per spawn.
-- Added U7 NPC inventory/equipment export support:
-  - NPC inventory item export from parsed `npc.dat` inventory blocks.
-  - `titan u7 npc-equipment` to export actual saved NPC inventory/equipment
-    with `readied_or_actor_top`, `backpack_container`, `backpack`, and
-    `nested_container` location labels.
-- Added U7 static metadata parser support:
-  - `WIHH.DAT` parser and `titan u7 wihh-dump` for actor weapon-in-hand frame
-    offsets.
-  - `titan u7 static-data-dump` for `weapons.dat`, `ammo.dat`, `armor.dat`,
-    `container.dat`, `xform.tbl`, `blends.dat`, and `usecode` function-index
-    metadata.
-  - BG/SI Exult-format bundled-data support for `static-data-dump`: when loose
-    `container.dat` or `blends.dat` files are absent, Titan can read the
-    corresponding records from an installed `exult_bg.flx` / `exult_si.flx`
-    data bundle. Blend exports also fall back to the documented 17-entry U7
-    translucency table when no loose or bundled source is available.
-- Added U7 `USECODE` parser and raw analysis commands:
-  - `titan u7 usecode-scan-intrinsic` finds `CALLI` / `CALLIS` references to a
-    target intrinsic and reports function id, file offset, relative offset,
-    argument count, return/no-return opcode flavor, and raw bytes.
-  - `titan u7 usecode-disasm` emits conservative assembly-style bytecode for a
-    single function or every function in a `USECODE` file without claiming
-    high-level decompilation.
+- **U7 monsters:** added `monster-defs`, `monster-dump`, `monster-report` and
+  `monster-equipment` for definitions, live actors, spawn data and possible
+  equipment with probabilities and quantities, including mod support.
+- **U7 NPC equipment:** added `npc-equipment` to export saved inventories
+  with readied, backpack and nested-container locations.
+- **U7 static metadata:** added `wihh-dump` for weapon attachments and
+  `static-data-dump` for equipment, containers, blends and usecode metadata.
+  Missing loose data can fall back to installed Exult bundles; blend exports
+  also have a standard translucency fallback.
+- **U7 usecode:** added `usecode-scan-intrinsic` for intrinsic references and
+  `usecode-disasm` for individual or complete bytecode disassembly.
 
 ### Changed
 
-- Expanded U7 egg CSV export for monster eggs with decoded monster shape,
-  frame, spawn count, schedule, and alignment fields.
-- Expanded `npc-equipment` location labels with `ready.dat` preferred ready
-  slots, and expanded `monster-equipment` with runtime-generated ammo rows for
-  ammo-using monster weapons in Exult-format data.
-- Cleaned U7 `build_exclude_set(no_building=True)` control flow so building
-  exclusion uses the same decision path as bit-flag filters.
-- Cleaned U7 typeflag statistics so the flag section counts only actual
-  TFA/occlusion/obstacle flags, while shape classes and animation types remain
-  separate.
+- Egg CSV exports include monster appearance, spawn count, schedule and
+  alignment.
+- Equipment reports use game-specific ready slots and account for generated
+  monster ammunition.
+- Typeflag statistics separate flags from shape classes and animation types.
 
 ### Fixed
 
-- Added U7 `npc.dat` flavor handling so loose NPC files are auto-scored as
-  Exult-format runtime vs original new-game data where possible, ambiguous
-  loose files report unknown sex, and `gamedat-info` decodes original
-  `INITGAME.DAT` NPC sex with the correct inverted bit-9 rule.
-- Filtered NPC inventory exports against the real `SHAPES.VGA` record count so
-  Exult-format text-message combat bark IDs are not reported as carried items.
+- NPC inspection distinguishes original new-game data from Exult runtime
+  files. Ambiguous loose files report unknown sex; `gamedat-info` correctly
+  reports sex from original initgame data.
+- Inventory exports no longer misidentify Exult combat-bark IDs as items.
 
 ---
 
@@ -898,31 +496,24 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Completed the U8 Spell Catalog with all 36 castable spells across
-  Necromancy, Sorcery, Thaumaturgy, and Theurgy, including mana costs and
-  their usage context, incantations, reagents, focuses, and source references.
+- Completed the U8 Spell Catalog with all 36 castable spells, including
+  mana costs, incantations, reagents, focuses and source references.
 
 ### Changed
 
-- Made BASEBOOK the sole book-icon entry and library launcher in the Objects
-  list, kept its related classes tagged as library sources, and pinned BASEBOOK
-  above the alphabetically sorted object entries.
-- Improved the library interface with content-aware counts, spell-specific
-  Slot labels, stricter data-schema checks, keyboard-accessible section tabs,
-  and clearer list/detail navigation.
-- Excluded SCROLL2 consumable-effect handlers from the readable Scrolls
-  catalogue; the underlying scroll objects and effects remain available in
-  the dialogue data.
+- BASEBOOK is the single book-icon library launcher and appears first in
+  the Objects list.
+- Improved library counts, spell labels, keyboard-accessible tabs and
+  list/detail navigation.
+- Readable Scrolls exclude consumable-effect handlers; their objects and
+  effects remain available in dialogue data.
 
 ### Fixed
 
-- Corrected BASEBOOK quality `0x66` to use Resurrection's own
-  `SGBOOK::func1D26` text instead of Intervention's duplicate dispatch, while
-  keeping Resurrection out of the castable Spell Catalog.
-- Corrected Spell Catalog content reporting so metadata-backed spell entries
-  are no longer presented as having no readable content.
-- Centralized NPC, Object, and Util classification so sidebar and header
-  counts remain consistent.
+- Corrected Resurrection book text and duplicate dispatch; Resurrection
+  remains outside the castable Spell Catalog.
+- Corrected missing-content reports for metadata-backed spells.
+- NPC, Object and Util counts agree between the sidebar and header.
 
 ---
 
@@ -930,9 +521,8 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added `titan dialogue copy` as an optional post-prepare step that prompts
-  for a destination and copies NPC JSON files plus their bundled META JSON
-  sidecars.
+- Added `titan dialogue copy` to copy prepared NPC JSON and META sidecars
+  to a selected destination.
 
 ---
 
@@ -940,34 +530,19 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- Added three new U7 data-inspection commands:
-  - `titan u7 world-query` for IFIX and IREG placement filtering by shape,
-    class, flags, and area.
-  - `titan u7 egg-query` for decoded egg trigger inspection with table or CSV
-    output.
-  - `titan u7 container-browse` for nested container traversal with tree or
-    CSV output.
-- Expanded U7 naming resolution with layered sources:
-  - Base shape names from `TEXT.FLX`.
-  - Per-frame names from Exult FLX data.
-  - Optional mod overrides from `textmsg.txt` and `shape_info.txt`.
-- Added stronger Exult-aware setup and config discovery:
-  - Detects runtime `gamedat` paths in user-profile Exult folders.
-  - Discovers mod roots, saves, and archive/initgame sources.
-  - Writes Exult paths into config when available.
-- Added multi-map mod support for `world-query` and `map-render` via
-  `--map-num`.
-- Improved dialogue web branch reporting:
-  - Random branch roll/chance reporting.
-  - Flag-branch ending hints to suggest alternate outcomes.
-- Added dialogue web library generation in `titan dialogue prepare` /
-  `validate`, covering books, scrolls, graves, plaques, and spell catalog
-  entries with a sectioned web library browser.
+- Added `titan u7 world-query` for placement filtering, `egg-query` for
+  trigger inspection and `container-browse` for nested inventories.
+- U7 names combine base-game labels, per-frame Exult names and mod overrides.
+- Setup detects Exult profile GAMEDAT, mod roots, saves and initgame sources,
+  and records discovered paths in config.
+- `world-query` and `map-render` support secondary maps through `--map-num`.
+- Dialogue browsing reports random branch chances and alternate flag outcomes.
+- `titan dialogue prepare` and `validate` generate a browsable library of
+  books, scrolls, graves, plaques and spells.
 
 ### Fixed
 
-- Corrected dialogue web condition handling for mixed random and
-  `strcmp`-driven branch flow.
+- Corrected dialogue conditions combining random and string-based branches.
 
 ---
 
@@ -975,46 +550,23 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **U7 loose NPC schedule exports:** added `titan u7 npc-dump` for loose
-  `npc.dat` / `GAMEDAT` data and `titan u7 schedule-dump` for loose
-  `schedule.dat`, including automatic sibling `npc.dat` name resolution.
-- **U7 TFA reference output and notes:** added
-  `u7 typeflag-dump --format detail` output plus implementation-checked parser notes
-  for `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`, shape classes,
-  and BG/SI animation nibbles.
-- **U7 Exult runtime path discovery:** `titan setup` now records live
-  Exult profile `GAMEDAT` paths when initialized, detects mod
-  `patch/initgame.dat` archives, and `u7 gamedat-info --mod NAME` can inspect
-  configured/user-profile mod sources.
+- Added `titan u7 npc-dump` and `schedule-dump` for loose NPC and schedule
+  files, with automatic NPC-name lookup.
+- Added `u7 typeflag-dump --format detail` for expanded shape metadata.
+- Setup discovers initialized Exult runtime and mod initgame data;
+  `u7 gamedat-info --mod NAME` inspects mod sources. Path discovery was
+  incomplete in this release and is expanded in 0.6.5.
 
 ### Fixed
 
-- Replaced CSV serialisation in `typeflag.py`, `save.py`,
-  and `cli.py` with Python's standard `csv.writer` module for robust export
-  output.
-- Corrected U7 NPC and inventory parsing edge cases in runtime data paths,
-  including IREG special-entry skipping so `npc.dat` parsing continues past
-  Avatar inventory and exports all declared NPC records.
-- Removed duplicate raw type-flag columns from U7 NPC CSV exports.
-- Corrected U7 TFA parsing so BG/SI animation bytes at offset `3 * 1024` are
-  decoded as packed animation nibbles instead of extra shape records.
-- Corrected U7 SHPDIMS decoding/export labels to expose raw `dimY, dimX`
-  bytes, X/Y obstacle bits, and decoded dimension payloads.
-- Corrected the U8 dialogue web engine loop safety guard so long valid
-  conversations that pause at an `Ask` no longer force-end after ten topic
-  choices, while no-pause runaway loops are still capped.
-- Corrected loose Exult `GAMEDAT/npc.dat` sex export to decode runtime
-  `type_flags` bit 9 directly, while `INITGAME.DAT` still uses Exult's
-  original new-game inversion path.
-- Added raw ZIP archive support for Exult mod `initgame.dat` containers and
-  initgame parsing in Exult mod data paths.
-
-### Correction
-
-- The U7 Exult runtime path discovery note above was incomplete: Exult
-  stores initialized base-game and mod runtime files under its profile data
-  folders, not only under the installed game or mod directories. The expanded
-  setup/path handling is tracked in `0.6.5`.
+- Corrected CSV escaping and removed duplicate raw flag columns.
+- Corrected U7 NPC/inventory parsing and exports, including Avatar inventory
+  and declared NPC counts.
+- Corrected U7 animation, shape-dimension and NPC-sex decoding for original
+  and Exult runtime data.
+- Valid long U8 conversations no longer end after ten topic choices;
+  runaway conversations remain capped.
+- Added ZIP initgame support for Exult mods.
 
 ---
 
@@ -1022,20 +574,13 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **Expanded `titan setup` wizard:** setup now detects and configures
-  Ultima 8 plus Ultima 7 (Black Gate and Serpent Isle) in one pass,
-  prints a consolidated path summary, supports confirmation before write,
-  and writes multi-game config sections (`[u8.*]`, `[u7bg.*]`, `[u7si.*]`).
-- **New `titan dialogue` command group:** added end-to-end U8 dialogue web
-  workflow commands:
-  - `titan dialogue prepare` to generate runtime dialogue artifacts
-  - `titan dialogue validate` to verify required outputs
-  - `titan dialogue launch` to start the local dialogue web viewer
-- **Dialogue web theme system updates:** added runtime theme switching with
-  Palettes, preview swatches, tokenized CSS theme
-  contract improvements (`--bg-main`, `--font-heading`, `--text-soft`), and
-  readability/UX polish for Look/Book surfaces (including clearer book-first
-  discoverability for `BASEBOOK` in the Objects list).
+- Setup configures U8 and U7 BG/SI together, shows a combined path summary
+  and confirms before writing multi-game config sections.
+- Added `titan dialogue prepare`, `validate` and `launch` for the local
+  U8 dialogue viewer.
+- Added runtime dialogue theme switching, palette previews and improved
+  readability and book discovery. Custom themes use colour/font tokens such
+  as `--bg-main`, `--font-heading` and `--text-soft`.
 
 ---
 
@@ -1043,39 +588,17 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Added
 
-- **`u7 map-render` tile-rectangle highlights:** new repeatable
-  `--highlight-tile-rect tx0,ty0,tx1,ty1,#RRGGBB[AA]` option overlays
-  world-tile rectangle bounds on rendered maps. Each rectangle can have
-  its own colour code, with optional alpha channel (`#RRGGBBAA`).
-- **Highlight stroke control:** new `--highlight-width` option controls
-  rectangle outline thickness in pixels.
-- **Highlight visibility controls:** `--highlight-fill-alpha` adds a
-  configurable semi-transparent fill, `--highlight-lift` applies projected
-  lift to overlays, and `--highlight-labels` draws per-rectangle coordinate
-  labels (`tx0,ty0,tx1,ty1`) for easier map annotation.
-- **Custom highlight labels:** `--highlight-tile-rect` now accepts optional
-  custom label text (`...,#RRGGBB,label`). Highlight text is centered in each
-  rectangle both horizontally and vertically.
-- **Default highlight fill:** fill defaults to `128` (50% opacity), so
-  underlying terrain and objects remain visible.
-- **RGBA composited highlight fill:** rectangle fill is rendered through an
-  overlay layer and composited onto the map for proper translucent blending.
-- **Larger overlay text:** highlight coordinate/custom label text size is
-  now tripled for readability on full-world renders.
-- **Zone profiles for `u7 map-render`:** new `--zone-profile` option loads
-  built-in rectangle sets from packaged JSON data (`si_zones`,
-  `bg_zones`) and renders them through the existing highlight path.
-- **Zone ID filtering:** new repeatable `--zone-id` option selects specific
-  zones from a profile; `--all-zones` includes every zone.
-- **Overlay composition retained:** profile-based zones and manual
-  `--highlight-tile-rect` overlays can be used together in the same render.
+- U7 `map-render` supports labelled rectangle highlights with configurable
+  colour, opacity, outline width and lift through `--highlight-tile-rect`,
+  `--highlight-width`, `--highlight-fill-alpha`, `--highlight-lift` and
+  `--highlight-labels`.
+- Added built-in BG/SI zone profiles through `--zone-profile`, `--zone-id`
+  and `--all-zones`; profiles and manual highlights can be combined.
 
 ### Fixed
 
-- **U7 music export sound compatibility:** added a dedicated General MIDI
-  conversion mode to `u7 music-export` (`--target gm`) to address SC-55/
-  SC-88 playback issues from MT-32-oriented track data. The conversion path
-  now applies GM-friendly patch remapping while preserving MIDI timing.
+- `u7 music-export --target gm` improves SC-55/SC-88 playback by remapping
+  MT-32-oriented instruments for General MIDI while retaining timing.
 
 ---
 
@@ -1083,147 +606,87 @@ This project uses [Semantic Versioning](https://semver.org/):
 
 ### Fixed
 
-- **`map-sample` RLE terrain:** colour-sampled minimap now uses nearby-flat
-  fill for RLE terrain shapes, matching the classic renderer. Eliminates
-  misleading centre-pixel colours from large sprites.
-- **`map-sample` IFIX overlay removed:** fixed stray coloured specs and
-  lavender/purple dots caused by sampling single pixels from mountain wall
-  and small IFIX object sprites.
-- **`map-sample` void tile halo:** shape 12 frame 0 (palette-cycling void)
-  no longer bleeds bright blue around mountains and buildings; also fixed
-  `_find_nearby_flat()` whole-chunk fallback to skip the void tile.
-- **`map-sample` fortress floor:** remap shape 18 frame 16 (near-black
-  indoor floor) to frame 0 (stone grey) so castle interiors are visible.
-- **`map-sample` grid overlay:** dual-tier grid: blue chunk grid (scale <= 2)
-  with coordinate labels + red superchunk grid with SC number labels.
-- **CLI help:** `--grid` descriptions for `map-render` and `map-sample` now
-  correctly describe chunk vs superchunk grid behaviour.
+- U7 `map-sample` produces more representative terrain colours, removing
+  stray object dots and void-tile halos and improving dark interior floors.
+- Added chunk/superchunk grid labels and corrected `--grid` help text for
+  `map-render` and `map-sample`.
 
 ---
 
 ## [0.6.0]
 
-### Added: Ultima 7 support
+### Added
 
-- **Multi-game architecture:** game-specific commands live under `titan u8`
-  and `titan u7` sub-apps; shared commands remain at root.
-- **U7 shapes:** read/write U7 RLE shapes and VGA Flex archives
-  (`SHAPES.VGA`, `FACES.VGA`, etc.). `U7Shape.to_bytes()` / `.save()` for
-  round-trip encoding. New commands: `shape-export`, `shape-batch`.
-- **U7 palettes:** 12-palette `PALETTES.FLX` support. New: `palette-export`.
-- **U7 music:** Flex-based XMIDI extraction (`ADLIBMUS.DAT`, `MT32MUS.DAT`,
-  etc.) and standalone `.xmi` conversion. Multi-track XMIDI now produces
-  MIDI Format 1. New: `u7 music-export`, `u8 music-export`.
-- **U7 sound:** Creative Voice (.voc) decoder with ADPCM support; batch
-  speech export from `U7SPEECH.SPC`. New: `voc-export`, `speech-export`,
-  `u8 sound-export-all`.
-- **U7 map rendering:** parallel oblique projection (classic / flat / steep),
-  IFIX + optional IREG objects, dependency-DAG depth sorting, TFA flag
-  filtering, `--full` world render, colour-sampled minimap.
-  New: `map-render`, `map-sample`.
-- **U7 type flags:** `TFA.DAT`, `SHPDIMS.DAT`, `WGTVOL.DAT`, `OCCLUDE.DAT`
-  parser with animation nibbles, shape class enum, and `build_exclude_set()`.
-  New: `typeflag-dump` (summary / detail / csv).
-- **U7 savegame reader:** Exult `.sav` (ZIP & FLEX), global flags, save
-  metadata, NPC stats, schedules. New: `save-list`, `save-extract`,
-  `gflag-dump`, `save-info`, `save-npcs`, `save-schedules`.
-- **Multi-game config:** `titan.toml` now supports `[u7bg.*]` / `[u7si.*]`
-  sections alongside the existing `[u8.*]` / legacy `[game]` format.
-- **Enhanced grid overlays:** chunk coordinate labels and superchunk
-  boundary lines for both U7 and U8 map commands.
-
-### Added: U7 font creation
-
-- **Font wizard:** new `titan u7 font-create` interactive wizard builds
-  Exult-compatible font shapes from TrueType sources. Steps: game/archive
-  selection, slot picking (11 BG/SI stock presets), TTF source, render
-  method, dimensions, palette, preview, and output (`.shp` or Flex patch).
-  Non-interactive batch mode via `--config recipe.toml`.
-- **Font rendering pipeline:** `titan.fonts` package: FreeType mono/grayscale
-  renderer, palette LUT mapper (7 built-in LUTs), glyph-to-shape encoder.
-- **Hollow gradient rendering:** stroke outline + vertical gradient fill with
-  morphological erosion; 30 built-in gradient presets (from U7 palette and
-  [uiGradients](https://uigradients.com)) with ANSI colour swatch display.
-  Hex-to-palette resolver maps any CSS gradient to nearest game indices.
-- **Bundled TTFs:** six fonts: dosVga437-win, Ophidean Runes, Britannian
-  Runes I/II/II Sans Serif, and Gargish. See [FONTS_CREDITS.md](FONTS_CREDITS.md).
-- **Exult integration:** parses `exult.cfg` for game paths and font config;
-  scans game directories for `*font*.vga` archives; shows live slot tables
-  from actual Flex data; resolves mod patch directories for archive patching.
-- **Exult Studio preview:** auto-fills frame 65 (the hardcoded thumbnail
-  frame) with a representative glyph for non-standard layouts (Gargish,
-  Runic, Serpentine).
+- **Ultima VII support:** added `titan u7`, shared root commands and
+  multi-game config sections alongside U8 support.
+- **U7 shapes and palettes:** read/write RLE shapes and VGA archives;
+  added `shape-export`, `shape-batch` and `palette-export`. Library shapes
+  support round-trip encoding through `U7Shape.to_bytes()` and `.save()`.
+- **U7 audio:** added XMIDI-to-MIDI conversion, VOC decoding and batch speech
+  export through `music-export`, `voc-export` and `speech-export`. U8 gained
+  `music-export` and `sound-export-all`.
+- **U7 maps:** added `map-render` and `map-sample` with selectable projections,
+  saved objects, typeflag filters, `--full` world renders and minimaps.
+- **U7 metadata and saves:** added `typeflag-dump`, `save-list`, `save-extract`,
+  `gflag-dump`, `save-info`, `save-npcs` and `save-schedules`.
+- **Map grids:** added chunk coordinates and superchunk boundaries for U7/U8.
+- **U7 font wizard:** added `titan u7 font-create` for TrueType-to-Exult
+  fonts, with slot selection, palette/gradient previews, outlines and
+  standalone or archive output. Batch mode accepts `--config recipe.toml`.
+- **Bundled fonts:** added DOS VGA, Ophidean, Britannian and Gargish fonts;
+  see [FONTS_CREDITS.md](FONTS_CREDITS.md).
+- **Exult integration:** discovers game/font paths and mod patch directories;
+  generated fonts include Exult Studio thumbnails for non-standard layouts.
 
 ### Changed
 
-- **CLI restructure:** U8 commands moved under `titan u8 <cmd>` with
-  deprecated root-level aliases. Modules relocated to `titan.u8.*` with
-  backward-compatible shims.
+- U8 commands moved under `titan u8`; root-level aliases are deprecated.
 
 ### Fixed
 
-- U7 palette 6-bit→8-bit scaling no longer fooled by garbage at index 255.
-- `map-render` hex superchunk input (`--sc 0x55`) now accepted.
-- RLE terrain tiles promoted to depth-sorted objects with correct anchoring;
-  eliminates black strips between multi-tile terrain.
-- Dependency-DAG uses actual pixel bounds for overlap (fixes tall sprites
-  rendering on top of roofs).
-- Cross-superchunk depth ordering uses a single global pass (fixes
-  furniture visible through rooftops at boundaries).
+- Corrected U7 palette scaling and hexadecimal `--sc` input.
+- Corrected terrain anchoring, tall-sprite/roof ordering and depth ordering
+  across superchunk boundaries.
 
 ### Known issues
 
-- U7 MIDI export doesn't sound 100% yet. Some tracks may have timing or
-  instrument mapping differences compared to the original game playback.
+- Some U7 MIDI exports differ in timing or instrument mapping from original
+  game playback.
 
 ---
 
-## [0.5.3] (2026-03-22)
+## [0.5.3] — 2026-03-22
 
 ### Added
 
-- **FLX name tables:** auto-detect and parse embedded name tables
-  (`SOUND.FLX`, `MUSIC.FLX`); named file extraction (`NNNN_NAME.<ext>`);
-  metadata sidecars (`.meta.txt`); `flex-list` Name column; library
-  `summary()` / `record_table()` methods.
-- **Speech FLX:** per-NPC speech archives (`E44.FLX`, etc.) with dialogue
-  transcript extraction and Sonarc audio at 11,111 Hz.
-- **Text content detection:** `detect_record_type()` returns `"text"` for
-  plain-ASCII records.
+- FLX extraction uses embedded names, adds `.meta.txt` sidecars and shows
+  names in `flex-list`; the library adds `summary()` and `record_table()`.
+- Added per-NPC speech archive extraction with transcripts and Sonarc audio.
+- `detect_record_type()` identifies plain-ASCII text records.
 
 ### Changed
 
-- Manifest format expanded to four columns for round-trip rebuilds.
+- Rebuild manifests use four columns for round-trip exports.
 
 ### Fixed
 
-- Name-table heuristic rejects space characters (prevents speech transcript
-  false positives).
-- Sidecar extension changed from `.txt` to `.meta.txt` to avoid overwriting data.
-- `from_directory()` rebuild updated for `.meta.txt` sidecars.
-- Build: fix duplicate `.npy` LUT files in wheel (hatchling config).
-- CI: Trusted Publishers (OIDC) for PyPI; remove duplicate trigger.
+- Corrected false name-table detection in speech transcripts.
+- Sidecars use `.meta.txt` instead of `.txt` to avoid overwriting data;
+  `from_directory()` accepts the new names.
 
 ---
 
-## [0.4.0] (2026-03-20)
+## [0.4.0] — 2026-03-20
 
 First public release.
 
 ### Added
 
-- **CLI:** 26 Typer-based commands covering Flex archives, shapes, palette,
-  Sonarc audio, XMIDI music, world maps, saves, credits, type-flag data,
-  gump layout, colour transforms.
-- **U8 map renderer:** isometric and bird's-eye views with dependency-graph
-  depth sorting, 16 TYPEFLAG filter flags, live-object merge from saves.
-- **Shape round-trip:** export RLE frames to PNG, edit, re-import.
-- **Configuration:** `titan.toml` with auto-path resolution; `titan setup`
-  wizard; `titan config` inspector.
-- **Library API:** all CLI capabilities as importable Python modules.
-- **PEP 561:** `py.typed` marker for type checking.
-
----
-
-_Versioning note: this project started at 0.4.0 to reflect the amount of
-functionality present at first release._
+- CLI and library tools for U8 Flex archives, shapes, palettes, audio,
+  music, maps, saves, credits, typeflags, gumps and colour transforms.
+- Isometric and bird's-eye U8 map renders with typeflag filtering and
+  saved-object support.
+- Shape export to PNG and re-import after editing.
+- `titan.toml` configuration, automatic path discovery, `titan setup`
+  and `titan config`.
+- Importable library APIs and `py.typed` typing support.

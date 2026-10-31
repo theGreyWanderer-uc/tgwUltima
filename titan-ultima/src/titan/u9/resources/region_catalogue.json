@@ -1,0 +1,853 @@
+{
+  "schema_version": 1,
+  "source": "reference/u9/maps/u9_region_catalogue.md",
+  "name_source": "catalogue rows; shipped terrain headers for the remaining development maps",
+  "classification_note": "Research classifications, not proof of retail reachability. Unknown map numbers remain unidentified.",
+  "maps": {
+    "0": {
+      "name": "The Lunch Room",
+      "category": "fixture",
+      "development": false,
+      "player_name": "Setup area"
+    },
+    "2": {
+      "name": "Asylum",
+      "category": "surface",
+      "development": false
+    },
+    "3": {
+      "name": "4 islands",
+      "category": "surface",
+      "development": false
+    },
+    "4": {
+      "name": "Moonglow",
+      "terrain_name": "Moonglow",
+      "category": "development",
+      "development": true,
+      "classification_note": "Development/test classification confirmed by the user. Only region 9 is Britannia; this stored terrain name does not identify a playable town map."
+    },
+    "5": {
+      "name": "Cove",
+      "category": "surface",
+      "development": false
+    },
+    "6": {
+      "name": "Terfin",
+      "category": "surface",
+      "development": false
+    },
+    "7": {
+      "name": "Trinsic",
+      "category": "surface",
+      "development": false
+    },
+    "8": {
+      "name": "Valoria",
+      "category": "surface",
+      "development": false
+    },
+    "9": {
+      "name": "Britannia",
+      "category": "overworld",
+      "development": false
+    },
+    "10": {
+      "name": "Shame",
+      "category": "dungeon",
+      "development": false
+    },
+    "11": {
+      "name": "Abyss",
+      "category": "dungeon",
+      "development": false
+    },
+    "12": {
+      "name": "Tower of Exultation Level 1",
+      "category": "set_piece",
+      "development": false
+    },
+    "13": {
+      "name": "Tower of Exultation Level 2",
+      "category": "set_piece",
+      "development": false
+    },
+    "14": {
+      "name": "Avatar's House Earth",
+      "category": "surface",
+      "development": false,
+      "player_name": "Avatar's home"
+    },
+    "15": {
+      "name": "Asylum Underground",
+      "category": "dungeon",
+      "development": false
+    },
+    "16": {
+      "name": "Covetous Level 0 & 1",
+      "category": "dungeon",
+      "development": false
+    },
+    "17": {
+      "name": "Covetous Level 2",
+      "category": "dungeon",
+      "development": false
+    },
+    "18": {
+      "name": "Covetous Level 3",
+      "category": "dungeon",
+      "development": false
+    },
+    "19": {
+      "name": "Covetous Level 4",
+      "category": "dungeon",
+      "development": false
+    },
+    "20": {
+      "name": "Covetous Lift Shaft",
+      "category": "dungeon",
+      "development": false
+    },
+    "21": {
+      "name": "Cove Underground",
+      "category": "dungeon",
+      "development": false
+    },
+    "22": {
+      "name": "Ethereal Void",
+      "category": "set_piece",
+      "development": false
+    },
+    "23": {
+      "name": "Stonegate Underground",
+      "category": "dungeon",
+      "development": false
+    },
+    "24": {
+      "name": "Britain Sewers",
+      "category": "dungeon",
+      "development": false
+    },
+    "25": {
+      "name": "New Despise",
+      "category": "dungeon",
+      "development": false
+    },
+    "26": {
+      "name": "Terfin level 1",
+      "category": "dungeon",
+      "development": false
+    },
+    "27": {
+      "name": "New Shame",
+      "category": "dungeon",
+      "development": false
+    },
+    "28": {
+      "name": "Dungeon Destard (old)",
+      "category": "superseded",
+      "development": true
+    },
+    "29": {
+      "name": "Dungeon Destard (old dragon)",
+      "category": "superseded",
+      "development": true
+    },
+    "30": {
+      "name": "Covetous 2",
+      "category": "superseded",
+      "development": true
+    },
+    "31": {
+      "name": "Covetous 3",
+      "category": "superseded",
+      "development": true
+    },
+    "32": {
+      "name": "Son of Covetous 3",
+      "category": "superseded",
+      "development": true
+    },
+    "33": {
+      "name": "Son of Covetous 2",
+      "category": "superseded",
+      "development": true
+    },
+    "34": {
+      "name": "Map 34",
+      "category": "development",
+      "development": true
+    },
+    "35": {
+      "name": "Deceit 1",
+      "category": "dungeon",
+      "development": false
+    },
+    "36": {
+      "name": "Britain Catacombs",
+      "category": "dungeon",
+      "development": false
+    },
+    "37": {
+      "name": "NPC Map Test",
+      "category": "development",
+      "development": true
+    },
+    "38": {
+      "name": "underground moonglow",
+      "category": "superseded",
+      "development": true
+    },
+    "39": {
+      "name": "Fake Moon Triggers",
+      "category": "fixture",
+      "development": false
+    },
+    "40": {
+      "name": "Ambrosia Sweet Ambrosia",
+      "category": "surface",
+      "development": false
+    },
+    "41": {
+      "name": "Stonegate Fix",
+      "category": "dungeon",
+      "development": false,
+      "player_name": "Stonegate"
+    },
+    "42": {
+      "name": "Map 42",
+      "category": "development",
+      "development": true
+    },
+    "43": {
+      "name": "Deceit 2",
+      "category": "dungeon",
+      "development": false
+    },
+    "44": {
+      "name": "Abyss Dungeon Map",
+      "category": "dungeon",
+      "development": false
+    },
+    "45": {
+      "name": "Wrong",
+      "category": "dungeon",
+      "development": false
+    },
+    "46": {
+      "name": "Terfin dungeon",
+      "category": "dungeon",
+      "development": false
+    },
+    "47": {
+      "name": "New Destard",
+      "category": "dungeon",
+      "development": false
+    },
+    "48": {
+      "name": "Anti-Void",
+      "category": "set_piece",
+      "development": false
+    },
+    "49": {
+      "name": "Castle Prison",
+      "category": "dungeon",
+      "development": false
+    },
+    "50": {
+      "name": "Hythloth Upper Levels",
+      "category": "dungeon",
+      "development": false
+    },
+    "51": {
+      "name": "Valley of souls",
+      "category": "set_piece",
+      "development": false
+    },
+    "52": {
+      "name": "Lb/Blackthorn fight",
+      "category": "set_piece",
+      "development": false
+    },
+    "53": {
+      "name": "Scary Monsters",
+      "category": "set_piece",
+      "development": false
+    },
+    "54": {
+      "name": "DropInAbyss",
+      "category": "dungeon",
+      "development": false
+    },
+    "55": {
+      "name": "Bone Armor Ritual Map",
+      "category": "set_piece",
+      "development": false
+    },
+    "56": {
+      "name": "Fake Column Triggers",
+      "category": "fixture",
+      "development": false
+    },
+    "57": {
+      "name": "Shame 2",
+      "category": "dungeon",
+      "development": false
+    },
+    "58": {
+      "name": "Ambrosia Sweet Ambrosia copy",
+      "category": "superseded",
+      "development": true
+    },
+    "60": {
+      "name": "Map 60",
+      "category": "development",
+      "development": true
+    },
+    "61": {
+      "name": "Water",
+      "category": "set_piece",
+      "development": false
+    },
+    "62": {
+      "name": "Air",
+      "category": "set_piece",
+      "development": false
+    },
+    "63": {
+      "name": "Earth",
+      "category": "set_piece",
+      "development": false
+    },
+    "64": {
+      "name": "Fire",
+      "category": "set_piece",
+      "development": false
+    },
+    "65": {
+      "name": "One Small Step",
+      "category": "set_piece",
+      "development": false
+    },
+    "66": {
+      "name": "Hallways of Insanity",
+      "category": "set_piece",
+      "development": false
+    },
+    "67": {
+      "name": "Stonegate Roof",
+      "category": "dungeon",
+      "development": false
+    },
+    "68": {
+      "name": "Unnamed map",
+      "category": "development",
+      "development": true
+    },
+    "70": {
+      "name": "SEM Test",
+      "category": "development",
+      "development": true
+    },
+    "77": {
+      "name": "Dragon Highway test",
+      "category": "development",
+      "development": true
+    },
+    "80": {
+      "name": "64 by 64, 20 polys per",
+      "category": "development",
+      "development": true
+    },
+    "81": {
+      "name": "64 by 64, 193 polys per",
+      "category": "development",
+      "development": true
+    },
+    "82": {
+      "name": "64 by 64, misc objects",
+      "category": "development",
+      "development": true
+    },
+    "83": {
+      "name": "64 by 64, chunk crossing items",
+      "category": "development",
+      "development": true
+    },
+    "84": {
+      "name": "64 by 64, high-poly count",
+      "category": "development",
+      "development": true
+    },
+    "85": {
+      "name": "64 by 64, building cluster",
+      "category": "development",
+      "development": true
+    },
+    "86": {
+      "name": "64 by 64 , buildings sparse",
+      "category": "development",
+      "development": true
+    },
+    "87": {
+      "name": "64 by 64, high texrure, low items",
+      "category": "development",
+      "development": true
+    },
+    "89": {
+      "name": "Buc2NewMag",
+      "category": "surface",
+      "development": false
+    },
+    "90": {
+      "name": "Mariah's Basement",
+      "category": "dungeon",
+      "development": false
+    },
+    "98": {
+      "name": "E3 Demo for Real",
+      "category": "development",
+      "development": true
+    },
+    "99": {
+      "name": "E3 Demo Underground",
+      "category": "development",
+      "development": true
+    },
+    "100": {
+      "name": "Demo Above Ground",
+      "category": "development",
+      "development": true
+    },
+    "101": {
+      "name": "Demo Under Ground",
+      "category": "development",
+      "development": true
+    },
+    "102": {
+      "name": "Gremlin Demo Map",
+      "category": "development",
+      "development": true
+    },
+    "103": {
+      "name": "Spider Demo Map",
+      "category": "development",
+      "development": true
+    },
+    "104": {
+      "name": "Weapon Equipping Demo Map",
+      "category": "development",
+      "development": true
+    },
+    "105": {
+      "name": "Dina's Enclosed Mess",
+      "category": "development",
+      "development": true
+    },
+    "107": {
+      "name": "Aaron test map",
+      "category": "development",
+      "development": true
+    },
+    "118": {
+      "name": "Map 118",
+      "category": "development",
+      "development": true
+    },
+    "119": {
+      "name": "Rands Test Map",
+      "category": "development",
+      "development": true
+    },
+    "120": {
+      "name": "Crumps personal map",
+      "category": "development",
+      "development": true
+    },
+    "121": {
+      "name": "junk",
+      "category": "development",
+      "development": true
+    },
+    "122": {
+      "name": "Amy's Test Map",
+      "category": "development",
+      "development": true
+    },
+    "123": {
+      "name": "Franzingruven",
+      "category": "unresolved",
+      "development": false
+    },
+    "124": {
+      "name": "Myque's Test Map",
+      "category": "development",
+      "development": true
+    },
+    "125": {
+      "name": "Map 125",
+      "category": "development",
+      "development": true
+    },
+    "126": {
+      "name": "Dina's Destard",
+      "category": "unresolved",
+      "development": false
+    },
+    "127": {
+      "name": "Map 127",
+      "category": "development",
+      "development": true
+    },
+    "128": {
+      "name": "Amy's Dungeon Test Map",
+      "category": "development",
+      "development": true
+    },
+    "129": {
+      "name": "QmazeTest Bill and Scott",
+      "category": "development",
+      "development": true
+    },
+    "130": {
+      "name": "Dina's Crazy Map",
+      "category": "development",
+      "development": true
+    },
+    "131": {
+      "name": "Myque's Experiment",
+      "category": "development",
+      "development": true
+    },
+    "140": {
+      "name": "Gary's Another Test Map",
+      "category": "development",
+      "development": true
+    },
+    "141": {
+      "name": "Gary's Test Dungeon",
+      "category": "development",
+      "development": true
+    },
+    "142": {
+      "name": "Gary's Test Map",
+      "category": "development",
+      "development": true
+    },
+    "143": {
+      "name": "Scott World",
+      "category": "development",
+      "development": true
+    },
+    "144": {
+      "name": "Herman's New Gerbilville",
+      "category": "development",
+      "development": true
+    },
+    "145": {
+      "name": "Herman's stupid test map",
+      "category": "development",
+      "development": true
+    },
+    "146": {
+      "name": "Jen's Joyebean Land",
+      "category": "development",
+      "development": true
+    },
+    "147": {
+      "name": "Jim's Happy Evil Map",
+      "category": "development",
+      "development": true
+    },
+    "148": {
+      "name": "ScottJ's Cavern Test Map",
+      "category": "unresolved",
+      "development": false
+    },
+    "149": {
+      "name": "Bill's Creature Map",
+      "category": "development",
+      "development": true
+    },
+    "150": {
+      "name": "Torch Test - Poof!",
+      "category": "development",
+      "development": true
+    },
+    "151": {
+      "name": "Bill's Bubba's World",
+      "category": "development",
+      "development": true
+    },
+    "152": {
+      "name": "Torch Test - Alpha Bitmap",
+      "category": "development",
+      "development": true
+    },
+    "153": {
+      "name": "The Map That Keeps Getting Trashed (HM)",
+      "category": "development",
+      "development": true
+    },
+    "154": {
+      "name": "Great Balls o' Fire! (MM)",
+      "category": "development",
+      "development": true
+    },
+    "155": {
+      "name": "Chuck's Usecode Test Map",
+      "category": "unresolved",
+      "development": false
+    },
+    "156": {
+      "name": "Jen's Test Too",
+      "category": "development",
+      "development": true
+    },
+    "157": {
+      "name": "Todd's Test",
+      "category": "development",
+      "development": true
+    },
+    "158": {
+      "name": "Scottie-cake's Brave New World",
+      "category": "development",
+      "development": true
+    },
+    "159": {
+      "name": "Great Balls O' Fire Underground",
+      "category": "development",
+      "development": true
+    },
+    "160": {
+      "name": "Creature map",
+      "category": "development",
+      "development": true
+    },
+    "161": {
+      "name": "ScottJ's Riverbank template",
+      "category": "development",
+      "development": true
+    },
+    "162": {
+      "name": "Margery Must Die",
+      "category": "development",
+      "development": true
+    },
+    "163": {
+      "name": "Dave's Combat Save/Load test map",
+      "category": "development",
+      "development": true
+    },
+    "164": {
+      "name": "Copy of britannia",
+      "category": "development",
+      "development": true
+    },
+    "165": {
+      "name": "Britain Test",
+      "category": "development",
+      "development": true
+    },
+    "166": {
+      "name": "Seth B Map",
+      "category": "unresolved",
+      "development": false
+    },
+    "167": {
+      "name": "Hutsville (DMA)",
+      "category": "development",
+      "development": true
+    },
+    "168": {
+      "name": "Herman's scratch copy of Britannia",
+      "category": "development",
+      "development": true
+    },
+    "169": {
+      "name": "Herman's Other Copy of Britannia",
+      "category": "development",
+      "development": true
+    },
+    "170": {
+      "name": "Avatar's House Earth (copy)",
+      "category": "unresolved",
+      "development": false
+    },
+    "171": {
+      "name": "Hassan's Map",
+      "category": "development",
+      "development": true
+    },
+    "172": {
+      "name": "Combt Audio Test Map",
+      "category": "development",
+      "development": true
+    },
+    "173": {
+      "name": "Seth's Dungeon O' Fun",
+      "category": "development",
+      "development": true
+    },
+    "174": {
+      "name": "Seth's Caverns O' Fun",
+      "category": "development",
+      "development": true
+    },
+    "175": {
+      "name": "Steve's Map",
+      "category": "development",
+      "development": true
+    },
+    "176": {
+      "name": "Special Combat Audio Test Map",
+      "category": "development",
+      "development": true
+    },
+    "179": {
+      "name": "Test Map for Scott W",
+      "category": "development",
+      "development": true
+    },
+    "180": {
+      "name": "Bob Dodd's World O' Pain",
+      "category": "development",
+      "development": true
+    },
+    "184": {
+      "name": "Jen's Copy of Cove",
+      "category": "development",
+      "development": true
+    },
+    "186": {
+      "name": "terry's test map",
+      "category": "development",
+      "development": true
+    },
+    "187": {
+      "name": "Marsh's New World",
+      "category": "development",
+      "development": true
+    },
+    "189": {
+      "name": "Down the Rabbit Hole (ScottW)",
+      "category": "development",
+      "development": true
+    },
+    "192": {
+      "name": "Jason's Map",
+      "category": "development",
+      "development": true
+    },
+    "193": {
+      "name": "Jason's Map 2",
+      "category": "development",
+      "development": true
+    },
+    "195": {
+      "name": "art's map test trinsic ",
+      "category": "development",
+      "development": true
+    },
+    "196": {
+      "name": "Lord British's Castle (ScottW)",
+      "category": "development",
+      "development": true
+    },
+    "198": {
+      "name": "Cari's Finished Characters",
+      "category": "development",
+      "development": true
+    },
+    "199": {
+      "name": "Scott's Maze",
+      "category": "development",
+      "development": true
+    },
+    "200": {
+      "name": "Joe's test map",
+      "category": "development",
+      "development": true
+    },
+    "201": {
+      "name": "Dave's Sound Test",
+      "category": "development",
+      "development": true
+    },
+    "202": {
+      "name": "Dave's EAX Sound Test Map",
+      "category": "development",
+      "development": true
+    },
+    "205": {
+      "name": "Victor_Caverns R Us",
+      "category": "development",
+      "development": true
+    },
+    "207": {
+      "name": "Bill's Lighting Test",
+      "category": "development",
+      "development": true
+    },
+    "211": {
+      "name": "Map 211",
+      "category": "development",
+      "development": true
+    },
+    "213": {
+      "name": "Herman's Wrap Map",
+      "category": "development",
+      "development": true
+    },
+    "214": {
+      "name": "Victor_Map",
+      "category": "development",
+      "development": true
+    },
+    "215": {
+      "name": "Binky's Map",
+      "category": "development",
+      "development": true
+    },
+    "216": {
+      "name": "Avatar <-> Raven Contents Test Map",
+      "category": "development",
+      "development": true
+    },
+    "227": {
+      "name": "art's working map2",
+      "category": "development",
+      "development": true
+    },
+    "230": {
+      "name": "Copy of Britannia (Don't change triggers!)",
+      "category": "development",
+      "development": true
+    },
+    "233": {
+      "name": "my map",
+      "category": "development",
+      "development": true
+    },
+    "235": {
+      "name": "Jim BTest",
+      "category": "development",
+      "development": true
+    },
+    "237": {
+      "name": "Map 237",
+      "category": "development",
+      "development": true
+    },
+    "238": {
+      "name": "testgenerator",
+      "category": "development",
+      "development": true
+    },
+    "239": {
+      "name": "Jim Test Underground",
+      "category": "development",
+      "development": true
+    }
+  }
+}

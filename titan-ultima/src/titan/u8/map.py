@@ -15,18 +15,17 @@ Example::
         fixed_data = f.read()
 
     all_maps = U8MapRenderer.parse_fixed_dat(fixed_data)
-    objects = all_maps[0]
+    objects = all_maps[3]
     objects = U8MapRenderer.expand_globs(objects, "glob_extract/")
 
     img = U8MapRenderer.render_map(objects, "u8shapes/", pal)
-    img.save("map_000.png")
+    img.save("map_003.png")
 """
 
 from __future__ import annotations
 
 __all__ = ["U8MapRenderer", "U8MapSampler"]
 
-import copy
 import os
 import struct
 from dataclasses import dataclass
@@ -35,11 +34,11 @@ from typing import Optional
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from titan.flex import FlexArchive
 from titan.palette import U8Palette
+from titan.u8.map_items import U8MapItem, U8MapItems
 from titan.u8.shape import U8Shape
+from titan.u8.state_io import read_u8_state_bytes
 from titan.u8.typeflag import U8TypeFlags
-from titan.u8.save import U8SaveArchive
 
 
 class U8MapRenderer:
@@ -72,47 +71,72 @@ class U8MapRenderer:
         # Screen coordinates (set during projection)
         screen_x: int = 0
         screen_y: int = 0
+        quality: int = 0
+        status: int = 0
+        npc_num: int = 0
+        map_num_raw: int = 0
+        next_item: int = 0
+        source_record: U8MapItem | None = None
+
+        @property
+        def _quality(self) -> int:
+            """Compatibility with callers that attached the former private field."""
+            return self.quality
+
+        @_quality.setter
+        def _quality(self, value: int) -> None:
+            self.quality = value
+
+    @classmethod
+    def _world_maps(cls, data: U8MapItems) -> dict[int, list[U8MapRenderer.MapObject]]:
+        """Adapt complete records to render objects, retaining their source metadata."""
+        maps: dict[int, list[U8MapRenderer.MapObject]] = {}
+        for map_id, items in enumerate(data.maps):
+            objects = [
+                cls.MapObject(
+                    x=item.x,
+                    y=item.y,
+                    z=item.z,
+                    type_num=item.shape,
+                    frame=item.frame,
+                    quality=item.quality,
+                    status=item.status,
+                    npc_num=item.npc_num,
+                    map_num_raw=item.map_num_raw,
+                    next_item=item.next_item,
+                    source_record=item,
+                )
+                for item in items
+                if item.is_world_object
+            ]
+            if objects:
+                maps[map_id] = objects
+        return maps
 
     @classmethod
     def parse_fixed_dat(cls, data: bytes) -> dict[int, list[U8MapRenderer.MapObject]]:
-        """
-        Parse FIXED.DAT into a dict of ``map_number -> list[MapObject]``.
+        """Read complete FIXED records and return eligible world placements only.
 
-        Only non-empty maps are included.
+        Contained entries use inventory coordinates and are retained by
+        U8MapItems, rather than rendered as map objects. Malformed Flex bounds
+        or partial records raise ValueError instead of silently losing data.
         """
-        if len(data) < 128 + 8:
-            return {}
-        num_maps = struct.unpack_from("<H", data, 84)[0]
-        maps: dict[int, list[U8MapRenderer.MapObject]] = {}
+        return cls._world_maps(U8MapItems.from_bytes(data, kind="fixed"))
 
-        for m in range(num_maps):
-            info_off = 128 + m * 8
-            if info_off + 8 > len(data):
-                break
-            map_pos = struct.unpack_from("<I", data, info_off)[0]
-            map_size = struct.unpack_from("<I", data, info_off + 4)[0]
-            if map_size == 0:
-                continue
-            num_objects = map_size // 16
-            objects: list[U8MapRenderer.MapObject] = []
-            for i in range(num_objects):
-                o = map_pos + i * 16
-                if o + 16 > len(data):
-                    break
-                obj_x = struct.unpack_from("<H", data, o)[0]
-                obj_y = struct.unpack_from("<H", data, o + 2)[0]
-                obj_z = data[o + 4]
-                type_num = struct.unpack_from("<H", data, o + 5)[0]
-                frame = data[o + 7]
-                quality = struct.unpack_from("<H", data, o + 10)[0]
-                objects.append(cls.MapObject(
-                    x=obj_x, y=obj_y, z=obj_z,
-                    type_num=type_num, frame=frame,
-                ))
-                # Store quality for glob expansion
-                objects[-1]._quality = quality  # type: ignore[attr-defined]
-            maps[m] = objects
-        return maps
+    @staticmethod
+    def merge_maps(
+        fixed_maps: dict[int, list[U8MapRenderer.MapObject]],
+        nonfixed_maps: dict[int, list[U8MapRenderer.MapObject]] | None = None,
+    ) -> dict[int, list[U8MapRenderer.MapObject]]:
+        """Combine eligible placements before map selection and GLOB expansion.
+
+        Keep maps present in either input and retain distinct colocated items.
+        Copy lists so later rendering/sorting cannot alter a source map's list.
+        """
+        merged = {map_id: list(items) for map_id, items in fixed_maps.items()}
+        for map_id, items in (nonfixed_maps or {}).items():
+            merged.setdefault(map_id, []).extend(items)
+        return merged
 
     @classmethod
     def load_glob(cls, glob_data: bytes) -> list[U8MapRenderer.MapObject]:
@@ -157,7 +181,7 @@ class U8MapRenderer:
                 result.append(obj)
                 continue
 
-            quality = getattr(obj, "_quality", 0)
+            quality = obj.quality
             glob_file = os.path.join(glob_dir, f"{quality:04d}.dat")
             if not os.path.isfile(glob_file):
                 continue
@@ -177,6 +201,8 @@ class U8MapRenderer:
                     z=sub.z + base_z,
                     type_num=sub.type_num,
                     frame=sub.frame,
+                    status=0x0082,  # Native GLOB.C: disposable | fast_only.
+                    source_record=obj.source_record,
                 ))
         return result
 
@@ -237,89 +263,27 @@ class U8MapRenderer:
         nf_flex_data: bytes,
         typeflag_data: Optional[bytes] = None,
     ) -> dict[int, list[U8MapRenderer.MapObject]]:
+        """Return NONFIXED world placements, excluding inventories and NPC slot 0.
+
+        The optional TYPEFLAG argument remains accepted for compatibility;
+        native contained flags determine placement without shape-family guesses.
+        Use U8MapItems for the complete archive, including the NPC registry.
         """
-        Parse NONFIXED.DAT (a Flex archive of per-map 16-byte item records).
-
-        NONFIXED.DAT lives inside U8SAVE.000 and contains dynamic world objects.
-        Each Flex slot corresponds to a map number.
-
-        If *typeflag_data* is supplied, container depth tracking is used to
-        return only top-level (world-placed) objects.
-        """
-        flex = FlexArchive.from_bytes(nf_flex_data)
-
-        container_shapes: set[int] = set()
-        if typeflag_data:
-            container_shapes = U8TypeFlags.container_shapes(typeflag_data)
-
-        maps: dict[int, list[U8MapRenderer.MapObject]] = {}
-
-        for map_num in range(len(flex.records)):
-            entry = flex.records[map_num]
-            if not entry or len(entry) < 16:
-                continue
-
-            item_count = len(entry) // 16
-            objects: list[U8MapRenderer.MapObject] = []
-            contdepth = 0
-
-            for i in range(item_count):
-                o = i * 16
-                x = struct.unpack_from("<h", entry, o)[0]
-                y = struct.unpack_from("<h", entry, o + 2)[0]
-                z = entry[o + 4]
-                shape = struct.unpack_from("<H", entry, o + 5)[0]
-                frame = entry[o + 7]
-                quality = struct.unpack_from("<H", entry, o + 10)[0]
-
-                if typeflag_data:
-                    while contdepth != x and contdepth > 0:
-                        contdepth -= 1
-
-                if contdepth == 0 or not typeflag_data:
-                    obj = U8MapRenderer.MapObject(
-                        x=x, y=y, z=z,
-                        type_num=shape, frame=frame,
-                    )
-                    obj._quality = quality  # type: ignore[attr-defined]
-                    objects.append(obj)
-
-                if typeflag_data and shape in container_shapes:
-                    contdepth += 1
-
-            if objects:
-                maps[map_num] = objects
-
-        return maps
+        return U8MapRenderer._world_maps(
+            U8MapItems.from_bytes(nf_flex_data, kind="nonfixed")
+        )
 
     @staticmethod
     def load_nonfixed(
         nonfixed_path: str,
         typeflag_path: Optional[str] = None,
     ) -> dict[int, list[U8MapRenderer.MapObject]]:
+        """Read loose NONFIXED or a bounds-checked native save archive.
+
+        TYPEFLAG is unnecessary for containment; the legacy argument is accepted.
         """
-        Load NONFIXED.DAT objects.  Accepts either:
-
-        - A U8 save file (U8SAVE.000) — extracts NONFIXED.DAT from it.
-        - A raw NONFIXED.DAT Flex archive.
-        """
-        with open(nonfixed_path, "rb") as f:
-            data = f.read()
-
-        if U8SaveArchive.is_save_file(data):
-            save = U8SaveArchive.from_bytes(data)
-            nf = save.get_data("NONFIXED.DAT")
-            if nf is None:
-                raise ValueError(f"NONFIXED.DAT not found inside {nonfixed_path}")
-        else:
-            nf = data
-
-        tf_data: Optional[bytes] = None
-        if typeflag_path:
-            with open(typeflag_path, "rb") as f:
-                tf_data = f.read()
-
-        return U8MapRenderer.parse_nonfixed(nf, tf_data)
+        data = read_u8_state_bytes(nonfixed_path, "NONFIXED.DAT")
+        return U8MapRenderer.parse_nonfixed(data)
 
     # -----------------------------------------------------------------------
     # Projection views
@@ -436,6 +400,8 @@ class U8MapRenderer:
             for obj in map_objects:
                 fx, fy, fz, _a, _t, _d, _s, _o = _info.get(
                     obj.type_num, _zero_info)
+                if obj.status & 0x0020:
+                    fx, fy = fy, fx
                 _si.append((
                     obj.x, obj.y, obj.z,
                     obj.x - fx,              # xleft  (back x)
@@ -646,14 +612,17 @@ class U8MapRenderer:
         canvas = Image.new("RGBA", (width, height), background)
 
         shape_cache: dict[int, Optional[U8Shape]] = {}
-        frame_cache: dict[tuple[int, int], Optional[tuple[Image.Image, int, int]]] = {}
+        frame_cache: dict[
+            tuple[int, int, bool], Optional[tuple[Image.Image, int, int]]
+        ] = {}
 
         flat_rgb = palette.to_flat_rgb()
         rendered = 0
         skipped = 0
 
         for obj in map_objects:
-            key = (obj.type_num, obj.frame)
+            flipped = bool(obj.status & 0x0020)
+            key = (obj.type_num, obj.frame, flipped)
 
             if key not in frame_cache:
                 if obj.type_num not in shape_cache:
@@ -678,7 +647,12 @@ class U8MapRenderer:
                         alpha = np.where(fr.pixels == 0xFF, 0,
                                          255).astype(np.uint8)
                         rgba.putalpha(Image.fromarray(alpha, mode="L"))
-                        frame_cache[key] = (rgba, fr.xoff, fr.yoff)
+                        xoff = fr.xoff
+                        if flipped:
+                            rgba = rgba.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+                            # Mirror about the native shape origin, not its image edge.
+                            xoff = fr.width - 1 - xoff
+                        frame_cache[key] = (rgba, xoff, fr.yoff)
                     else:
                         frame_cache[key] = None
                 else:
@@ -834,7 +808,9 @@ class U8MapSampler:
             r_sum = g_sum = b_sum = cnt = 0
             for fj in range(2):
                 for fi in range(2):
-                    ax = (fi - iso_sx) + fr.xoff
+                    ax = fr.xoff + (
+                        iso_sx - fi if obj.status & 0x0020 else fi - iso_sx
+                    )
                     ay = (fj - iso_sy) + fr.yoff
                     if ax < 0 or ay < 0 or ax >= fr.width or ay >= fr.height:
                         continue

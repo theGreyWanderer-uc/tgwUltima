@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 __all__ = [
+    "RECOMMENDATIONS",
     "IntegrityFinding",
     "IntegrityReport",
     "check_save",
+    "check_save_archive",
     "render_integrity_report",
+    "resolve_u9_save_directories",
 ]
 
 import hashlib
 import json
 import math
 import re
+from typing import cast
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -71,17 +75,109 @@ AXIS_DESCRIPTIONS = {
     "compatibility": "saved references against map data",
 }
 
-RECOMMENDATIONS = {
-    "SEL": "Select an existing save slot or repair start.dat.",
-    "ARC": "Recover or replace the save archive before loading it.",
-    "CUS": "Re-extract the selected archive; do not mix loose files from other slots.",
-    "NFS": "Preserve the files and inspect the named nonfixed maps before loading.",
-    "FXS": "Restore the affected fixed maps from a known-good installation.",
-    "HND": "Do not load until processes.dat and its object-reference table are repaired.",
-    "PRC": "Do not load until the deterministic processes.dat prefix is repaired.",
-    # A full check ID (for example "PRC04") may override its family's advice.
-    "REF": "Do not load or overwrite the slot; inspect its object-reference targets and matching map data.",
-    "LAY": "Supply the creation-time fixed directory with --fixed-reference.",
+# Update reference/u9/u9_save_integrity_reference.md before this catalog.
+# Exact pairs are the shared contract; never fall back to a check family.
+RECOMMENDATIONS: dict[tuple[str, str], str] = {
+    (
+        "SEL01",
+        "FATAL",
+    ): "Select an explicit existing slot with --slot, or restore a valid start.dat before loading.",
+    (
+        "SEL02",
+        "FATAL",
+    ): "Locate the savegame directory and select an existing slot before loading.",
+    (
+        "ARC01",
+        "FATAL",
+    ): "Do not load this archive; preserve it and recover a readable, structurally valid copy from backup.",
+    (
+        "ARC10",
+        "WARN",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
+    (
+        "CUS01",
+        "FATAL",
+    ): "Preserve the working files, then re-extract processes.dat from the selected archive before loading; do not mix slots.",
+    (
+        "CUS02",
+        "FATAL",
+    ): "Restore the missing nonfixed members from the selected archive before loading.",
+    (
+        "CUS03",
+        "FATAL",
+    ): "Preserve the working files, then re-extract the mismatched nonfixed members from the selected archive before loading; do not mix slots.",
+    (
+        "CUS04",
+        "WARN",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
+    (
+        "NFS01",
+        "FATAL",
+    ): "Do not load the affected nonfixed maps; preserve them and recover structurally valid copies from a matching save backup.",
+    (
+        "NFS01",
+        "WARN",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
+    (
+        "NFS07",
+        "WARN",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
+    (
+        "FXS01",
+        "FATAL",
+    ): "Do not load with the affected fixed maps; restore structurally valid copies matching the save's creation-time installation.",
+    (
+        "FXS04",
+        "FATAL",
+    ): "Do not load with invalid fixed free lists; preserve the maps and restore copies matching the save's creation-time installation.",
+    (
+        "HND01",
+        "FATAL",
+    ): "Do not load; preserve processes.dat and recover a copy with a valid object-reference table from a matching save backup.",
+    (
+        "HND02",
+        "ERROR",
+    ): "Investigate and repair the object-reference free chain in processes.dat before loading.",
+    (
+        "HND04",
+        "ERROR",
+    ): "Investigate the named live object-reference count/map fields in processes.dat before loading.",
+    (
+        "PRC01",
+        "FATAL",
+    ): "Do not load; preserve processes.dat and investigate the unreadable camera/control prefix or typed process list.",
+    (
+        "PRC02",
+        "WARN",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
+    (
+        "REF01",
+        "FATAL",
+    ): "Do not load; supply the missing target maps from the matching archive or creation-time fixed installation.",
+    (
+        "REF02",
+        "FATAL",
+    ): "Do not load or overwrite the slot; inspect the invalid object offsets against the matching map payloads.",
+    (
+        "REF03",
+        "FATAL",
+    ): "Do not load or overwrite the slot; investigate fixed references into non-live slots and restore matching creation-time map data.",
+    (
+        "REF04",
+        "ERROR",
+    ): "Investigate nonfixed references into non-live slots against the selected archive's maps before loading.",
+    (
+        "REF07",
+        "WARN",
+    ): "Keep a backup, then try loading if no more serious findings apply. If the game crashes, or things are missing or out of place, go back to your backup or an older save and save a report to share.",
+    (
+        "LAY02",
+        "ERROR",
+    ): "Investigate the fixed-file differences and restore the save's trusted creation-time fixed set before loading.",
+    (
+        "LAY04",
+        "WARN",
+    ): "An original map comparison is optional. Keep a backup before trying the save; if loading causes problems, use the backup or an older save and save a report to share.",
 }
 
 
@@ -488,6 +584,7 @@ class IntegrityFinding:
     path: str | None = None
     offset: int | None = None
     details: dict[str, object] = field(default_factory=dict)
+    affects_verdict: bool = True
 
 
 @dataclass
@@ -497,6 +594,9 @@ class IntegrityReport:
     archive: str | None = None
     findings: list[IntegrityFinding] = field(default_factory=list)
     artifacts: dict[str, dict[str, object]] = field(default_factory=dict)
+    no_save_selected: bool = False
+    custody_applicable: bool = True
+    self_reference: bool = False
 
     def add(
         self,
@@ -507,8 +607,12 @@ class IntegrityReport:
         *,
         path: str | Path | None = None,
         offset: int | None = None,
+        affects_verdict: bool = True,
         **details: object,
     ) -> None:
+        details.setdefault("slot", self.slot)
+        details.setdefault("count", 1)
+        details.setdefault("maps", [])
         self.findings.append(
             IntegrityFinding(
                 check_id,
@@ -518,17 +622,40 @@ class IntegrityReport:
                 str(path) if path is not None else None,
                 offset,
                 details,
+                affects_verdict,
             )
         )
 
     def verdict(self, axis: str | None = None) -> str:
-        relevant = [f for f in self.findings if axis is None or f.axis == axis]
+        if axis == "custody" and not self.custody_applicable:
+            return "N/A"
+        relevant = [
+            f
+            for f in self.findings
+            if f.affects_verdict and (axis is None or f.axis == axis)
+        ]
         rank = max((SEVERITY_RANK[f.severity] for f in relevant), default=0)
         return ("PASS", "WARN", "ERROR", "FATAL")[rank]
 
     @property
     def overall(self) -> str:
         return self.verdict()
+
+    def recommendations(self) -> list[dict[str, str]]:
+        """Return one next step per documented check/severity pair."""
+        keys = {
+            (finding.check_id, finding.severity)
+            for finding in self.findings
+            if finding.severity in ("WARN", "ERROR", "FATAL")
+        } & RECOMMENDATIONS.keys()
+        return [
+            {
+                "check_id": check_id,
+                "severity": severity,
+                "message": RECOMMENDATIONS[check_id, severity],
+            }
+            for check_id, severity in sorted(keys)
+        ]
 
     def to_dict(self) -> dict[str, object]:
         """The report as JSON-ready data; non-finite floats become ``None``."""
@@ -540,6 +667,10 @@ class IntegrityReport:
             "overall": self.overall,
             "artifacts": self.artifacts,
             "findings": [asdict(finding) for finding in self.findings],
+            "recommendations": self.recommendations(),
+            "no_save_selected": self.no_save_selected,
+            "custody_applicable": self.custody_applicable,
+            "self_reference": self.self_reference,
         }
         return _json_safe(report)  # type: ignore[return-value]
 
@@ -576,14 +707,22 @@ def _record_artifact(
 
 
 def _check_nonfixed(
-    report: IntegrityReport, name: str, data: bytes, *, source: str
+    report: IntegrityReport, name: str, data: bytes, *, source: str, map_number: int
 ) -> U9Nonfixed | None:
     _record_artifact(report, name, data, source=source)
     try:
         nonfixed = U9Nonfixed(data)
         chunks = nonfixed.chunks()
     except (U9NonfixedError, ValueError, IndexError) as error:
-        report.add("NFS01", "structure", "FATAL", str(error), path=source)
+        report.add(
+            "NFS01",
+            "structure",
+            "FATAL",
+            str(error),
+            path=source,
+            map_number=map_number,
+            maps=[map_number],
+        )
         return None
     incomplete = [chunk.index for chunk in chunks if not chunk.allocation_is_complete]
     report.artifacts[name].update(
@@ -604,6 +743,8 @@ def _check_nonfixed(
             path=source,
             declared=nonfixed.declared_payload_size,
             actual=nonfixed.payload_size,
+            map_number=map_number,
+            maps=[map_number],
         )
     if incomplete:
         report.add(
@@ -613,6 +754,9 @@ def _check_nonfixed(
             f"allocator recovery is incomplete in {len(incomplete)} chunks",
             path=source,
             chunk_indices=incomplete,
+            count=len(incomplete),
+            map_number=map_number,
+            maps=[map_number],
         )
     return nonfixed
 
@@ -620,14 +764,22 @@ def _check_nonfixed(
 def _check_fixed(
     report: IntegrityReport, path: Path, map_number: int
 ) -> U9Fixed | None:
-    data = path.read_bytes()
     name = f"fixed.{map_number}"
-    _record_artifact(report, name, data, source=str(path))
     try:
+        data = path.read_bytes()
+        _record_artifact(report, name, data, source=str(path))
         fixed = U9Fixed(data)
         chunks = fixed.chunks()
-    except (U9FixedError, ValueError, IndexError) as error:
-        report.add("FXS01", "structure", "FATAL", str(error), path=path)
+    except (OSError, U9FixedError, ValueError, IndexError) as error:
+        report.add(
+            "FXS01",
+            "structure",
+            "FATAL",
+            str(error),
+            path=path,
+            map_number=map_number,
+            maps=[map_number],
+        )
         return None
     pages = [page for chunk in chunks for page in chunk.pages]
     invalid = [page.offset for page in pages if not page.free_list_walked]
@@ -649,6 +801,8 @@ def _check_fixed(
             path=path,
             declared=fixed.heap_size,
             actual=fixed.payload_size,
+            map_number=map_number,
+            maps=[map_number],
         )
     if invalid:
         report.add(
@@ -658,6 +812,10 @@ def _check_fixed(
             f"{len(invalid)} of {len(pages)} page free lists are invalid",
             path=path,
             page_offsets=invalid,
+            count=len(invalid),
+            total_count=len(pages),
+            map_number=map_number,
+            maps=[map_number],
         )
     return fixed
 
@@ -731,7 +889,7 @@ def _resolve_object_references(
     nonfixed_free: list[int] = []
     unknown: list[int] = []
 
-    nonfixed_state: dict[int, tuple[set[int], set[int]]] = {}
+    nonfixed_state: dict[int, tuple[set[int], set[int], int]] = {}
     for map_number, heap in nonfixed.items():
         chunks = heap.chunks()
         live = {
@@ -743,7 +901,7 @@ def _resolve_object_references(
             if not chunk.allocation_is_complete
             for page in chunk.pages
         }
-        nonfixed_state[map_number] = live, uncertain_pages
+        nonfixed_state[map_number] = live, uncertain_pages, heap.payload_size
 
     fixed_state: dict[int, tuple[set[int], dict[int, bool], int]] = {}
     for map_number, heap in fixed.items():
@@ -782,9 +940,14 @@ def _resolve_object_references(
             if state is None:
                 missing_maps.add(("nonfixed", entry.map_number))
                 continue
-            live, uncertain_pages = state
+            live, uncertain_pages, heap_size = state
             slot_delta = offset - page_offset - 0x60
-            if slot_delta < 0 or slot_delta % 32 or slot_delta // 32 >= 125:
+            if (
+                offset >= heap_size
+                or slot_delta < 0
+                or slot_delta % 32
+                or slot_delta // 32 >= 125
+            ):
                 invalid_slots.append(entry.index)
             elif offset in live:
                 continue
@@ -802,6 +965,8 @@ def _resolve_object_references(
             arenas=[
                 f"{kind}.{map_number}" for kind, map_number in sorted(missing_maps)
             ],
+            count=len(missing_maps),
+            maps=sorted({number for _, number in missing_maps}),
         )
     if invalid_slots:
         report.add(
@@ -813,6 +978,8 @@ def _resolve_object_references(
             reference_indices=invalid_slots,
             # Compatibility alias retained for existing JSON consumers.
             handle_indices=invalid_slots,
+            count=len(invalid_slots),
+            maps=sorted({table.entries[i].map_number for i in invalid_slots}),
         )
     if fixed_free:
         targets = {
@@ -828,6 +995,9 @@ def _resolve_object_references(
             reference_indices=fixed_free,
             # Compatibility alias retained for existing JSON consumers.
             handle_indices=fixed_free,
+            count=len(fixed_free),
+            target_count=len(targets),
+            maps=sorted({number for number, _ in targets}),
             targets=[
                 {"map": map_number, "offset": offset}
                 for map_number, offset in sorted(targets)
@@ -845,6 +1015,8 @@ def _resolve_object_references(
             reference_indices=nonfixed_free,
             # Compatibility alias retained for existing JSON consumers.
             handle_indices=nonfixed_free,
+            count=len(nonfixed_free),
+            maps=sorted({table.entries[i].map_number for i in nonfixed_free}),
             target_records=_target_records(
                 table, nonfixed_free, nonfixed, fixed, "non-live"
             ),
@@ -859,12 +1031,17 @@ def _resolve_object_references(
             reference_indices=unknown,
             # Compatibility alias retained for existing JSON consumers.
             handle_indices=unknown,
+            count=len(unknown),
+            maps=sorted({table.entries[i].map_number for i in unknown}),
             target_records=_target_records(table, unknown, nonfixed, fixed, "unknown"),
         )
 
 
-def _resolve_directories(target: Path) -> tuple[Path, Path | None]:
-    if (target / "savegame").is_dir():
+def resolve_u9_save_directories(target: Path) -> tuple[Path, Path | None]:
+    """Resolve an installation or loose save directory, including missing saves."""
+    if target.name.casefold() != "savegame" and (
+        (target / "savegame").is_dir() or (target / "static").is_dir()
+    ):
         return target / "savegame", target / "static"
     return target, target.parent / "static"
 
@@ -879,11 +1056,12 @@ def check_save(
 ) -> IntegrityReport:
     """Check one U9 install/save directory and return a display-neutral report."""
     target_path = Path(target)
-    save_directory, default_static = _resolve_directories(target_path)
+    save_directory, default_static = resolve_u9_save_directories(target_path)
     static_path = Path(static_directory) if static_directory else default_static
-    report = IntegrityReport(str(target_path))
+    report = IntegrityReport(str(target_path), slot=slot)
 
     if not save_directory.is_dir():
+        report.no_save_selected = slot is None
         report.add(
             "SEL02",
             "custody",
@@ -898,17 +1076,79 @@ def check_save(
         try:
             slot = U9StartDat.from_file(start_path).slot
         except (OSError, U9SaveError) as error:
+            report.no_save_selected = isinstance(
+                error, (FileNotFoundError, NotADirectoryError)
+            )
             report.add("SEL01", "custody", "FATAL", str(error), path=start_path)
             return report
     report.slot = slot
 
     archive_path = save_directory / f"u9game{slot}.sav"
+    return _check_save_archive(
+        report,
+        save_directory,
+        archive_path,
+        static_path,
+        fixed_reference_directory,
+        allow_partial,
+        pair_with_working=True,
+    )
+
+
+def check_save_archive(
+    archive: str | Path,
+    *,
+    static_directory: str | Path | None = None,
+    fixed_reference_directory: str | Path | None = None,
+    allow_partial: bool = False,
+) -> IntegrityReport:
+    """Check a historical save archive without comparing today's loose files."""
+    path = Path(archive)
+    match = re.match(r"^u9game(\d+).*\.sav$", path.name, re.IGNORECASE)
+    report = IntegrityReport(
+        str(path), slot=int(match[1]) if match else None, custody_applicable=False
+    )
+    static_path = (
+        Path(static_directory) if static_directory else path.parent.parent / "static"
+    )
+    return _check_save_archive(
+        report,
+        path.parent,
+        path,
+        static_path,
+        fixed_reference_directory,
+        allow_partial,
+        pair_with_working=False,
+    )
+
+
+def _check_save_archive(
+    report: IntegrityReport,
+    save_directory: Path,
+    archive_path: Path,
+    static_path: Path | None,
+    fixed_reference_directory: str | Path | None,
+    allow_partial: bool,
+    *,
+    pair_with_working: bool,
+) -> IntegrityReport:
     report.archive = str(archive_path)
+    report.self_reference = bool(
+        fixed_reference_directory is not None
+        and static_path is not None
+        and Path(fixed_reference_directory).resolve() == static_path.resolve()
+    )
     try:
         archive_data = archive_path.read_bytes()
         archive = U9SaveArchive.from_bytes(archive_data)
     except (OSError, U9SaveError) as error:
-        report.add("ARC01", "custody", "FATAL", str(error), path=archive_path)
+        report.add(
+            "ARC01",
+            "custody" if pair_with_working else "structure",
+            "FATAL",
+            str(error),
+            path=archive_path,
+        )
         return report
     _record_artifact(
         report,
@@ -917,6 +1157,10 @@ def check_save(
         source=str(archive_path),
         description=archive.header.description,
         header_map=archive.header.header_map,
+        label=archive.header.label,
+        time=archive.header.time,
+        day=archive.header.day,
+        position=list(archive.header.position),
         maps=[member.map_number for member in archive.nonfixed],
     )
     _record_artifact(
@@ -940,6 +1184,8 @@ def check_save(
             f"nonfixed.0-{MAX_MAP_NUMBER}, so this is legal, but no shipped map has "
             "these numbers; they come from stray loose files in the save directory",
             path=archive_path,
+            count=len(stray_maps),
+            maps=stray_maps,
         )
     object_references: U9ObjectReferenceTable | None = None
     try:
@@ -994,6 +1240,8 @@ def check_save(
                 "so the plant stops growing as soon as the save is loaded "
                 "(the rest of the save loads normally)",
                 path=f"{archive_path}!processes.dat",
+                count=len(growth),
+                process_offsets=growth,
             )
     process_sections: U9ProcessSections | None = None
     if process_prefix is not None and process_prefix.terminator_offset is not None:
@@ -1013,7 +1261,7 @@ def check_save(
     pairs = [(archive.processes, save_directory / "processes.dat")]
     pairs.extend((member, save_directory / member.name) for member in archive.nonfixed)
     missing_members: list[str] = []
-    for member, loose_path in pairs:
+    for member, loose_path in pairs if pair_with_working else ():
         check_id = "CUS01" if member.name == "processes.dat" else "CUS03"
         if not loose_path.is_file():
             if allow_partial:
@@ -1025,9 +1273,23 @@ def check_save(
                 "FATAL",
                 f"archived member {member.name} is missing from working directory",
                 path=loose_path,
+                member_name=member.name,
+                maps=[member.map_number] if member.map_number is not None else [],
             )
             continue
-        loose_data = loose_path.read_bytes()
+        try:
+            loose_data = loose_path.read_bytes()
+        except OSError as error:
+            report.add(
+                check_id,
+                "custody",
+                "FATAL",
+                f"working {member.name} could not be read: {error}",
+                path=loose_path,
+                member_name=member.name,
+                maps=[member.map_number] if member.map_number is not None else [],
+            )
+            continue
         if member.name == "processes.dat":
             _record_artifact(
                 report,
@@ -1044,6 +1306,8 @@ def check_save(
                 path=loose_path,
                 archive_sha256=_sha256(member.data),
                 working_sha256=_sha256(loose_data),
+                member_name=member.name,
+                maps=[member.map_number] if member.map_number is not None else [],
             )
     if missing_members:
         report.add(
@@ -1052,10 +1316,13 @@ def check_save(
             "INFO",
             f"partial bundle omits {len(missing_members)} archived working files",
             omitted=missing_members,
+            count=len(missing_members),
         )
 
     archived_maps = {member.map_number for member in archive.nonfixed}
-    loose_nonfixed = _files_by_map(save_directory, "nonfixed")
+    loose_nonfixed = (
+        _files_by_map(save_directory, "nonfixed") if pair_with_working else {}
+    )
     for map_number, path in sorted(loose_nonfixed.items()):
         if map_number not in archived_maps:
             report.add(
@@ -1064,6 +1331,8 @@ def check_save(
                 "WARN",
                 f"working nonfixed.{map_number} has no member in selected archive",
                 path=path,
+                map_number=map_number,
+                maps=[map_number],
             )
 
     archive_nonfixed: dict[int, U9Nonfixed] = {}
@@ -1073,15 +1342,32 @@ def check_save(
             f"archive/{member.name}",
             member.data,
             source=f"{archive_path}!{member.name}",
+            map_number=cast(
+                int, member.map_number
+            ),  # archive parser requires a map number
         )
         if parsed is not None and member.map_number is not None:
             archive_nonfixed[member.map_number] = parsed
     for map_number, path in sorted(loose_nonfixed.items()):
+        try:
+            working_data = path.read_bytes()
+        except OSError as error:
+            report.add(
+                "NFS01",
+                "structure",
+                "FATAL",
+                f"working map could not be read: {error}",
+                path=path,
+                map_number=map_number,
+                maps=[map_number],
+            )
+            continue
         _check_nonfixed(
             report,
             f"working/nonfixed.{map_number}",
-            path.read_bytes(),
+            working_data,
             source=str(path),
+            map_number=map_number,
         )
 
     # A member numbered above the shipped range is a stray file the save swept up
@@ -1108,6 +1394,8 @@ def check_save(
                 "FATAL",
                 f"fixed.{map_number} is unavailable for a save-relevant map",
                 path=static_path,
+                map_number=map_number,
+                maps=[map_number],
             )
             continue
         parsed = _check_fixed(report, fixed_path, map_number)
@@ -1123,6 +1411,8 @@ def check_save(
                 "INFO",
                 f"partial bundle omits fixed files for {len(missing_fixed)} archive maps",
                 map_numbers=missing_fixed,
+                count=len(missing_fixed),
+                maps=missing_fixed,
             )
 
     if fixed_reference_directory is not None:
@@ -1133,23 +1423,37 @@ def check_save(
         for map_number in sorted(comparison_maps):
             current = fixed_files.get(map_number)
             reference = references.get(map_number)
-            if current is None or reference is None:
+            current_data = reference_data = None
+            read_error = None
+            if current is not None and reference is not None:
+                try:
+                    current_data = current.read_bytes()
+                    reference_data = reference.read_bytes()
+                except OSError as error:
+                    read_error = str(error)
+            if current_data is None or reference_data is None:
                 report.add(
                     "LAY04",
                     "compatibility",
                     "WARN",
                     f"fixed.{map_number} cannot be compared with a trusted reference",
+                    affects_verdict=False,
                     path=reference or current,
+                    map_number=map_number,
+                    maps=[map_number],
+                    read_error=read_error,
                 )
-            elif current.read_bytes() != reference.read_bytes():
+            elif current_data != reference_data:
                 report.add(
                     "LAY02",
                     "compatibility",
                     "ERROR",
                     f"fixed.{map_number} differs byte-for-byte from the trusted reference",
                     path=current,
-                    current_sha256=_sha256(current.read_bytes()),
-                    reference_sha256=_sha256(reference.read_bytes()),
+                    current_sha256=_sha256(current_data),
+                    reference_sha256=_sha256(reference_data),
+                    map_number=map_number,
+                    maps=[map_number],
                 )
             else:
                 report.add(
@@ -1158,6 +1462,8 @@ def check_save(
                     "INFO",
                     f"fixed.{map_number} is byte-identical to the trusted reference",
                     path=current,
+                    map_number=map_number,
+                    maps=[map_number],
                 )
     else:
         report.add(
@@ -1165,6 +1471,9 @@ def check_save(
             "compatibility",
             "WARN",
             "no creation-time fixed reference directory was supplied",
+            affects_verdict=False,
+            count=len(relevant_maps),
+            maps=sorted(relevant_maps),
         )
 
     if object_references is not None:
@@ -1542,6 +1851,10 @@ def check_save(
                 reference_indices=invalid_entries,
                 # Compatibility alias retained for existing JSON consumers.
                 handle_indices=invalid_entries,
+                count=len(invalid_entries),
+                maps=sorted(
+                    {object_references.entries[i].map_number for i in invalid_entries}
+                ),
             )
         _resolve_object_references(
             report, object_references, archive_nonfixed, parsed_fixed
@@ -1566,9 +1879,18 @@ def render_integrity_report(report: IntegrityReport) -> str:
             f"  {axis.title():13} {report.verdict(axis):5}  {AXIS_DESCRIPTIONS[axis]}"
         )
 
-    actionable = [finding for finding in report.findings if finding.severity != "INFO"]
+    actionable = [
+        finding
+        for finding in report.findings
+        if finding.severity != "INFO" and finding.affects_verdict
+    ]
+    comparison_notes = [
+        finding for finding in report.findings if not finding.affects_verdict
+    ]
     confirmations = [
-        finding for finding in report.findings if finding.severity == "INFO"
+        finding
+        for finding in report.findings
+        if finding.severity == "INFO" and finding.affects_verdict
     ]
     problem_groups: dict[tuple[str, str, str, str], list[IntegrityFinding]] = {}
     for finding in actionable:
@@ -1625,16 +1947,22 @@ def render_integrity_report(report: IntegrityReport) -> str:
                 f"        Evidence: {len(target_records) - 8} more target records in JSON"
             )
 
-    recommendation_keys = {
-        finding.check_id
-        if finding.check_id in RECOMMENDATIONS
-        else finding.check_id[:3]
-        for finding in actionable
-    } & RECOMMENDATIONS.keys()
-    if recommendation_keys:
+    if comparison_notes:
+        lines.extend(("", f"Comparison notes ({len(comparison_notes)})"))
+        for finding in comparison_notes:
+            location = f" [{finding.path}]" if finding.path else ""
+            lines.append(
+                f"  {finding.severity} {finding.check_id}: {finding.message}{location}"
+            )
+
+    recommendations = report.recommendations()
+    if recommendations:
         lines.extend(("", "Next steps"))
-        for code in sorted(recommendation_keys):
-            lines.append(f"  {code}: {RECOMMENDATIONS[code]}")
+        for recommendation in recommendations:
+            lines.append(
+                f"  {recommendation['check_id']} / {recommendation['severity']}: "
+                f"{recommendation['message']}"
+            )
 
     lines.extend(("", f"Confirmations ({len(confirmations)})"))
     if not confirmations:

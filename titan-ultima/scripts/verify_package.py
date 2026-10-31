@@ -5,9 +5,13 @@ import tarfile
 import zipfile
 from collections import Counter
 from pathlib import Path
+from typing import NoReturn
 
 
 WHEEL_REQUIRED = [
+    "titan/u9/resources/save_wording.json",
+    "titan/u9/resources/region_catalogue.json",
+    "titan/u9/resources/save_browser_examples.json",
     "titan/dialogue/webbundle/index.html",
     "titan/dialogue/pipeline/resources/symbols.csv",
     "titan/third_party/fold/NOTICE.md",
@@ -16,6 +20,9 @@ WHEEL_REQUIRED = [
 ]
 
 SDIST_REQUIRED_SUFFIXES = [
+    "/src/titan/u9/resources/save_wording.json",
+    "/src/titan/u9/resources/region_catalogue.json",
+    "/src/titan/u9/resources/save_browser_examples.json",
     "/src/titan/dialogue/webbundle/index.html",
 ]
 
@@ -37,7 +44,7 @@ PLACEHOLDER_MARKER = "Titan dialogue shell placeholder"
 FOLD_LICENSE_MARKER = "GNU GENERAL PUBLIC LICENSE"
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise SystemExit(message)
 
 
@@ -71,9 +78,7 @@ def verify_wheel(wheel: Path) -> None:
             )
         print("  OK: dialogue shell is non-placeholder")
 
-        copying = zf.read("titan/third_party/fold/COPYING").decode(
-            "utf-8", "replace"
-        )
+        copying = zf.read("titan/third_party/fold/COPYING").decode("utf-8", "replace")
         if FOLD_LICENSE_MARKER not in copying:
             fail("fold/COPYING does not look like GPL license text")
         print("  OK: fold compliance bundle present")

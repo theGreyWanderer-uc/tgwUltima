@@ -264,7 +264,36 @@ def cmd_flex_create(args: SimpleNamespace) -> int:
         # Default output name: directory name + .flx
         output_file = Path(source_dir).stem + ".flx"
 
+    metadata = []
+    if archive.archive_format == "u7":
+        from titan.u7.shape_animation_flag import (
+            prepare_u7_flex_animation_import,
+            write_u7_animation_payloads,
+        )
+
+        input_paths = {}
+        for path in Path(source_dir).iterdir():
+            if not path.is_file() or path.name.endswith(
+                (".meta.txt", ".animation.json")
+            ):
+                continue
+            prefix = path.stem.split("_", 1)[0]
+            if prefix.isdecimal():
+                input_paths[int(prefix)] = path
+        try:
+            metadata = prepare_u7_flex_animation_import(
+                dict(enumerate(archive.records)),
+                Path(output_file),
+                sources=(Path(source_dir),),
+                input_paths=input_paths,
+                animated=getattr(args, "animated", None),
+            )
+        except (ui.PromptCancelled, KeyboardInterrupt):
+            print("Cancelled.")
+            return 0
     archive.save(output_file)
+    if metadata:
+        write_u7_animation_payloads(metadata)
     return 0
 
 
@@ -398,7 +427,27 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
     archive.records[index] = new_data
 
     output_path = args.output or flex_path
+    metadata = []
+    if archive.archive_format == "u7":
+        from titan.u7.shape_animation_flag import (
+            prepare_u7_flex_animation_import,
+            write_u7_animation_payloads,
+        )
+
+        try:
+            metadata = prepare_u7_flex_animation_import(
+                {index: new_data},
+                Path(output_path),
+                sources=(Path(flex_path),),
+                input_paths={index: Path(data_path)},
+                animated=getattr(args, "animated", None),
+            )
+        except (ui.PromptCancelled, KeyboardInterrupt):
+            print("Cancelled.")
+            return 0
     archive.save(output_path)
+    if metadata:
+        write_u7_animation_payloads(metadata)
 
     print(
         f"Flex updated: record {index} replaced "
@@ -1497,6 +1546,13 @@ def flex_create_cmd(
             help="Source directory with numbered files (e.g., 0000.bin, 0001.shp)"
         ),
     ],
+    animated: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--animate/--no-animate",
+            help="U7 multi-frame shape animation; otherwise ask per imported shape",
+        ),
+    ] = None,
     output: Annotated[
         Optional[str],
         typer.Option(
@@ -1525,6 +1581,7 @@ def flex_create_cmd(
                 output=output,
                 comment=comment,
                 archive_format=archive_format,
+                animated=animated,
             )
         )
     )
@@ -1537,6 +1594,13 @@ def flex_update_cmd(
         int, typer.Option("--index", help="Record index to replace (0-based)")
     ],
     data: Annotated[str, typer.Option("--data", help="Path to the replacement file")],
+    animated: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--animate/--no-animate",
+            help="U7 multi-frame shape animation; otherwise ask when importing a shape",
+        ),
+    ] = None,
     output: Annotated[
         Optional[str],
         typer.Option(
@@ -1552,6 +1616,7 @@ def flex_update_cmd(
                 index=index,
                 data=data,
                 output=output,
+                animated=animated,
             )
         )
     )

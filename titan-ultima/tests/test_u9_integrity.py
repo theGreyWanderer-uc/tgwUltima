@@ -2,12 +2,18 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import struct
 import tempfile
 import unittest
 from pathlib import Path
 
-from titan.u9.integrity import check_save, render_integrity_report
+from titan.u9.integrity import (
+    RECOMMENDATIONS,
+    IntegrityReport,
+    check_save,
+    render_integrity_report,
+)
 from titan.u9.process_data import OBJECT_REFERENCE_DATA_OFFSET
 
 from tests.test_u9_process_data import _temporary_camera_record
@@ -199,26 +205,28 @@ def _later_process_records() -> bytes:
 def _processes(
     *,
     fixed_offset: int | None = None,
+    nonfixed_offset: int | None = None,
     first_process: bool = False,
     extra: bytes = b"",
     sections: bytes = b"",
     temporary_camera: bool = False,
 ) -> bytes:
-    count = 3 if fixed_offset is not None else 2
+    encoded = -fixed_offset if fixed_offset is not None else nonfixed_offset
+    count = 3 if encoded is not None else 2
     end = OBJECT_REFERENCE_DATA_OFFSET + 12 + count * 12
     data = bytearray(end)
     struct.pack_into("<II", data, 0, 8, 2)
     struct.pack_into("<III", data, OBJECT_REFERENCE_DATA_OFFSET, 1, count, 1)
     struct.pack_into("<iii", data, OBJECT_REFERENCE_DATA_OFFSET + 12, 0, -1, 0)
     struct.pack_into("<iii", data, OBJECT_REFERENCE_DATA_OFFSET + 24, 0, -1, 0)
-    if fixed_offset is not None:
+    if encoded is not None:
         struct.pack_into(
             "<iii",
             data,
             OBJECT_REFERENCE_DATA_OFFSET + 36,
             1,
             9,
-            -fixed_offset,
+            encoded,
         )
     data += struct.pack(
         "<I3f3fiiB4fi",
@@ -417,6 +425,8 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn("camera=v2/effects0", rendered)
         self.assertIn("camera_control=v2", rendered)
         self.assertIn("first_process_type=-1", rendered)
+        self.assertNotIn("Next steps", rendered)
+        self.assertEqual(report.to_dict()["recommendations"], [])
         self.assertLess(rendered.index("Problems"), rendered.index("Evidence"))
         json.dumps(report.to_dict())
 
@@ -427,7 +437,8 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn("CUS01", {finding.check_id for finding in report.findings})
         rendered = render_integrity_report(report)
         self.assertIn("Assessment: UNSAFE TO LOAD", rendered)
-        self.assertIn("CUS: Re-extract the selected archive", rendered)
+        self.assertIn("CUS01 / FATAL: Preserve the working files", rendered)
+        self.assertIn("re-extract processes.dat from the selected archive", rendered)
         self.assertIn("Source:", rendered)
 
     def test_reports_first_process_shared_prefix(self) -> None:
@@ -684,7 +695,7 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn("type 215", finding.message)
         self.assertIn("rest of the save loads normally", finding.message)
         rendered = render_integrity_report(report)
-        self.assertNotIn("PRC: Do not load until", rendered)
+        self.assertNotIn("PRC04 / INFO:", rendered)
         evidence = report.artifacts["archive/processes.dat"]
         self.assertIsNotNone(evidence["process_sections"])
 
@@ -701,6 +712,98 @@ class IntegrityTests(unittest.TestCase):
         self.assertIn("fast-area version 0", finding.message)
         evidence = report.artifacts["archive/processes.dat"]
         self.assertIsNone(evidence["process_sections"])
+        rendered = render_integrity_report(report)
+        self.assertIn("PRC02 / WARN: Keep a backup", rendered)
+        self.assertIn("an older save and save a report to share", rendered)
+        self.assertNotIn("Do not load", rendered)
+
+    def test_nonfixed_advice_distinguishes_watermark_from_unreadable_data(self) -> None:
+        watermark_mismatch = bytearray(_nonfixed())
+        struct.pack_into("<I", watermark_mismatch, 0x0C, 4096)
+        for severity, payload, advice in (
+            (
+                "WARN",
+                bytes(watermark_mismatch),
+                "Keep a backup, then try loading",
+            ),
+            ("FATAL", b"unreadable", "Do not load the affected nonfixed maps"),
+        ):
+            with self.subTest(severity=severity):
+                (self.save / "nonfixed.9").write_bytes(payload)
+                (self.save / "u9game4.sav").write_bytes(_archive(_processes(), payload))
+                report = check_save(self.root, fixed_reference_directory=self.reference)
+                self.assertEqual(report.verdict("structure"), severity)
+                self.assertEqual(
+                    {f.severity for f in report.findings if f.check_id == "NFS01"},
+                    {severity},
+                )
+                rendered = render_integrity_report(report)
+                self.assertIn(f"NFS01 / {severity}: {advice}", rendered)
+                self.assertEqual(
+                    report.to_dict()["recommendations"],
+                    [
+                        {
+                            "check_id": "NFS01",
+                            "severity": severity,
+                            "message": RECOMMENDATIONS["NFS01", severity],
+                        }
+                    ],
+                )
+                if severity == "WARN":
+                    self.assertNotIn("Do not load", rendered)
+
+    def test_mixed_advice_keeps_severities_and_deduplicates_exact_pairs(self) -> None:
+        report = IntegrityReport("fixture")
+        report.add("NFS01", "structure", "WARN", "watermark", path="working")
+        report.add("NFS01", "structure", "FATAL", "unreadable", path="archive")
+        report.add("NFS01", "structure", "WARN", "watermark", path="archive")
+        report.add("CUS04", "custody", "WARN", "unmatched loose map")
+        report.add("PRC04", "compatibility", "INFO", "cosmetic")
+        report.add("LAY01", "compatibility", "PASS", "identical")
+        recommendations = report.recommendations()
+        self.assertEqual(report.to_dict()["recommendations"], recommendations)
+        self.assertEqual(
+            [(item["check_id"], item["severity"]) for item in recommendations],
+            [("CUS04", "WARN"), ("NFS01", "FATAL"), ("NFS01", "WARN")],
+        )
+        rendered = render_integrity_report(report)
+        for item in recommendations:
+            label = f"{item['check_id']} / {item['severity']}: {item['message']}"
+            self.assertEqual(rendered.count(label), 1)
+        self.assertIn("try loading if no more serious findings apply", rendered)
+        self.assertIn("things are missing or out of place", rendered)
+        self.assertEqual(report.overall, "FATAL")
+        self.assertEqual(len(report.findings), 6)
+
+    def test_undocumented_pairs_do_not_inherit_family_advice(self) -> None:
+        report = IntegrityReport("fixture")
+        report.add("PRC01", "structure", "WARN", "new severity")
+        report.add("PRC99", "structure", "FATAL", "new check")
+        self.assertEqual(report.recommendations(), [])
+        self.assertNotIn("Next steps", render_integrity_report(report))
+
+    def test_advice_catalog_matches_the_shared_reference(self) -> None:
+        reference = (
+            Path(__file__).resolve().parents[1]
+            / "reference/u9/u9_save_integrity_reference.md"
+        )
+        if not reference.is_file():
+            self.skipTest("local U9 format reference is not distributed")
+        advice_section = (
+            reference.read_text(encoding="utf-8")
+            .split("### Advice keyed by check ID and severity\n", 1)[1]
+            .split("\n## 11.", 1)[0]
+        )
+        rows = re.findall(
+            r"^\| `([A-Z]{3}\d{2})` \| `(WARN|ERROR|FATAL)` \| (.+) \|$",
+            advice_section,
+            re.MULTILINE,
+        )
+        documented = {
+            (check_id, severity): message for check_id, severity, message in rows
+        }
+        self.assertEqual(len(rows), len(documented))
+        self.assertEqual(RECOMMENDATIONS, documented)
 
     def test_renderer_collapses_duplicate_problems_but_json_keeps_them(self) -> None:
         report = check_save(self.root, fixed_reference_directory=self.reference)
@@ -743,6 +846,9 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(report.verdict("custody"), "WARN")
         self.assertEqual(report.verdict("structure"), "PASS")
         self.assertEqual(report.verdict("compatibility"), "PASS")
+        rendered = render_integrity_report(report)
+        self.assertIn("ARC10 / WARN: Keep a backup, then try loading", rendered)
+        self.assertNotIn("recover", rendered)
 
     def test_missing_fixed_map_is_a_compatibility_failure(self) -> None:
         (self.static / "fixed.9").unlink()
@@ -762,6 +868,58 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(report.verdict("compatibility"), "PASS")
         self.assertIn("CUS07", {finding.check_id for finding in report.findings})
         self.assertIn("REF08", {finding.check_id for finding in report.findings})
+
+    def test_nonfixed_reference_beyond_the_payload_is_out_of_bounds(self) -> None:
+        processes = _processes(nonfixed_offset=0x2060)
+        (self.save / "processes.dat").write_bytes(processes)
+        (self.save / "u9game4.sav").write_bytes(_archive(processes, _nonfixed()))
+        report = check_save(self.root, fixed_reference_directory=self.reference)
+        ids = {finding.check_id for finding in report.findings}
+        self.assertIn("REF02", ids)
+        self.assertNotIn("REF04", ids)
+        self.assertEqual(report.verdict("custody"), "PASS")
+        self.assertEqual(report.verdict("structure"), "PASS")
+        self.assertEqual(report.verdict("compatibility"), "FATAL")
+        self.assertEqual(report.overall, "FATAL")
+        finding = next(f for f in report.findings if f.check_id == "REF02")
+        self.assertEqual(finding.details["reference_indices"], [2])
+        self.assertEqual(finding.details["handle_indices"], [2])
+
+    def test_nonfixed_reference_payload_boundary_keeps_in_bounds_free_slots(
+        self,
+    ) -> None:
+        for payload_size, offset, expected in (
+            (0x1000, 0xFE0, "REF04"),
+            (0x2060, 0x2060, "REF02"),
+        ):
+            with self.subTest(payload_size=payload_size, offset=offset):
+                nonfixed = _nonfixed() + bytes(payload_size)
+                processes = _processes(nonfixed_offset=offset)
+                (self.save / "nonfixed.9").write_bytes(nonfixed)
+                (self.save / "processes.dat").write_bytes(processes)
+                (self.save / "u9game4.sav").write_bytes(_archive(processes, nonfixed))
+                report = check_save(self.root, fixed_reference_directory=self.reference)
+                ids = {finding.check_id for finding in report.findings}
+                self.assertIn(expected, ids)
+                self.assertNotIn("REF04" if expected == "REF02" else "REF02", ids)
+
+    def test_nonfixed_reference_outside_uncertain_page_is_out_of_bounds(self) -> None:
+        nonfixed = bytearray(_nonfixed() + bytes(0x80))
+        struct.pack_into("<I", nonfixed, 0x20, 1)  # First page at payload offset 0.
+        struct.pack_into("<I", nonfixed, 40 + 0x14, 1)  # Missing declared entity.
+        for offset in (0x80, 0xA0):
+            with self.subTest(offset=offset):
+                processes = _processes(nonfixed_offset=offset)
+                (self.save / "nonfixed.9").write_bytes(nonfixed)
+                (self.save / "processes.dat").write_bytes(processes)
+                (self.save / "u9game4.sav").write_bytes(
+                    _archive(processes, bytes(nonfixed))
+                )
+                report = check_save(self.root, fixed_reference_directory=self.reference)
+                ids = {finding.check_id for finding in report.findings}
+                self.assertIn("REF02", ids)
+                self.assertNotIn("REF04", ids)
+                self.assertNotIn("REF07", ids)
 
     def test_fixed_reference_resolves_live_slot_and_rejects_free_slot(self) -> None:
         fixed = _fixed(live_slot=0)

@@ -215,6 +215,7 @@ questions concern field or gameplay semantics.
 | Area | Coverage | Quick example |
 |---|---|---|
 | Archives | List/extract any U9 `.flx`/`.FLX` archive | `titan u9 flx-list sound/Speech.flx` |
+| Save browser | Browse saves, plain integrity findings, maps, NPCs and activities; make preserving backups and offline reports | `titan u9 save-browse --game-dir C:\Ultima\Ultima9` |
 | Save integrity | Verify selected archive custody, fixed/nonfixed allocator structure, and fixed-layout compatibility; display separate verdicts or write JSON | `titan u9 save-check C:\Ultima\Ultima9 --fixed-reference C:\Ultima\Ultima9\static` |
 | Metadata | Decode `TYPENAME.FLX` type-ID → name pairs | `titan u9 typename-dump static/TYPENAME.FLX` |
 | Sound and speech | Decode audio to WAV; report sizes/codecs/SFX links and lossless `sfxenv.flx` acoustic presets; replace one or many records from compatible PCM WAV or native data | `titan u9 sound-report sound/ -o sounds.csv` |

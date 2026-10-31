@@ -654,6 +654,400 @@ titan flex-update U8SHAPES.FLX --index 42 --data my_shape.shp -o U8SHAPES_PATCHE
 All commands below are invoked as `titan u8 <command>`. The old root-level
 forms (e.g. `titan shape-export`) still work as deprecated aliases.
 
+### U8 interactive wizards and browsers
+
+#### `u8 palette-browse`
+
+Browse Pagan's 256-colour palette using the same numbered terminal swatches as
+the U7 palette browser. Page colours, inspect decimal/hex indices, stored VGA
+components and display RGB, find nearest RGB matches, and try RGB gradients.
+Preview numbered PNG sheets in the foreground image viewer. **C** selects the
+eight DOS target palettes: normal, greyscale, no red, rain storm, fire storm,
+saturate and the GBR/BRG shifts. These use decoded `U8/PAL.C` formulas and
+six-bit rounding; they preview fade targets rather than fade timing.
+
+```powershell
+conda run --no-capture-output -n titanDev titan u8 palette-browse --game-dir C:\ULTIMA8
+titan u8 palette-browse C:\ULTIMA8\ENGLISH\STATIC\U8PAL.PAL --index 128
+titan u8 palette-browse C:\ULTIMA8\ENGLISH\STATIC\U8PAL.PAL --export
+```
+
+| Argument / option | Meaning |
+|---|---|
+| `SOURCE` | Optional native palette file; otherwise choose a U8 installation/language owner |
+| `--game-dir DIR` | Installation, language or STATIC directory for owner discovery |
+| `--index INT` | Initial colour/page, 0–255; accepts decimal on the command line |
+| `--effect INT` | Initial DOS target palette, 0–7; default 0 (normal) |
+| `--export` | Export the selected palette/effect and exit |
+| `-o`, `--output DIR` | Export root; default `titan-out/u8_palette_browse_export` |
+
+**N/B** page, **I** inspects (decimal or `0x` hex), **V** shows all colours,
+**P** opens the numbered PNG, **F** finds an RGB colour, **G** matches a gradient,
+**U** shows source details, **E** exports, **A/W** change palette/data source,
+and **Q** quits. Native byte palettes (772 bytes, including a four-byte header)
+and word palettes (1536 bytes) are accepted. Components must be 0–63.
+
+Each export gets a fresh numbered folder containing a searchable HTML report,
+the selected effect's 256-row CSV and PNG, JSON and PNG sheets for all eight
+effects, and an exact `original.pal` copy. Reports show index 255's stored RGB
+while identifying its decoded-sprite transparency role. RGB matching excludes
+255. Pentagram blend information at indices 8–14 is labelled as optional
+translucent-painting behaviour; it is separate from native `XFORMPAL.DAT` lookup
+tables. U7 cycling bands are not applied to Pagan.
+
+Format and implementation notes:
+[U8 palette browser](reference/u8/palette_browser/u8_palette_browser.md).
+
+#### `u8 container-browse`
+
+Browse bags, chests and named NPC inventories across a captured native U8SAVE or
+GAMEDAT and the selected STATIC's FIXED records. The active map uses its live
+cache; other maps use stored FIXED/NONFIXED inventories. Search names, IDs, flags and nested contents; inspect quantities,
+raw quality, equipment slots and parent links. Open native sprite PNGs or exact
+saved or verified usecode container gump artwork with its direct contents in the
+image viewer. G places native sprites within GUMPAGE storage bounds; repeated G
+rerolls the random layout. H opens empty artwork and L selects random/saved
+positions. Shape, NPC and owner-map
+browsers return to the inventory when closed.
+
+Both U7 and U8 use the same persistent results/detail flow. In the results list,
+**S** performs quick search and **F** edits independent container name/shape,
+contains-item name/shape, direct/any-depth, owner, map and kind filters where
+available. Inside an inventory, **T** shows the named contents tree, **D** shows
+the complete native record, and **U** (**P** alias) opens the parent. **B** returns
+to the calling list/browser. Breadcrumbs retain distinct IDs for repeated bags.
+List **E** offers current results or all inventories; detail **E** exports that
+inventory and its nested containers. Current-result exports retain every active
+filter; all-inventory exports clear list filters.
+
+```powershell
+conda run --no-capture-output -n titanDev titan u8 container-browse --game-dir C:\ULTIMA8
+titan u8 container-browse C:\ULTIMA8\cloud_saves\GAMEDAT --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --container 1
+titan u8 container-browse C:\ULTIMA8\cloud_saves\SAVEGAME\U8SAVE.005 --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --export
+```
+
+| Argument / option | Meaning |
+|---|---|
+| `SOURCE` | Optional native U8SAVE or GAMEDAT folder; otherwise select interactively |
+| `--game-dir DIR` | U8 installation, language or STATIC owner for discovery |
+| `--shapes FILE` | Matching U8SHAPES.FLX; otherwise configured or selected owner |
+| `-p`, `--palette FILE` | Matching U8PAL.PAL; otherwise graphics owner |
+| `--gumps FILE` | Matching U8GUMPS.FLX; otherwise graphics owner |
+| `--gumpage FILE` | Matching GUMPAGE.DAT storage bounds; otherwise gump graphics owner |
+| `--layout random\|saved` | Random scatter by default; saved uses nonzero native anchors and scatters unset positions |
+| `--seed INT` | Repeatable exported layout; subsequent interactive G previews reroll |
+| `--names CSV` | Optional `npc_id,name` overrides |
+| `--fixed FILE` | Matching FIXED.DAT; otherwise world graphics owner |
+| `--cache-only` | Live-cache inventories only; default also scans stored maps |
+| `--npc-backpack`, `--no-npc-backpack` | Labelled backpack fallback for NPCs with no known gump; enabled by default |
+| `--map ID` | Initial map filter, 0–255; also scopes all-inventory exports |
+| `--container ID` | Cache slot 1–9215 or `FIXED:MAP:RECORD` / `NONFIXED:MAP:RECORD`; stored indices are zero-based |
+| `--data-only` | Inspect links without graphics; empty containers without type metadata remain unknown |
+| `--export` | Export the selected inventory, or all inventories, and exit |
+| `-o`, `--output DIR` | Fresh export root; default `titan-out/u8_container_browse_export` |
+
+Reports include `containers.csv`, a master `contents.csv` with inventory ID,
+nesting depth and named path, `tree.txt`, complete `inventory.json`, linked per-container HTML and native
+PNG previews and `gump_placements.csv` with painted bounds and origins.
+Windows image previews restore minimized viewers and bring them forward on
+every request, including reused Photos windows; they are not left always on top.
+Repeated exports create new folders. Free slots are excluded;
+cycles and disagreement between parent references and contents chains appear
+as diagnostics. Stored IDs and parent links stay within their archive and map;
+live IDs remain cache slots. J filters by map; K includes live/stored filters.
+Closed
+containers use verified usecode gump mappings where known, with saved
+shape/frame taking priority. Composition preserves native pixels, includes
+editor markers and keeps nested contents inside their own containers. Missing
+storage metadata leaves empty artwork available with a diagnostic. Unknown
+NPC gumps use an explicitly labelled backpack preview; saved, Avatar and corpse
+artwork retain priority. Preview
+positions never change the save. See [the container browser reference](reference/u8/container_browser/u8_container_browser.md).
+
+#### `u8 map-browse`
+
+Choose a matching STATIC owner and native save/GAMEDAT, then browse complete
+FIXED/NONFIXED records with shared arrow/Enter menus, hotkeys and redirected
+input. Preview top-down colour samples or native isometric PNGs in the image
+viewer. Inspect objects, parent/child containers and named captured NPC slots;
+open the existing shape and NPC browsers and return to the map.
+
+```powershell
+conda run --no-capture-output -n titanDev titan u8 map-browse --game-dir C:\ULTIMA8
+conda run --no-capture-output -n titanDev titan u8 map-browse C:\ULTIMA8\cloud_saves\GAMEDAT --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --map 8
+titan u8 map-browse --game-dir C:\ULTIMA8\ENGLISH --static-only
+titan u8 map-browse C:\ULTIMA8\cloud_saves\GAMEDAT --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --map 8 --export -o titan-out/u8_map_browse_export
+```
+
+| Option | Meaning |
+| --- | --- |
+| Optional `SOURCE` | Native U8SAVE, GAMEDAT directory or loose NONFIXED.DAT |
+| `--game-dir` | U8 installation, language or STATIC directory |
+| `--shapes`, `--palette/-p` | Matching world U8SHAPES.FLX and U8PAL.PAL |
+| `--fixed`, `--globs` | Explicit FIXED.DAT and GLOB.FLX; otherwise same STATIC owner |
+| `--map/-m` | Initial map slot, 0-255; zero is the NPC registry, not a world map |
+| `--names` | Optional `npc_id,name` CSV overrides |
+| `--static-only` | FIXED data without a save snapshot |
+| `--export` | Export selected `--map` and exit |
+| `--output/-o` | Report parent folder; default `titan-out/u8_map_browse_export` |
+
+The map menu supports **T/I** overview/isometric preview, **O** objects,
+**N** named NPCs, **F** filters, **V** projection/overview scale/grid,
+**E** export, **M** another map and **Q** quit. Filters cover storage, record
+scope, exact shape, text search, world Z and roofs. Editor markers are hidden
+in images by default; a filter toggle shows them, and their raw records remain
+available in the object list/exports. GLOB children are expanded
+before height/roof filtering; inventory Z remains an equipment/containment field.
+Each export creates a fresh `map_NNN_report[_NNN]` folder with `index.html`,
+`overview.png`, `isometric.png`, `objects.csv` and `report.json`.
+
+Record identity is archive + map + record index, never a cached item ID.
+NPC links use captured allocated NPC slots; the raw `npc_num` byte also has
+egg-specific meanings. Missing/malformed GLOBs and invalid sprite references
+appear as rendering diagnostics. PNGs preserve native isometric pixels; the
+overview samples colours. These views do not run game lighting, animation or
+usecode. Existing reports and source STATIC/GAMEDAT files are preserved.
+
+Format/workflow notes: `reference/u8/map_browser/u8_map_browser.md`.
+
+#### `u8 world-query` / `u8 egg-query`
+
+Search U8 world placements, inventories and egg/trigger definitions across all
+captured maps. Both commands open paged interactive result browsers unless
+`--format table|csv|json` or `--export` is supplied. Loaded-map ITEMCACH replaces
+stored FIXED/NONFIXED for that map; unloaded maps retain both archive identities.
+
+```powershell
+conda run --no-capture-output -n titanDev titan u8 world-query --game-dir C:\ULTIMA8
+conda run --no-capture-output -n titanDev titan u8 egg-query --game-dir C:\ULTIMA8
+titan u8 world-query C:\ULTIMA8\cloud_saves\GAMEDAT --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --shape 143 --scope all --export
+titan u8 egg-query C:\ULTIMA8\cloud_saves\GAMEDAT --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --type usecode --type teleport --type destination --type monster --type ambient --export
+```
+
+Common filters: `--query`, repeatable `--shape`, `--map`, `--family`,
+`--storage all|cache|fixed|nonfixed|glob`, `--scope world|all|contained|diagnostics`,
+`--area x0,y0,x1,y1` (native world units), `--min-z` / `--max-z`, `--status-mask`,
+and `--shape-flags`. `--expand-globs` optionally searches lazily derived children;
+ordinary searches include their structural stamp records. `--static-only`
+searches FIXED without a snapshot. Contained spatial filters use the top-level
+owner's position, never packed inventory coordinates.
+
+Egg filters add repeatable `--type usecode|teleport|destination|teleport_other|monster|glob|ambient`,
+`--class` (U8 usecode class, decimal/hex), `--destination-map` and
+`--destination-id`. TYPEFLAG is required. Native fields include 32-unit hatch
+ranges, usecode classes and bundled labels, teleport target links, spawn count,
+shape, activity and the native eight-entry probability table. SI_NOISY entries
+are labelled candidates; arbitrary usecode handlers and fired state are not
+inferred.
+
+F edits filters; K/J pages results; E exports; details link sprites, shapes,
+parents/stamps, inventories/NPCs, stored maps and teleport destinations.
+Exports create fresh `world[_NNN]` / `eggs[_NNN]` folders under
+`titan-out/u8_world_query_export` / `titan-out/u8_egg_query_export` (override with
+`-o`), with complete CSV/JSON, offline paged/searchable HTML and up to 64 distinct
+native sprite previews. Existing reports and game files are preserved.
+
+See [U8 world and egg search](reference/u8/world_search/u8_world_search.md)
+for coverage, field meanings and limitations.
+
+#### `u8 save-browse`
+
+Choose a native U8SAVE archive or current GAMEDAT and browse verified state
+with Titan's shared arrow/Enter menus, hotkeys and redirected-input fallback.
+Graphics are loaded when requested; data views work without U8SHAPES.FLX.
+
+```powershell
+titan u8 save-browse --game-dir C:\ULTIMA8
+titan u8 save-browse C:\ULTIMA8\cloud_saves\SAVEGAME\U8SAVE.005 --compare C:\ULTIMA8\cloud_saves\GAMEDAT
+conda run --no-capture-output -n titanDev titan u8 save-browse --game-dir C:\ULTIMA8
+```
+
+| Argument / option | Meaning |
+|---|---|
+| `SOURCE` | Optional initial native U8SAVE or GAMEDAT folder; otherwise choose interactively |
+| `--game-dir DIR` | U8 installation, language or STATIC directory for source discovery and graphics |
+| `--compare SOURCE` | Initial comparison target; selected primary save is the before snapshot |
+| `--shapes FILE` | Matching U8SHAPES.FLX for optional NPC/shape previews |
+| `-p`, `--palette FILE` | Matching U8PAL.PAL; otherwise the shapes owner |
+| `--anim FILE` | Matching ANIM.DAT for optional animation browsing |
+| `--symbols FILE` | Optional native FLAGSYM.DAT with verified offsets and widths |
+| `--names CSV` | Optional `npc_id,name` overrides shared with NPC reports |
+| `-o`, `--output DIR` | Export root; default `titan-out/u8_save_browse_export` |
+
+**O** shows coverage and complete overview; **F** browses entries with hex
+inspection and extraction. **A/N/I/R/G/M/U/V/K** open Avatar, named NPCs,
+cached items, cache regions, global flags, stored maps, container gumps,
+gump rectangles and kernel processes. Rows support search, paging and
+JSON/CSV/text exports. Global flags support explicit bit index/width and
+all-bit views; NPCs/items/regions/maps can include empty/free slots.
+
+**P** opens the NPC artwork/equipment/animation browser within the captured
+snapshot; **Q** there returns to save browsing. Map rows open stored records
+and kernel rows open process details. Shape-bearing records can open frame
+and animation browsing. **C** compares another snapshot, retaining complete
+counts for limited previews and exporting all differences. **E** produces
+an offline HTML overview and JSON/CSV data bundle. **D** chooses another
+primary snapshot and clears its comparison; **W** changes graphics, **Q** quits.
+
+Missing state remains missing in the entry inventory; absent FLAG.DAT uses
+the native zero default. Invalid known entries remain inspectable as bytes;
+unknown entries remain opaque and kernel coverage remains partial. Sources
+and existing exports are preserved; repeated exports choose new names.
+See [the save browser reference](reference/u8/save_browser/u8_save_browser_reference.md).
+
+#### `u8 npc-browse`
+
+Browse native NPCs from current GAMEDAT, a U8SAVE archive or paired loose
+NPCDATA/ITEMCACH files. Uses the same source menus, terminal artwork and
+animation player as shape browsing. Character names come from permanent NPC
+usecode classes, with saved Avatar names and optional CSV overrides.
+
+```powershell
+titan u8 npc-browse --game-dir C:\ULTIMA8
+titan u8 npc-browse C:\ULTIMA8\cloud_saves\GAMEDAT --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --npc 7
+conda run --no-capture-output -n titanDev titan u8 npc-browse --game-dir C:\ULTIMA8
+```
+
+| Argument / option | Meaning |
+|---|---|
+| `SOURCE` | Optional initial save, GAMEDAT directory or loose NPCDATA.DAT; otherwise choose interactively |
+| `--game-dir DIR` | U8 installation, language or STATIC directory for graphics selection |
+| `--shapes FILE` | Initial matching U8SHAPES.FLX; otherwise configured or selected graphics |
+| `-p`, `--palette FILE` | Explicit U8PAL.PAL; otherwise selected shapes owner |
+| `--anim FILE` | Explicit matching ANIM.DAT; otherwise selected shapes owner |
+| `--itemcach FILE` | Cache override for the initial snapshot; otherwise paired save/directory/sibling |
+| `--npc N` | Open native slot 0–255 directly, including unused state |
+| `--names CSV` | Optional unique `npc_id,name` overrides |
+| `-o`, `--output DIR` | Export root; default `titan-out/u8_npc_browse_export` |
+
+NPC lists support number/name/usecode/shape-class search, paging, stored-map
+and shape filters, and allocated/alive/dead/unused/all views. Allocation uses
+cache free-list membership and a nonzero shape; `in_use` is not sufficient in
+initial saves. Alive/dead filters use the native `dead` bit, not HP alone.
+
+In details, **N/B** move through the current search/filter, **S** returns to
+selection/search, **F** changes filters, **T** shows complete stored state,
+and **I** inspects the eight numbered equipment references with item artwork
+and invalid/free-reference diagnostics. The NPC preview uses its full stored
+frame and item flip flag. Missing artwork leaves the state view usable.
+
+For allocated NPCs, **G** opens the inventory gump with its contents and **C**
+opens nested inventory browsing; **B** there returns to the same NPC. An empty
+inventory still opens its artwork. Saved gumps take priority, followed by native
+Avatar/corpse artwork and a labelled backpack fallback for other NPCs. G previews
+remain in the output root's `inventory_previews` folder; viewer launch failures
+print the PNG path so it can be opened manually.
+
+**A** opens this NPC's sprite/animation browser; **M** selects an action or raw
+frames, **D** selects direction, **P** plays the preview, and **Q** returns to
+NPC details. **O** opens the snapshot overview, **D** in NPC details chooses
+another snapshot, **W** changes graphics source, and **Q** quits. Source changes
+clear the initial cache override; graphics changes reload owner-specific assets.
+
+**E** exports the current named NPC list to CSV, one NPC's full JSON, one NPC's
+HTML/CSV/contact-sheet bundle, or the complete allocated-NPC report. Existing
+files are preserved by choosing new filenames/directories. Redirected input
+uses line menus and skips terminal artwork; desktop terminals support arrows,
+Enter, hotkeys, path completion and live animation playback.
+
+Names use the native permanent-NPC dispatch rule `NPC slot + 1024`, with
+status `0x80` clear. `npc_name`, `npc_usecode_class`, `npc_usecode_name` and
+`label_source` preserve the distinction between character identities, bundled
+English usecode symbols and shared sprite classes. See
+[the NPC browser reference](reference/u8/npc_browser/u8_npc_browser_reference.md).
+
+#### `u8 shape-browse`
+
+Browse world sprites, gumps and font glyphs with Titan's shared interactive
+menus, terminal images and animation player. Start from configured U8 paths
+or select an installation/language/STATIC folder. Shape IDs retain their
+native archive slots, including gaps. Search by decimal/hex ID or bundled
+usecode class label; labels apply to world shapes, not gumps/fonts.
+
+```powershell
+titan u8 shape-browse
+titan u8 shape-browse --game-dir C:\ULTIMA8
+titan u8 shape-browse --archive C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --shape 1 --action 7 --direction 2 --overlay 1
+```
+
+| Option | Meaning |
+|---|---|
+| `--game-dir DIR` | Installation root, language folder or STATIC directory; otherwise use configured U8 base/archive owner |
+| `--archive FILE` | Start directly with a Flex archive or standalone `.shp` |
+| `--shape N` | Initial populated native shape ID; also assigns a standalone file's ID |
+| `--frame N` | Initial raw sprite frame, or sequence step when `--action` is supplied; default 0 |
+| `-p`, `--palette FILE` | Explicit U8 palette; otherwise use the selected archive owner's configured palette or U8PAL.PAL |
+| `--typeflag FILE` | Explicit TYPEFLAG.DAT; otherwise load the world archive owner's file |
+| `--anim FILE` | Explicit ANIM.DAT; otherwise load the world archive owner's file |
+| `--wpnovlay FILE` | Explicit WPNOVLAY.DAT, paired with ANIM.DAT |
+| `--action N` | Initial actor action, 0–63; default raw sprite frames |
+| `--direction N` | 0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW; default 0 |
+| `--overlay N` | Avatar weapon/glow slot; requires `--shape 1 --action N` |
+| `-o`, `--output DIR` | Default export root; `titan-out/u8_shape_browse_export` |
+
+Arrow keys/Enter or hotkeys select menus; redirected input uses line menus.
+Folder/file prompts support Tab completion in a desktop terminal.
+U8 previews use solid background cells and show source/rendered
+dimensions. Previews retain native pixels when the available width permits;
+static images retain taller artwork in scrollback. Playback also fits the
+available height and updates when resized. A full-detail 128×102 backpack
+needs 260 columns (and 108 rows during playback). Reduce the terminal font
+size or zoom for smaller physical artwork without dropping source pixels.
+Use **I** to open the original pixels when the terminal is too narrow.
+When launching through Conda, use `conda run --no-capture-output -n titanDev
+titan u8 shape-browse` to keep terminal menus/images connected.
+
+| Browser control | Action |
+|---|---|
+| `F` / `B`, `N` | Next/previous frame or ANIM step; choose an index |
+| `S`, `J` / `K` | Paged/searchable shape picker; next/previous matching shape |
+| `O` | Filter all/animated shapes, or TYPEFLAG fixed/solid/container/equipment/roof/translucent properties |
+| `M`, `D`, `U` | Actor action/raw frames; direction; available avatar weapon/glow overlay |
+| `H`, `T` | Current ANIM node details; shape properties and frame metadata |
+| `P` | Live terminal playback: Space pauses/resumes, `+`/`-` changes speed, Q/Esc returns |
+| `I`, `V` | Open current image or a sheet of up to twelve frames/steps |
+| `E` | Export indexed/RGBA frames, named contact sheet sets, an aligned sequence GIF, or complete JSON metadata |
+| `L`, `A`, `W`, `Q` | Change palette, archive, data source, or quit |
+
+PNG exports retain native frame dimensions; indexed PNGs preserve palette
+indices and transparent index 255. GIF previews align frame drawing origins
+and apply ANIM flips and WPNOVLAY screen offsets. GIF speed is chosen during
+export, from 20–2000 ms per step. Existing files and loaded source files are
+preserved; choose another output path if a filename is already present.
+
+In **E → C (Named contact sheet frame sets)** choose raw frame ranges or
+named ANIM action/direction sets, then the current set, one selected set,
+or all sets for the current shape. Raw sheets contain up to twelve frames;
+longer ANIM sequences produce multiple sheets, covering every step. Each
+sheet shows its group name and native frame/step numbers. Examples:
+
+```text
+shape_0001_action_07_attack_e_steps_0000_0005.png
+shape_0001_action_07_attack_e_overlay_1_sword_steps_0000_0005.png
+shape_0001_frames_0012_0023.png
+```
+
+Animation sets keep aligned drawing origins and ANIM flips. A selected
+avatar overlay is included where the action has matching WPNOVLAY data;
+its slot and name appear in the filename. Default directories are
+`shape_NNNN_contact_sheets/animations` and
+`shape_NNNN_contact_sheets/raw_frames` beneath the export root. Saving all
+sets applies to the current shape and preserves existing output files.
+
+Metadata and palettes stay with the selected archive owner. Explicit flags
+can pair external files deliberately. Missing metadata leaves raw browsing
+available; malformed automatic metadata produces a diagnostic. Gumps/fonts
+and generic standalone files do not acquire world metadata automatically.
+Configured archive/palette/metadata paths apply only within the selected
+owner directory. Redirected sessions save exports and preview files without
+launching desktop viewers; live playback needs a desktop terminal.
+
+Actor previews show sprites at a chosen viewer speed. Movement, collision,
+sound, usecode, palette cycling and destination-dependent XFORMPAL blending
+are not simulated. JSON reports retain ANIM repeat values and node fields.
+See [the U8 shape browser reference](reference/u8/shape_browser/u8_shape_browser_reference.md)
+for ownership, rendering and validation details.
+
 ### Shape commands
 
 ---
@@ -1005,7 +1399,24 @@ CLI values always override config values.
 | `--globs DIR` | Directory of pre-extracted GLOB `.dat` files (from `flex-extract GLOB.FLX`) |
 | `--palette PATH`, `-p PATH` | Path to `U8PAL.PAL` colour palette |
 | `--typeflag PATH` | Path to `TYPEFLAG.DAT`. Enables engine-accurate pairwise depth sorting for correct building/wall rendering. Highly recommended |
-| `--nonfixed PATH` | Path to `U8SAVE.000` or a raw `NONFIXED.DAT` Flex archive. Merges live/dynamic objects (NPCs, moved items) into the render |
+| `--nonfixed PATH` | Path to a native `U8SAVE.000` or loose `NONFIXED.DAT`. Merges stored dynamic world items into the render. NPC registry slot 0 and inventory records are excluded; active cached state is a separate snapshot. |
+
+FIXED and NONFIXED use the shared complete 16-byte record parser. Contained
+items are excluded using their native flags, including nested inventories;
+TYPEFLAG is unnecessary for containment. NONFIXED slot 0 stores the NPC
+registry, rather than world map 0. Use `fixed-dump`/`nonfixed-dump` below to
+inspect every raw field, parent link and rejected-record diagnostic. Stored
+world items retain flags, quality, NPC/map bytes, next reference and source
+record metadata. Rendering remains a static view and does not execute item
+status behavior or reconstruct NPC placements from registry/cache state.
+
+All four commands combine eligible FIXED and NONFIXED placements before map
+selection, so a map with only NONFIXED world items is supported. GLOB references
+from either source expand before shape filtering. The saved `FLIPPED` status
+mirrors sprite pixels about their origin and swaps X/Y TYPEFLAG footpads for
+depth sorting; the sampler uses mirrored coordinates for its colour samples.
+Other runtime status effects, including invisibility/translucency blending,
+remain outside these static views.
 
 #### Common filter flags
 
@@ -1187,6 +1598,305 @@ titan u8 map-sample-all --maps 0 5 --scales 32
 
 ---
 
+#### `u8 anim-dump`
+
+Inspect `ANIM.DAT` actor actions and their eight directional sprite sequences.
+This is runtime animation choreography: frame references, movement, sound,
+callbacks and flags. It contains no sprite pixels or 3D models.
+
+```
+titan u8 anim-dump FILE [--shape N] [--action N] [--direction N]
+                      [--frames] [--format text|json|csv] [-o FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `FILE` | Path to native U8 `ANIM.DAT` |
+| `--shape N` | Select a shape ID, 0–2047; default: all populated shapes |
+| `--action N` | Select an action ID, 0–63; default: all populated actions |
+| `--direction N` | Select 0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW; implies frame detail |
+| `--frames` | Include frame nodes for every selected direction |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | Write a new report file; default: stdout. Existing files and the source are preserved. |
+
+Without frame detail, output lists actions with frame counts, repeat, flags,
+unknown header fields and raw headers. Detailed output also includes sprite
+frames, signed Z changes, sound IDs, signed movement, attack range, flip,
+on-ground, special-code and usecode-callback bits, unknown fields and raw nodes.
+CSV has one row per action, or one row per frame node when detail is requested.
+JSON includes total and selected counts; filtering retains original IDs.
+
+`repeat` is the decoded engine wait count, not milliseconds. `delta_dir` is a
+signed **9-bit** value in steps of four world units; `movement_world_units`
+reports that multiplication, before collision handling. Unknown action IDs
+use labels such as `action_36`. Action names are labels, not a promise of
+identical behaviour for every actor. Sprite references require the matching
+shape archive for validation; this command validates ANIM's own structure.
+
+```bash
+titan u8 anim-dump ANIM.DAT
+titan u8 anim-dump ANIM.DAT --shape 1 --action 0 --direction 0
+titan u8 anim-dump ANIM.DAT --shape 1 --frames --format json -o avatar_actions.json
+titan u8 anim-dump ANIM.DAT --action 7 --format csv -o attacks.csv
+```
+
+The reusable parser is `titan.u8.U8AnimData`. It rejects malformed offsets,
+overlapping offset tables, zero-length populated actions and truncated nodes,
+while allowing shared tables/actions and retaining unreferenced file bytes.
+See [ANIM.DAT format notes](reference/u8/anim/u8_anim_dat_reference.md) for the binary layout
+and the differences between the decoded U8 source and Pentagram.
+
+---
+
+#### `u8 wpnovlay-dump`
+
+Inspect `WPNOVLAY.DAT` weapon overlay sprite frames and signed screen-pixel
+offsets. Its Flex record IDs are avatar action IDs; payload lengths depend
+on avatar shape 1 in the matching `ANIM.DAT`.
+
+```
+titan u8 wpnovlay-dump FILE [--anim FILE] [--action N] [--overlay-type N]
+                          [--direction N] [--frames] [--format text|json|csv]
+                          [-o FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `FILE` | Path to native U8 `WPNOVLAY.DAT` |
+| `--anim FILE` | Matching `ANIM.DAT`; default: `ANIM.DAT` beside the overlay file |
+| `--action N` | Select avatar action ID 0–63; default: all populated records |
+| `--overlay-type N` | Select an original overlay slot; 0=mace, 1=sword, 2=axe, 3=dagger, 4–6=glows; further slots retained |
+| `--direction N` | Select 0=N through 7=NW; implies per-step frame details |
+| `--frames` | Include frame details for every selected direction |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | Write a new report file; default: stdout. Both input files and existing outputs are preserved. |
+
+Summary output reports frame/type counts and executable sprite shape mappings.
+Detailed output includes sequence step, corresponding avatar sprite frame,
+overlay sprite frame, signed X/Y offsets and raw four-byte node hex. Offsets
+are screen pixels added to the avatar's draw position, not world movement.
+Sprite shapes come from executable tables, not from the overlay file itself;
+unassigned slots have no inferred shape mapping. All 15 retail overlay slots
+are retained, including glows and unassigned slots. Frame zero is retained
+as an ordinary frame value.
+
+CSV has one row per action/type, or one row per node with frame detail. JSON
+groups overlay types under actions. The parser rejects invalid Flex bounds,
+missing avatar actions and payloads that do not divide into whole overlay
+blocks. Use ANIM from the same installation; the format stores no identity
+marker that could conclusively validate every pairing.
+
+```bash
+titan u8 wpnovlay-dump WPNOVLAY.DAT
+titan u8 wpnovlay-dump WPNOVLAY.DAT --action 7 --overlay-type 1 --direction 0
+titan u8 wpnovlay-dump WPNOVLAY.DAT --frames --format json -o titan-out/u8_wpnovlay_export/wpnovlay_frames.json
+titan u8 wpnovlay-dump WPNOVLAY.DAT --anim ANIM.DAT --frames --format csv -o titan-out/u8_wpnovlay_export/wpnovlay_frames.csv
+```
+
+The reusable parser is `titan.u8.U8WeaponOverlayData`. See the
+[WPNOVLAY.DAT reference](reference/u8/wpnovlay/u8_wpnovlay_dat_reference.md)
+for the layout, executable mappings and runtime selection limits.
+
+---
+
+#### `u8 itemcach-dump`
+
+Inspect saved `ITEMCACH.DAT` item slots and native cache metadata. FILE can
+be a loose DAT or a native Origin `U8SAVE` archive containing it.
+
+```
+titan u8 itemcach-dump FILE [--item N] [--shape N] [--view items|regions]
+                          [--all-slots] [--format text|json|csv] [-o FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `FILE` | Loose `ITEMCACH.DAT` or native `U8SAVE` archive |
+| `--item N` | Exact slot ID 0–9215, including free/null data |
+| `--shape N` | Filter stored shape ID, 0–65535; items view only |
+| `--view` | `items` (default) or `regions`; region view rejects item/shape filters |
+| `--all-slots` | Include all 9,216 item slots or all 4,096 region cells |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | New report file; default: stdout. Sources and existing reports are preserved. |
+
+The default items view omits null/free-list slots. It reports stable slot IDs,
+raw unsigned fields, allocation membership, status names, container references
+and packed gump coordinates. Stored `frame_low` is only the low byte for NPCs;
+`npcdata-dump` joins the high byte. Contained/equipped coordinates and Z >= 251
+must not be treated as ordinary world positions. `map_num_raw` is the NPC map
+field, not a per-object map ID for every ordinary cached item.
+
+JSON includes complete cache metadata, all region cells, free/ethereal list
+walks, list diagnostics and retained record tails. CSV has one row per selected
+item or region; complex fields use JSON cells. The regions view defaults to
+cells with a nonzero head or stored count. Free slots may contain stale shapes;
+allocation is classified from lists rather than shape alone.
+
+```bash
+titan u8 itemcach-dump U8SAVE.000 --item 1
+titan u8 itemcach-dump ITEMCACH.DAT --all-slots --format json -o titan-out/u8_itemcach_export/itemcach_all.json
+titan u8 itemcach-dump U8SAVE.000 --view regions --all-slots --format csv -o titan-out/u8_itemcach_export/itemcach_regions.csv
+```
+
+The reusable parser is `titan.u8.U8ItemCache`. See the
+[ITEMCACH.DAT reference](reference/u8/itemcach/u8_itemcach_dat_reference.md)
+for both record layouts, coordinate context and diagnostic limits.
+
+---
+
+#### `u8 npc-animation-report`
+
+Create a master CSV for filtering and offline per-NPC HTML reports with
+named animation contact sheets. Join NPC slots to ITEMCACH sprite shapes,
+then to the matching shape archive and ANIM actions. The `animation_name`
+column sits directly after `frame`; rows retain action, direction and step
+because one sprite frame may participate in multiple sequences.
+
+```powershell
+titan u8 npc-animation-report C:\ULTIMA8\cloud_saves\GAMEDAT --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX -o titan-out/u8_npc_animation_export/gamedat
+titan u8 npc-animation-report C:\ULTIMA8\cloud_saves\SAVEGAME\U8SAVE.005 --shapes C:\ULTIMA8\ENGLISH\STATIC\U8SHAPES.FLX --npc 1 -o titan-out/u8_npc_animation_export/avatar
+```
+
+| Argument / option | Meaning |
+|---|---|
+| `SOURCE` | Native U8SAVE archive, GAMEDAT directory, or loose NPCDATA.DAT |
+| `--shapes FILE` | Matching U8SHAPES.FLX; otherwise configured U8 shape archive |
+| `--anim FILE` | Matching ANIM.DAT; otherwise the shape archive owner's file; required |
+| `-p`, `--palette FILE` | Explicit U8PAL.PAL; otherwise the selected shape owner |
+| `--itemcach FILE` | Explicit matching ITEMCACH.DAT or save; otherwise the same snapshot or sibling loose file |
+| `--npc N` | One native NPC slot, 0–255, including unused data if explicitly selected; default allocated nonzero-shape NPCs |
+| `--names FILE` | Optional UTF-8 `npc_id,name` overrides for automatic permanent-NPC names; duplicate/invalid IDs and empty names are rejected |
+| `-o`, `--output DIR` | New or empty output directory; default `titan-out/u8_npc_animation_export` |
+
+Open `index.html` in the output folder. `master.csv` includes frame dimensions
+and origins, action headers/repeat/flags, node movement/sound/callback fields,
+raw/unknown bytes, saved state and relative HTML/contact-sheet links.
+`npcs/npc_NNN.html` contains complete saved NPC/item/equipment details and
+expandable action/direction sections. `npc_state.json` preserves the joined
+state and `manifest.json` records sources/hashes, counts and diagnostics.
+
+Images under `assets/shape_NNNN/` are shared by NPCs using the same shape.
+All action steps are paged into named contact sheets; raw frames not referenced
+by ANIM appear separately with no invented action name. Missing sprite
+references remain in the CSV and diagnostics; unavailable sheets are omitted.
+Images show actor sprites with origin alignment and ANIM flips; equipped
+weapon overlays are not inferred. NPC identity is separate from shape class
+labels: permanent NPCs use their native slot's named usecode class; Avatar uses
+its saved name when available. `--names` overrides these defaults. Unknown
+identities retain slot labels. CSV includes `npc_name`, `npc_usecode_class`,
+`npc_usecode_name` and `label_source` separately from shape `class_label`.
+
+Saved action/direction/step matches and saved frame matches are separate
+columns; they do not claim the snapshot represents a currently executing
+animation. Existing outputs and source files are preserved. See
+[the NPC animation report reference](reference/u8/npc_animation/u8_npc_animation_reference.md).
+
+#### `u8 npcdata-dump`
+
+Inspect all native NPC state fields and optionally join the matching item
+cache for sprite frames, locations and equipment item details.
+
+```
+titan u8 npcdata-dump FILE [--itemcach FILE] [--npc N] [--map N]
+                         [--all-slots] [--format text|json|csv] [-o FILE]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `FILE` | Loose `NPCDATA.DAT` or native `U8SAVE` archive |
+| `--itemcach FILE` | Matching loose ITEMCACH or save; a U8SAVE input pairs automatically |
+| `--npc N` | Exact slot ID 0–255, including unused/null data |
+| `--map N` | Select stored NPC map ID 0–255; requires paired ITEMCACH |
+| `--all-slots` | Include all 256 records, including unused slots |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | New report file; default: stdout. Both sources and existing reports are preserved. |
+
+Records include stats, signed mana, direction, last action, animation step,
+fall height, alignment, both complete flag words, equipment references, unknown
+bytes and raw 49-byte hex. The 77-byte retail record tail is retained separately.
+Paired output reconstructs `item_frame` from both files, retains raw item fields
+and resolves the eight numbered equipment slots. Invalid equipment references
+receive a diagnostic; free-slot references are retained. CSV list/object fields
+are JSON cells.
+
+The initial native saves have every stored `in_use` bit clear. Paired default
+selection therefore uses nonzero cache shapes outside free/null lists; unpaired
+selection uses nonzero NPC records and labels activity as unknown. `--all-slots`
+or an explicit `--npc` exposes unused data. Plain-char stats follow the decoded
+signed interpretation; Pentagram reads them unsigned, and raw bytes remain
+available for comparison. Use a cache from the same snapshot for a loose pair.
+
+```bash
+titan u8 npcdata-dump U8SAVE.000 --npc 1
+titan u8 npcdata-dump NPCDATA.DAT --itemcach ITEMCACH.DAT --format json -o titan-out/u8_npcdata_export/npcdata_allocated.json
+titan u8 npcdata-dump U8SAVE.000 --all-slots --format csv -o titan-out/u8_npcdata_export/npcdata_all.csv
+```
+
+The reusable parser is `titan.u8.U8NpcData`. See the
+[NPCDATA.DAT reference](reference/u8/npcdata/u8_npcdata_dat_reference.md)
+for packed fields, flag meanings, presence selection and retained tail evidence.
+
+---
+
+#### `u8 fixed-dump` / `u8 nonfixed-dump`
+
+Inspect full native FIXED/NONFIXED item records and their serialized inventory
+hierarchy. FIXED takes a loose `FIXED.DAT`; NONFIXED takes a loose DAT or a
+native Origin `U8SAVE` archive. These commands use explicit paths.
+
+```
+titan u8 fixed-dump FILE [--map N] [--record N] [--shape N]
+                         [--view summary|items] [--scope all|world|contained|npc]
+                         [--typeflag FILE] [--format text|json|csv] [-o FILE]
+titan u8 nonfixed-dump FILE [same options]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `FILE` | FIXED.DAT, NONFIXED.DAT, or a native save for nonfixed |
+| `--map N` | Flex slot 0–255; NONFIXED slot 0 is the NPC registry |
+| `--record N` | Zero-based record index within `--map`; automatically selects items view |
+| `--shape N` | Filter stored shape ID, 0–65535 |
+| `--view` | `summary` (default): all 256 directory slots; `items`: complete selected records |
+| `--scope` | `all` (default), eligible `world` placements, `contained` inventory items, or `npc` registry roots |
+| `--typeflag FILE` | Optional shape-family, shape-flag and equipment-type metadata in items view |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | New report file; default stdout. Input files and existing reports are preserved. |
+
+Summary rows report file offsets, payload sizes, raw/selected record counts,
+world/contained/NPC/glob counts, maximum depth and diagnostic counts. Items
+rows expose unsigned X/Y/Z, shape/frame, status/quality, NPC/map bytes and
+the stored next reference, plus decoded flags, raw 16-byte hex, map-local
+parent/root indices, packed gump coordinates and equipment slot.
+
+`CONTAINED` (`0x0008`) changes X to serialized depth, rather than the parent
+cache ID used by ITEMCACH. Parent links follow depth-first record order and
+never follow the stored next reference. NPC actors can own inventory even
+when their shape is not family 6. NONFIXED slot 0 NPCs carry their actual map
+in `map_num_raw`; they are not ordinary placements in map 0. The stored frame
+is only one byte; these commands do not join NPCDATA or simulate map loading.
+
+All raw records remain inspectable, including null shapes, native-rejected
+coordinates and unresolved depths. Bad archive bounds, overlapping payloads
+and partial 16-byte items fail with an error. JSON includes the original header,
+all 256 directory entries and selected diagnostics; CSV complex fields use
+JSON cells. Empty maps appear in the default summary; empty item selections
+retain CSV headers. `--record` requires `--map`; other filters intersect.
+
+```bash
+titan u8 fixed-dump FIXED.DAT
+titan u8 fixed-dump FIXED.DAT --view items --typeflag TYPEFLAG.DAT --format json -o titan-out/u8_fixed_export/fixed_items.json
+titan u8 nonfixed-dump U8SAVE.000 --map 0 --view items --format json -o titan-out/u8_nonfixed_export/initial_npc_registry.json
+titan u8 nonfixed-dump NONFIXED.DAT --view items --scope contained --format csv -o titan-out/u8_nonfixed_export/gamedat_inventory.csv
+```
+
+The reusable parser is `titan.u8.U8MapItems` (`kind="fixed"` or `"nonfixed"`),
+with immutable `U8MapItem` records and exact `to_bytes()` retention. See the
+[FIXED.DAT reference](reference/u8/fixed/u8_fixed_dat_reference.md) and
+[NONFIXED.DAT reference](reference/u8/nonfixed/u8_nonfixed_dat_reference.md).
+
+---
+
 #### `u8 typeflag-dump`
 
 Parse U8 `TYPEFLAG.DAT` and dump all shape physics / flag metadata.
@@ -1272,6 +1982,221 @@ titan u8 xformpal-export XFORMPAL.DAT -o xformpal/
 
 ### U8 save archive commands
 
+Native U8 saves package GAMEDAT `*.DAT` files. Initial saves can have fewer
+entries than runtime saves. These commands support the original DOS save
+format; Pentagram's own runtime save format is a separate format.
+
+#### `u8 avatar-dump`
+
+Inspect the complete 77-byte avatar extension, separate from item/NPC slot 1.
+Includes advancement points, the full name buffer, sex, cheat/stasis state,
+random seed, hunger, language/audio/text/speed options, window positions,
+unknown point and padding. Raw toggles are preserved without normalizing them.
+
+```text
+titan u8 avatar-dump <file> [--format text|json|csv] [-o FILE]
+```
+
+| Argument/option | Description |
+|---|---|
+| `file` | Loose AVATAR.DAT or native U8SAVE archive |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | New report file; default stdout; existing files preserved |
+
+Stored points are stat progression, not current NPC stats. The source's
+effectiveStr byte represents hunger. Names use CP437 for display while all
+32 name bytes remain available. Raw and signed seed values are both shown.
+Missing archive AVATAR is an error for this dedicated dump.
+
+```powershell
+titan u8 avatar-dump U8SAVE.005 --format json -o avatar.json
+```
+
+#### `u8 gumps-dump`
+
+Inspect saved container UI records and all 16 stored screen rectangles.
+The native bark save routine emits no bytes. This is separate from the
+static GUMPAGE.DAT layout exposed by gumpinfo-dump.
+
+```text
+titan u8 gumps-dump <file> [--view containers|rects] [--format text|json|csv] [-o FILE]
+```
+
+| Argument/option | Description |
+|---|---|
+| `file` | Loose GUMPS.DAT or native U8SAVE archive |
+| `--view` | `containers` (default) or all 16 `rects` |
+| `--format` | `text` (default), `json`, or `csv`; CSV contains selected rows |
+| `-o FILE`, `--output FILE` | New report file; default stdout; existing files preserved |
+
+Preserves container referents, signed inclusive screen rectangles, drag
+positions, unsigned world coordinates, shape/frame, labels, stored counter
+and residue. Counter/type mismatches produce diagnostics. Missing initial-save
+GUMPS is reported by save-info; this dedicated dump requires a present entry.
+
+```powershell
+titan u8 gumps-dump U8SAVE.005 --view rects --format csv -o rects.csv
+```
+
+#### `u8 kernel-dump`
+
+Inspect the native scheduler, process inventory and verified animation/time
+and usecode process state with explicit partial coverage.
+
+```text
+titan u8 kernel-dump <file> [--view summary|processes|decoded|records]
+    [--slot N] [--record N] [--format text|json|csv] [-o FILE]
+```
+
+| Argument/option | Description |
+|---|---|
+| `file` | Loose KERNEL.DAT or native U8SAVE archive |
+| `--view` | `summary` (default), detailed `processes` with raw and decoded state, `decoded` state rows, or exact raw Flex `records` |
+| `--slot N` | Saved process slot; requires processes or decoded view |
+| `--record N` | Flex record index; requires records view |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | New report file; default stdout; existing files preserved |
+
+Shows native 1.00 build data, scheduler prefix, real-time words, priority
+counts and complete 42-byte Process base fields/flags. A verified native
+build/vtable/size profile identifies supported GameTime, Animation, actor
+animation subclasses, waits/timers and UnkProcess usecode state. Includes
+dependency/notification words, all 200 VM stack bytes, stack/frame pointers,
+unit number, saved this state and instruction resume offset. Saved pointers
+are retained raw and never followed; vtable mappings apply only to the
+documented DOS build. Unmatched subtypes remain `unsupported`; malformed
+matched subtypes are `invalid` with local diagnostics and preserved bytes.
+The clock runs at 30 Hz and 27,000 ticks per game hour. Scheduler ticks,
+game loops and game-clock ticks are separate counters.
+Process slots can be reused. Initial-save KERNEL may be absent; no scheduler
+state is synthesized. Raw record exports preserve all payload bytes.
+
+```powershell
+titan u8 kernel-dump U8SAVE.005 --view processes --format json -o processes.json
+titan u8 kernel-dump U8SAVE.005 --view decoded --format json -o decoded.json
+titan u8 kernel-dump U8SAVE.005 --view decoded --slot 20
+titan u8 kernel-dump U8SAVE.005 --view records --record 1
+```
+
+#### `u8 flags-dump`
+
+Inspect global usecode state from `FLAG.DAT`, a native save archive, or a
+GAMEDAT directory. This is separate from item status and NPC state flags.
+The file is 1,024 bytes / 8,192 packed bits, least significant bit first.
+Some variables span several bits; bit rows do not imply independent booleans.
+
+```text
+titan u8 flags-dump <file> [--index N --width N] [--symbols FILE --name NAME]
+    [--all-bits] [--format text|json|csv] [-o FILE]
+```
+
+| Argument/option | Description |
+|---|---|
+| `file` | Loose FLAG.DAT, native U8SAVE archive, or GAMEDAT directory |
+| `--index N` | Inspect an explicit bit offset, 0–8191 |
+| `--width N` | Unsigned field width, 1–16; default 1; requires `--index` when greater than 1 |
+| `--symbols FILE` | Native FLAGSYM.DAT with verified name/offset/width records; shows all named variables, including zeros |
+| `--name NAME` | Exact symbol name; requires `--symbols` |
+| `--all-bits` | Show all 8,192 bits; default shows set bits |
+| `--format` | `text` (default), `json`, or `csv` |
+| `-o FILE`, `--output FILE` | New report file; default stdout; preserves existing files |
+
+Symbol mode cannot be combined with `--index` or `--all-bits`.
+Missing FLAG.DAT in a native save/directory uses the original engine's zero
+initialization and is labelled as defaulted. A present file of any size other
+than 1,024 bytes is rejected. Values are unsigned stored fields; a native
+signed 16-bit consumer can interpret high-bit values differently.
+Reconstructed usecode declarations are not a verified offset map and cannot
+be supplied as `--symbols`.
+
+```powershell
+titan u8 flags-dump GAMEDAT/FLAG.DAT
+titan u8 flags-dump U8SAVE.005 --all-bits --format csv -o flags.csv
+titan u8 flags-dump U8SAVE.005 --index 7 --width 16
+titan u8 flags-dump U8SAVE.005 --symbols FLAGSYM.DAT --name questVariable
+```
+
+#### `u8 save-info`
+
+Summarize a native save archive or a loose GAMEDAT directory using verified
+NONFIXED, ITEMCACH, NPCDATA, FLAG, AVATAR and GUMPS layouts, plus partial
+KERNEL scheduler/process coverage.
+
+```text
+titan u8 save-info <file> [--format text|json] [-o FILE]
+```
+
+| Argument/option | Description |
+|---|---|
+| `file` | Native U8SAVE archive or GAMEDAT directory; directory input reads top-level `*.DAT` only |
+| `--format` | `text` (default) or `json` |
+| `-o FILE`, `--output FILE` | New report file; default stdout; preserves existing files |
+
+Includes entry sizes/SHA-256/decoding status, missing entries, cache map and
+allocation/region counts, paired NPC presence/maps/avatar stats, stored map
+record counts and global flag coverage. NPC presence uses nonzero cache shapes
+outside free/null lists, because the saved `in_use` bit alone is insufficient.
+Current cache and NONFIXED map counts remain separate.
+
+Includes avatar extension fields, container UI state and kernel summary.
+KERNEL.DAT is labelled `partial`; the summary includes matched process class
+counts, decode coverage, game-clock fields and subtype diagnostics. Other
+process types and unknown entries remain uninterpreted.
+Malformed known payloads stay visible with `invalid` status and decoding errors;
+malformed archive structure fails the command. Missing runtime entries are
+reported without declaring the save corrupt. Native archive headers do not
+provide a save title or timestamp.
+
+```powershell
+titan u8 save-info U8SAVE.000
+titan u8 save-info GAMEDAT --format json -o gamedat_info.json
+```
+
+#### `u8 save-diff`
+
+Compare two native saves, two GAMEDAT directories, or one of each.
+
+```text
+titan u8 save-diff <before> <after> [--symbols FILE] [--limit N]
+    [--format text|json] [-o FILE]
+```
+
+| Argument/option | Description |
+|---|---|
+| `before`, `after` | Native U8SAVE archive or GAMEDAT directory |
+| `--symbols FILE` | Optional matching native FLAGSYM.DAT for named global variable differences |
+| `--limit N` | Maximum rows per section and byte ranges per entry; default 100; 0 exports all; total counts are always complete |
+| `--format` | `text` (default) or `json` |
+| `-o FILE`, `--output FILE` | New report file; default stdout; preserves existing files |
+
+Reports entry additions/removals/changes, sizes, hashes and changed byte ranges;
+global bit/optional named variable changes; NPC slot fields and paired cache
+state/full frames; cache slot fields, membership, metadata and regions;
+and NONFIXED record additions/removals with raw ancestor context per map.
+Also compares avatar stored fields, UI counters/rectangles/container record
+multisets, kernel core/real-time/priority data and reusable process slots.
+Derived kernel object/payload changes are reported as raw data differences.
+The `kernel_process_state` section additionally compares matched native
+clock/time, actor animation and usecode fields, stacks and serialized list
+words. Class and decode status changes remain visible; saved slots can be
+reused and no process continuity is inferred.
+Map record order is ignored while duplicate multiplicity and parent context
+are retained. A changed record appears as a removal/addition, not an inferred
+move. Ordinary cache IDs are reusable; a slot difference does not establish
+that the same game object persisted. Free/stale slots are included and labelled.
+
+Missing FLAG.DAT compares as initialized zero state while file presence changes
+remain visible. Missing/invalid known layouts skip their semantic comparison
+with explicit reasons. Opaque entries, Flex headers/padding and unknown bytes
+are covered by entry byte comparisons. Archive packing order is ignored.
+This is a scoped state comparison, not complete live-world reconstruction.
+Successful comparisons return exit code 0 whether or not differences exist.
+
+```powershell
+titan u8 save-diff U8SAVE.004 U8SAVE.005
+titan u8 save-diff U8SAVE.000 GAMEDAT --limit 0 --format json -o save_diff.json
+```
+
 ---
 
 #### `u8 save-list`
@@ -1307,8 +2232,11 @@ titan u8 save-extract <file> [-o DIR] [--entry NAME]
 | `-o DIR`, `--output DIR` | Output directory (default: `./<savename>/`) |
 | `--entry NAME` | Extract only this named entry, e.g. `NONFIXED.DAT` |
 
-Common entries inside U8SAVE.000: `FIXED.DAT`, `NONFIXED.DAT`, `NPCDATA.DAT`,
-`OBJLIST.DAT`, `CHUNKS.DAT`, `GAMEDAT.DAT`.
+Observed initial-save entries: `NONFIXED.DAT`, `NPCDATA.DAT`, `ITEMCACH.DAT`
+and `AVATAR.DAT`. Runtime saves also contain `FLAG.DAT`, `GUMPS.DAT` and
+`KERNEL.DAT`. FIXED.DAT is normally static world data outside the save.
+Archive readers validate entry bounds, ASCII filename terminators and
+case-insensitive duplicate names before listing or extracting.
 
 **Examples**
 ```bash
@@ -1686,6 +2614,30 @@ a vertical colour gradient fill. You can specify colours in two ways:
 
 #### `u7 shape-create`
 
+After reviewing artwork with multiple RLE object frames, Titan asks whether
+the frames should animate. **Yes** sets the shape's animated object flag in
+the destination `TFA.DAT`; **No** clears that bit. Other flags, dimensions and
+metadata entries are retained. Standalone SHP files carry the choice in
+`<shape>.shp.animation.json`, because the SHP format contains no object flags.
+Keep this sidecar with the shape when importing it later. Generic libraries
+carry per-record choices in `<archive>.animation.json`; interface/font/effect
+libraries do not change world-object TFA flags. Single-frame shapes and raw
+terrain flats do not ask for automatic object animation.
+
+`--animate` / `--no-animate` supplies the answer for scripted creation and
+imports. A recipe uses `[conversion] animated = true` or `false` and never
+prompts. The same prompt/options apply to `u7 shape-import`, `u7 flex-add-shape`
+and validated U7 shape records in generic `flex-create` / `flex-update`.
+Noninteractive imports without an answer preserve a matching saved choice;
+without one they leave animation metadata unchanged. U8 and unrelated binary
+records retain their existing import behavior.
+
+Animation metadata is written beside the destination archive. To keep a
+source archive's metadata separate, choose another output directory. Exult
+extended shape IDs use a three-byte-entry patch table; packed retail animation
+nibbles remain in the original STATIC TFA. Existing metadata is validated before
+the archive is written. Format notes: `reference/tfa/u7_imported_shape_animation.md`.
+
 Guided PNG → U7 shape → FLX/VGA workflow, modelled on `font-create`.
 Desktop terminals use the same Questionary menus as `container-browse`: arrow
 keys and Enter for selections and confirmations. The highlight follows the
@@ -1792,6 +2744,7 @@ index = 0
 [conversion]
 allow_cycling = false
 flat = false
+# animated = true            # Automatically cycle multiple RLE object frames
 origin_x = 0                 # Exult Studio right extent; 0 anchors at right edge
 origin_y = 0                 # Exult Studio bottom extent; 0 anchors at bottom edge
 
@@ -2384,15 +3337,27 @@ titan u7 container-browse [STATIC] [OPTIONS]
 - `--mod-data` reads `textmsg.txt` and `shape_info.txt` from the given directory. `textmsg.txt %%section shapes` overlays shape names on top of TEXT.FLX; `%%section miscnames` extends the per-frame name string table. The mod's `shape_info.txt %%section framenames` overlays frame-to-name mappings on top of the base Exult FLX data. Both files are optional — if only one is present, titan uses what it can. `--exult-flx` and `--mod-data` are independent and complement each other: `--exult-flx` provides the base framename mappings, `--mod-data` overlays the mod's additions.
 - `--map-num` selects which set of IREG files to query. Mods with multiple maps store each map's IREG in a `mapNN/` subdirectory inside gamedat (e.g. `gamedat/map01/u7ireg*`). Map 0 uses the root gamedat directory. Only the IREG for the selected map is scanned; `--contains-*` filters operate within that map's data.
 
-**Wizard steps (interactive):**
-1. BG/SI flavour, then a base game, installed mod, custom Exult game, or manual folder
-2. The target's GAMEDAT directory and map (including discovered `mapNN` folders)
-3. Container name substring filter (leave blank for all containers)
-4. Container shape number filter (comma-separated, leave blank for all)
-5. Contains-item name filter (leave blank to skip)
-6. Contains-item shape filter (comma-separated, leave blank to skip)
-7. Area: entire world, specific superchunks, or tile rectangle
-8. Output format (tree / csv) + optional file save
+**Interactive flow:**
+1. Choose BG/SI, a game/mod, GAMEDAT and the map (including discovered `mapNN` folders).
+2. Browse the captured map's containers immediately; nested and empty containers have distinct browser IDs.
+3. **S** searches; **F** edits container/contents name and shape filters, direct/any-depth matching, map, superchunks and tile rectangle.
+4. Select an inventory for compact details and a breadcrumb. **T** shows its contents tree, **D** the native record, **U/P** its parent, and **B** the results list.
+5. **V** previews its sprite; **G** opens its gump with direct contents, **H** empty artwork and **L** random/saved IREG placement. **S** inside an inventory opens an owner-scoped frame browser that returns to the inventory.
+6. **E** on the list exports current results or all captured inventories; **E** inside an inventory exports it and its nested containers.
+
+Interactive bundles use fresh folders under `titan-out/u7_container_browse_export`
+and include `containers.csv`, `contents.csv` with named paths, `tree.txt`,
+`inventory.json`, linked HTML pages and native PNGs. Batch `-f tree/csv` and
+`-o FILE` retain their existing behavior. Interactive IREG IDs identify records
+within this captured scan; they are not native persistent save IDs. U7 currently
+captures the selected map's IREG containers; NPC inventories remain in the NPC
+browser. Both games compose native gumps with direct item sprites; U8 also
+provides NPC/map links. U7 inherits owner-scoped `CONTAINER.DAT`/Exult mappings,
+`gump_info.txt` storage overrides, GUMPS/SHAPES graphics and palettes. New
+container HTML reports attach gump PNGs; JSON records placement evidence.
+Locked-chest artwork substitutions are labelled and never modify the save.
+
+See [the U7 container browser reference](reference/u7/container_browser/u7_container_browser.md).
 
 **Non-interactive examples:**
 
@@ -7036,6 +8001,44 @@ titan u9 color-cube-csv static/yiqccube.dat
 
 ### Save integrity commands
 
+#### `u9 save-browse`
+
+Open a U7/U8-style save browser with plain integrity findings, paged searchable
+maps/NPCs/activities, archive members, hex inspection, and JSON/CSV exports.
+Details retain the complete checker evidence. Findings and overall loading
+advice come from the shipped `titan/u9/resources/save_wording.json`, keyed by
+check ID and severity; map names include development/test qualifications.
+Missing original map files leave a comparison note without raising the result;
+actual map differences and integrity problems still do. Warning advice gives
+the backup, try, recover and share-report path. Errors or unsafe results prohibit
+trying the save, including advice on otherwise harmless findings.
+
+```powershell
+titan u9 save-browse [SOURCE] [--game-dir DIR] [--slot N]
+                     [--static DIR] [--fixed-reference DIR] [-o DIR] [--report]
+```
+
+A folder checks the current working selection; an explicit `.sav` file checks
+that archive independently, with loose-file custody N/A. `--slot` applies only
+to folders. Without SOURCE the browser offers a save picker. Missing `start.dat`
+shows “No save selected”; damaged existing selectors remain errors. Refresh
+rereads selection unless `--slot` was explicit.
+
+`--report` writes an offline HTML report without interactive prompts. The report
+includes plain findings, Details expanders, Copy report, and complete JSON.
+Interactive backups copy the selected archive and all current top-level loose
+files, including `start.dat`, into a fresh `u9-save-slot-N-<UTC timestamp>` folder
+with a verified manifest. Historical archives' loose files are identified as
+today's working snapshot. Extracting a save creates a separate inspection copy.
+Earlier exports and backups are preserved; source data cannot be an output.
+
+```powershell
+titan u9 save-browse --game-dir C:\Ultima\Ultima9
+titan u9 save-browse C:\archives\u9game4.sav --static C:\Ultima\Ultima9\static --report -o C:\reports\u9
+```
+
+---
+
 #### `u9 save-check`
 
 Verify the selected save archive, its extracted working files, nonfixed/fixed
@@ -8034,6 +9037,14 @@ A value on the command line always wins.
 | `palette-export` | Export `.pal` as PNG swatch |
 | `shape-export` | Export `.shp` frames to PNG |
 | `shape-batch` | Batch export all shapes to PNG |
+| `u8 shape-browse` | Interactive U8 frames, properties, actor actions/directions and weapon overlays |
+| `u8 npc-animation-report` | Master animation CSV and per-NPC HTML reports with named contact sheets |
+| `u8 npc-browse` | Interactive named NPC state, equipment, sprite/animation views and report exports |
+| `u8 save-browse` | Native save/GAMEDAT state, entry extraction, embedded NPCs and snapshot comparisons |
+| `u8 map-browse` | FIXED/NONFIXED maps, container records, named NPCs and image/data reports |
+| `u8 world-query` | All-map live/stored item search, inventory ownership and paged report exports |
+| `u8 egg-query` | Egg/trigger definitions, hatch ranges, usecode classes and teleport target links |
+| `u8 container-browse` | All-map stored/live inventories, named NPC owners, composed gumps and inventory reports |
 | `shape-import` | Import PNGs back into a shape file |
 | `shape-convert-u7` | Convert a U8 shape into a U7/Exult-compatible shape |
 | `shape-convert-u7-all` | Batch version of `shape-convert-u7`, over every used shape |
@@ -8045,12 +9056,20 @@ A value on the command line always wins.
 | `map-render-all` | Render all (or selected) maps in all (or selected) views |
 | `map-sample` | Top-down colour-sampled minimap for one map |
 | `map-sample-all` | Batch minimap render for all (or selected) maps |
+| `fixed-dump` | Inspect complete FIXED.DAT records and nested inventory |
+| `nonfixed-dump` | Inspect complete NONFIXED.DAT records, inventory and NPC registry |
 | `typeflag-dump` | Dump `TYPEFLAG.DAT` shape physics data |
 | `gumpinfo-dump` | Dump `GUMPAGE.DAT` container UI layout |
 | `credits-decrypt` | Decrypt `ECREDITS.DAT` / `QUOTES.DAT` |
 | `xformpal-export` | Export colour-transform palette |
 | `save-list` | List entries in a U8 save archive |
 | `save-extract` | Extract entries from a U8 save archive |
+| `flags-dump` | Inspect packed global flag bits or verified named variables |
+| `avatar-dump` | Inspect complete avatar extension state, settings and progression |
+| `gumps-dump` | Inspect saved container UI records and screen rectangles |
+| `kernel-dump` | Inspect native scheduler, matched clock/animation/usecode state and raw records |
+| `save-info` | Summarize native save or GAMEDAT state and decoding coverage |
+| `save-diff` | Compare verified save fields, contextual map records and opaque bytes |
 | `unkcoff-dump` | Dump `UNKCOFF.DAT` code-offset table |
 | `uw2 map-extract` | Decode UU2 map, object, automap, note, and light data |
 | `uw2 map-render` | Render UU2 maps directly from original files |
@@ -8220,6 +9239,7 @@ A value on the command line always wins.
 | `u9 color-cube-lookup` | Show the palette index chosen for one colour |
 | `u9 color-cube-csv` | Export colour-cube tree nodes to CSV |
 | `u9 save-check` | Verify a save archive and its working files: allocator structure, every stored item handle's target, and fixed-file compatibility, reported as separate custody, structure and compatibility verdicts |
+| `u9 save-browse` | Browse selected or historical saves, plain integrity findings, maps, NPCs and activities; export offline reports and verified preserving backups |
 | `uo art-export` | Export UO land/static art to PNG |
 | `uo gump-export` | Export UO gumps to PNG |
 | `uo texture-export` | Export UO land textures to PNG |

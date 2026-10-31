@@ -29,6 +29,7 @@ __all__ = [
     "FLEX_COUNT_OFFSET",
     "FLEX_UNK_OFFSET",
     "FLEX_FILESIZE_OFFSET",
+    "FLEX_CHECKSUM_OFFSET",
     "FLEX_TABLE_OFFSET",
     "FLEX_RECORD_ENTRY_SIZE",
     "FLEX_FILL_BYTE",
@@ -39,6 +40,7 @@ __all__ = [
     "FlexArchive",
     # Functions
     "detect_record_type",
+    "calculate_u8_flex_checksum",
     "get_extension_for_flex",
 ]
 
@@ -56,20 +58,22 @@ from titan._version import TITAN_VERSION
 # ---------------------------------------------------------------------------
 # Header layout:
 #   0x00..0x51  (82 bytes)  Comment/title field (ASCII, padded with 0x1A)
-#   0x52..0x53  (2 bytes)   Continuation of 0x1A padding (magic sentinel)
+#   0x52..0x53  (2 bytes)   Padding (zeros in native U8 archives)
 #   0x54..0x57  (4 bytes)   Record count (uint32 LE)
-#   0x58..0x5B  (4 bytes)   Unknown field (often 0x00000001)
-#   0x5C..0x5F  (4 bytes)   Total file size (uint32 LE)
-#   0x60..0x7F  (32 bytes)  Reserved (zeros)
+#   0x58..0x5B  (4 bytes)   Native version (1, 9, 10 or 205 in audited data)
+#   0x5C..0x5F  (4 bytes)   Total file size (uint32 LE; sometimes zero in source)
+#   0x60..0x63  (4 bytes)   Native checksum (signed-byte sum, stored as uint32)
+#   0x64..0x7F  (28 bytes)  Padding (zeros)
 #   0x80+                   Record table: count * 8 bytes (offset:u32, size:u32)
 #   After table              Raw record data
 
 FLEX_HEADER_SIZE: int = 0x80  # 128 bytes total header before record table
 FLEX_COMMENT_LEN: int = 0x52  # 82 bytes for the comment block
-FLEX_MAGIC_OFFSET: int = 0x52  # Where 0x1A padding must exist
+FLEX_MAGIC_OFFSET: int = 0x52  # Legacy name for padding offset; not a magic check
 FLEX_COUNT_OFFSET: int = 0x54  # uint32 record count
-FLEX_UNK_OFFSET: int = 0x58  # uint32 unknown (usually 1)
+FLEX_UNK_OFFSET: int = 0x58  # U8 native version / U7 secondary magic (legacy name)
 FLEX_FILESIZE_OFFSET: int = 0x5C  # uint32 total file size
+FLEX_CHECKSUM_OFFSET: int = 0x60  # U8 native checksum; U7 reserved bytes
 FLEX_TABLE_OFFSET: int = 0x80  # Start of the offset/size table
 FLEX_RECORD_ENTRY_SIZE: int = 8  # Each record entry: 4 bytes offset + 4 bytes size
 FLEX_FILL_BYTE: int = 0x1A  # Sentinel/fill byte used in header
@@ -115,6 +119,22 @@ CONTENT_EXT_MAP: dict[str, str] = {
 # ============================================================================
 
 
+def calculate_u8_flex_checksum(data: bytes | bytearray) -> int:
+    """Return the native U8 Flex checksum, excluding the header and final 128 bytes.
+
+    Decoded U8 FlexFile::getChecksum starts at 0x80 but stops at file size
+    minus 0x80. Reproduce that boundary, including directory bytes, and sum
+    signed chars modulo 2**32. Files of 128..256 bytes have an empty range.
+    The header's stored size/checksum words do not affect the calculation.
+    """
+    if len(data) < FLEX_HEADER_SIZE:
+        raise ValueError("U8 Flex checksum: truncated header")
+    checksum_bytes = memoryview(data)[
+        FLEX_HEADER_SIZE : len(data) - FLEX_HEADER_SIZE
+    ].cast("b")
+    return sum(checksum_bytes) & 0xFFFFFFFF
+
+
 class FlexArchive:
     """
     Reader/writer preserving the source U7/Exult or U8 Flex header format.
@@ -122,17 +142,21 @@ class FlexArchive:
     Flex is an indexed container: a fixed-size header followed by a table of
     (offset, size) pairs pointing to raw record blobs packed sequentially.
 
-    Binary layout (all little-endian uint32 unless noted)::
+    U8 binary layout (all little-endian uint32 unless noted)::
 
         Offset  Size    Description
         0x00    0x52    ASCII comment (padded to end with 0x1A bytes)
-        0x52    0x02    0x1A 0x1A (continuation of padding / magic)
+        0x52    0x02    Padding (zeros in native U8 archives)
         0x54    0x04    Record count
-        0x58    0x04    Unknown (typically 1)
-        0x5C    0x04    Total file size
-        0x60    0x20    Reserved (zeros)
+        0x58    0x04    Native version (unknown_field for API compatibility)
+        0x5C    0x04    Total file size (may be zero in source archives)
+        0x60    0x04    Native checksum (recalculated when writing)
+        0x64    0x1C    Padding (zeros)
         0x80    N*8     Record table (offset uint32, size uint32) per record
         0x80+N*8 ...    Record data
+
+    U7/Exult instead has magic1 at 0x50, magic2 at 0x58 and reserved
+    bytes at 0x5C..0x7F. Its reserved bytes are preserved, not checksummed.
     """
 
     def __init__(self) -> None:
@@ -469,7 +493,7 @@ class FlexArchive:
     # ------------------------------------------------------------------
 
     def to_bytes(self) -> bytes:
-        """Serialize this archive to Flex format bytes."""
+        """Repack Flex records and recalculate the native checksum for U8 only."""
         count = len(self.records)
 
         # --- Build header ---
@@ -484,18 +508,18 @@ class FlexArchive:
         for i in range(len(comment_encoded), FLEX_COMMENT_LEN):
             header[i] = FLEX_FILL_BYTE
 
-        # 0x52 and 0x53 = 0x00 (from the 0x00001A1A dword at 0x50)
+        # Native U8 padding after the 82-byte label is zero, not 0x1A.
         header[0x52] = 0x00
         header[0x53] = 0x00
 
         # Record count at 0x54
         struct.pack_into("<I", header, FLEX_COUNT_OFFSET, count)
 
-        # Unknown field at 0x58 (typically 1)
+        # Native U8 version at 0x58 (legacy unknown_field attribute).
         struct.pack_into("<I", header, FLEX_UNK_OFFSET, self.unknown_field)
 
         # File size at 0x5C — compute later
-        # Reserved 0x60..0x7F already zeroed
+        # Checksum at 0x60 is computed after packing; padding 0x64..0x7F is zero.
 
         # --- Build record table ---
         table_size = count * FLEX_RECORD_ENTRY_SIZE
@@ -548,7 +572,14 @@ class FlexArchive:
         total_size = FLEX_HEADER_SIZE + table_size + len(data_blobs)
         struct.pack_into("<I", header, FLEX_FILESIZE_OFFSET, total_size)
 
-        return bytes(header) + bytes(table) + bytes(data_blobs)
+        serialized = header + table + data_blobs
+        struct.pack_into(
+            "<I",
+            serialized,
+            FLEX_CHECKSUM_OFFSET,
+            calculate_u8_flex_checksum(serialized),
+        )
+        return bytes(serialized)
 
     def save(self, filepath: str) -> None:
         """Write this archive to a file."""
@@ -584,7 +615,7 @@ class FlexArchive:
             if not entry.is_file():
                 continue
             # Skip metadata sidecars (NNNN.meta.txt / NNNN_NAME.meta.txt)
-            if entry.name.endswith(".meta.txt"):
+            if entry.name.endswith((".meta.txt", ".animation.json")):
                 continue
             stem = entry.stem
             # Accept "0001" or "0001_ARMHIT1A" — extract leading digits

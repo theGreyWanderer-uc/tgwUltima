@@ -277,20 +277,26 @@ class U8Shape:
 
         Returns:
             numpy uint8 array (height x width).  Index 0xFF = transparent.
+
+        Index 0xFF is titan's marker for "no pixel" (U8 frames have no
+        transparent colour: transparency is the RLE skips). No original
+        U8 shape draws with index 255, so it is never chosen for an opaque
+        pixel: the nearest colour is taken from indices 0-254, otherwise a
+        pixel painted in index 255's colour would silently vanish.
         """
         arr = np.asarray(rgba_img)                       # (H, W, 4) uint8
         h, w = arr.shape[:2]
         rgb = arr[:, :, :3].astype(np.int32)             # (H, W, 3)
         alpha = arr[:, :, 3]                              # (H, W)
 
-        # Build palette lookup table (256 x 3, int32)
-        pal_arr = np.array([palette.colors[i] for i in range(256)],
-                           dtype=np.int32)                # (256, 3)
+        # Palette lookup table, indices 0-254 (255 is reserved, see above)
+        pal_arr = np.array([palette.colors[i] for i in range(255)],
+                           dtype=np.int32)                # (255, 3)
 
         # For every opaque pixel, find nearest palette entry (Euclidean RGB).
         flat_rgb = rgb.reshape(-1, 1, 3)                  # (N, 1, 3)
-        diff = flat_rgb - pal_arr.reshape(1, 256, 3)      # (N, 256, 3)
-        dist_sq = (diff * diff).sum(axis=2)               # (N, 256)
+        diff = flat_rgb - pal_arr.reshape(1, 255, 3)      # (N, 255, 3)
+        dist_sq = (diff * diff).sum(axis=2)               # (N, 255)
         nearest = dist_sq.argmin(axis=1).astype(np.uint8) # (N,)
         result = nearest.reshape(h, w)
 

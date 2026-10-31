@@ -169,7 +169,8 @@ def test_grid_uses_indexed_native_background_cells_and_adapts_width(monkeypatch)
     lines = []
     monkeypatch.setattr(ui, "print_coloured", lines.append)
     monkeypatch.setattr(
-        browser.shutil, "get_terminal_size", lambda *a: os.terminal_size((34, 25))
+        "titan._palette_browser_ui.shutil.get_terminal_size",
+        lambda *a: os.terminal_size((34, 25)),
     )
     browser.show_grid(palette, 224, 32)
     assert len(lines) == 4
