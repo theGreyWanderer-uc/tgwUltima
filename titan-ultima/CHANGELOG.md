@@ -8,17 +8,6 @@ work for the next release.
 
 ## [0.7.9] — Unreleased
 
-### Fixed
-
-- **U9 music:** the saved music node's first field is now `key` (the link of
-  the trigger object that started the music), not `track`; `track` remains
-  as an alias. The trigger references correct the music opcodes' call
-  targets and decode the 1.19H music fix (Minoc's branch to label 0).
-- **UO multis:** `multi.mul` record size (12 or 16 bytes) is now detected
-  once per file and ambiguous files are reported, instead of guessing per
-  entry, which could misread 12-byte files. `multi-export` gains
-  `--container auto|uop|mul` and reports the source and layout it read.
-
 ### Added
 
 - **UO map inventory:** added `uo map-inventory`, the UO counterpart of
@@ -144,6 +133,14 @@ work for the next release.
 
 ### Fixed
 
+- **U9 music:** the saved music node's first field is now `key` (the link of
+  the trigger object that started the music), not `track`; `track` remains
+  as an alias. The trigger references correct the music opcodes' call
+  targets and decode the 1.19H music fix (Minoc's branch to label 0).
+- **UO multis:** `multi.mul` record size (12 or 16 bytes) is now detected
+  once per file and ambiguous files are reported, instead of guessing per
+  entry, which could misread 12-byte files. `multi-export` gains
+  `--container auto|uop|mul` and reports the source and layout it read.
 - **U8 shape import:** opaque pixels no longer become transparent when their
   nearest palette colour is index 255. Also applies to U8-to-U7 conversion.
 - **U8 Flex writing:** building, repacking and replacing records now update
