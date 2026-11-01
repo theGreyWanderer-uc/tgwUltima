@@ -49,7 +49,7 @@ Optional:
 
 ## Quick Start
 
-Run setup once. It detects common Ultima 8, Ultima 7, and UO install locations,
+Run setup once. It detects common Ultima 8, Ultima 7, Ultima 9, and UO install locations,
 detects Exult runtime folders and the Exult install directory (for
 `exult_bg.flx` / `exult_si.flx`), writes `titan.toml`, and can extract the
 U8 shape/glob data used by map rendering.
@@ -82,7 +82,52 @@ titan u3 map-create si_source_map.json --output-root scratch/ --map-num 4 --no-r
 # UO configured commands, if [uo.game] base is set
 titan uo gump-export -o uo_gumps/
 titan uo animation-body-names-export -o uo_metadata/
+
+# U9 save browser, if [u9.game] base is set
+titan u9 save-browse
 ```
+
+U9 setup searches common GOG, Galaxy, EA/Origin, manual and Heroic locations,
+as well as an existing `[u9.game].base` or `[u9.paths].static`. It searches
+up to three directory levels, skips backup/patch/save folders, and verifies
+the three bitmap archives, matching `sdInfo` tables and `ankh.pal` before
+selecting an install. `titan config` checks the saved paths and core archive
+headers/directories. Relative `[u9.paths]` values resolve from the game base.
+U9 commands also use configured input paths. Omit known game assets, or use a
+bare filename below the configured static/sound/runtime/savegame folders:
+
+```bash
+titan u9 palette-info
+titan u9 texture-info 4423
+titan u9 texture-export-all -o u9_textures/
+titan u9 model-info 1510
+titan u9 animation-pose-export 1 1510 --no-preview -o posed_model/
+titan u9 text-search "Farewell"
+titan u9 flx-list Speech.flx
+titan u9 map-render 14 -o region_14.png
+```
+
+Explicit command-line paths take precedence. Generic FLX tools still require
+an archive choice, and numbered terrain/fixed/nonfixed commands require a
+filename or region number. IDs, comparison saves, replacement PNGs/CSVs,
+animation plans and output paths are never guessed. Texture commands default
+to `bitmap16`; set `[u9.paths].textures` to select another tier. Matching
+`sdInfo` tables follow the selected tier. Optional companion files for an
+explicit external source come from that source's installation, avoiding
+accidental joins to the configured installation.
+
+`texture-export-all` exports every frame from the highest-quality available
+tier (`bitmap16`, then `bitmapC`, then `bitmapsh`), at base resolution only.
+`--all-mips` adds that tier's smaller stored mip levels; `--all-tiers` separately
+requests every available quality tier. Supply a texture FLX to export just that
+archive. Output folders contain clean numeric PNG names and a `manifest.json`
+with counts and errors. Progress uses the standard library, and paletted frames
+without a palette are reported as errors instead of exporting grey images.
+
+On Windows, Galaxy's `Program Files (x86)/GOG Galaxy/Games/Ultima 9` layout
+is checked first, followed by `GOG Games/Ultima 9` and `Ultima 9` at the drive
+root, across drives C through G. Paths with spaces are supported; quote them
+when passing a path on the command line.
 
 `titan setup` doesn't detect Ultima 6 installs yet — add `[u6.game]
 base = "<Ultima 6 install>"` to `titan.toml` yourself, or pass

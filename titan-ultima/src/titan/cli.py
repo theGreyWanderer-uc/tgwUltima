@@ -581,6 +581,7 @@ def cmd_config(args: SimpleNamespace) -> int:
         check_exists: bool = False,
         base: Optional[str] = None,
         u7_resources: bool = False,
+        u9_resources: bool = False,
     ) -> None:
         if not section:
             return
@@ -603,6 +604,11 @@ def cmd_config(args: SimpleNamespace) -> int:
                     from titan.u7.install import check_resource
 
                     flag = check_resource(k, value_path)
+                if u9_resources and value_path is not None:
+                    from titan.u9.install import U9_RESOURCE_NAMES, check_u9_resource
+
+                    if k in U9_RESOURCE_NAMES:
+                        flag = check_u9_resource(k, value_path)
                 resolved = f" -> {value_path.absolute()}" if value_path else ""
                 print(f"  {k:<12} = {v!r}  [{flag}]{resolved}")
             else:
@@ -615,11 +621,20 @@ def cmd_config(args: SimpleNamespace) -> int:
     u7bg = config.get("u7bg", {})
     u7si = config.get("u7si", {})
     uo = config.get("uo", {})
+    u9 = config.get("u9", {})
     exult = config.get("exult", {})
-    if any((u8, uw2, u7bg, u7si, uo, exult)):
+    if any((u8, uw2, u7bg, u7si, uo, u9, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
         _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
+        _print_kv_section("[u9.game]", u9.get("game", {}), check_exists=True)
+        _print_kv_section(
+            "[u9.paths]",
+            u9.get("paths", {}),
+            check_exists=True,
+            base=u9.get("game", {}).get("base"),
+            u9_resources=True,
+        )
         _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
         bg_base = u7bg.get("game", {}).get("base")
         _print_kv_section(
@@ -690,6 +705,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
         install_roots,
         install_game,
     )
+    from titan.u9.install import discover_u9_installs, u9_install_candidates
 
     explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
     toml_path = Path(explicit).expanduser() if explicit else Path.cwd() / "titan.toml"
@@ -697,7 +713,9 @@ def cmd_setup(args: SimpleNamespace) -> int:
     existing_u8_game = existing_config.get("game", {})
     print("TITAN Setup Wizard")
     print("=" * 55)
-    print("This will create titan.toml for Ultima 8, Ultima 7, and UO installs.\n")
+    print(
+        "This will create titan.toml for Ultima 8, Ultima 7, Ultima 9, and UO installs.\n"
+    )
     if toml_path.exists():
         print(f"Existing config: {toml_path}")
         print("Setup keeps custom settings and adds missing entries.")
@@ -1025,6 +1043,50 @@ def cmd_setup(args: SimpleNamespace) -> int:
                     }
                     print(f"    Preserve custom paths for mod: {mod_name}")
 
+    # -- U9 install detection -------------------------------------
+    print("\nSearching for Ultima 9 installations...")
+    found_u9 = {}
+    for candidate in u9_install_candidates(existing_config):
+        for u9_installation in discover_u9_installs(candidate):
+            if u9_installation.root in found_u9:
+                continue
+            found_u9[u9_installation.root] = u9_installation
+            if u9_installation.valid:
+                print(f"  Found Ultima 9: {u9_installation.root}")
+            else:
+                print(
+                    f"  Incomplete or damaged Ultima 9 installation: {u9_installation.root}"
+                )
+                for key, status in u9_installation.checks.items():
+                    if status != "OK":
+                        print(f"    {u9_installation.paths[key]} [{status}]")
+    previous_u9_base = existing_config.get("u9", {}).get("game", {}).get("base")
+    detected_u9 = next((item for item in found_u9.values() if item.valid), None)
+    u9_default = str(previous_u9_base or (detected_u9.root if detected_u9 else ""))
+    u9_input = (
+        ui.path(f"Ultima IX base [{u9_default or 'optional'}]: ", u9_default)
+        .strip()
+        .strip('"')
+    )
+    u9_value = u9_input or u9_default
+    selected_u9 = None
+    if u9_value:
+        selected_u9 = next(
+            (item for item in discover_u9_installs(Path(u9_value)) if item.valid), None
+        )
+        if selected_u9 is None:
+            print(
+                "  No valid U9 bitmap installation at that path; existing settings kept."
+            )
+        elif (
+            previous_u9_base
+            and selected_u9.root != Path(previous_u9_base).expanduser().absolute()
+        ):
+            print(
+                f"  Proposed u9 base correction: {previous_u9_base} -> {selected_u9.root}"
+            )
+            setup_updates["u9"] = {"game": {"base": selected_u9.root.as_posix()}}
+
     # -- UO install detection -------------------------------------
     detected_uo: Optional[Path] = None
     print("\nSearching for Ultima Online Classic Client installation...")
@@ -1217,6 +1279,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U7 SI STATIC: {u7si_static_detected or '(empty)'}")
     print(f"  U7 SI GAMEDAT:{u7si_gamedat or '(empty)'}")
     print(f"  UO base:      {uo_base or '(empty)'}")
+    print(f"  U9 base:      {selected_u9.root if selected_u9 else '(empty)'}")
+    if selected_u9:
+        for key, status in selected_u9.checks.items():
+            print(f"  U9 {key}: {selected_u9.paths[key]} [{status}]")
     print(f"  Exult BG FLX: {exult_bg_flx or '(empty)'}")
     print(f"  Exult SI FLX: {exult_si_flx or '(empty)'}")
     for label, selected in (("BG", selected_bg), ("SI", selected_si)):
@@ -1283,6 +1349,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
         u7bg_mod_sources = []
         u7si_mod_sources = []
         setup_updates = {}
+        selected_u9 = None
 
         manual_u8_static = (
             ui.path("U8 STATIC path [optional]: ").strip().replace("\\", "/")
@@ -1296,6 +1363,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
         manual_u7si_static = (
             ui.path("U7 SI STATIC path [optional]: ").strip().replace("\\", "/")
         )
+        manual_u9 = ui.path("U9 installation base [optional]: ").strip().strip('"')
+        if manual_u9:
+            selected_u9 = next(
+                (item for item in discover_u9_installs(Path(manual_u9)) if item.valid),
+                None,
+            )
+            if selected_u9 is None:
+                print(
+                    "  No valid U9 bitmap installation at that path; existing settings kept."
+                )
+            elif previous_u9_base:
+                setup_updates["u9"] = {"game": {"base": selected_u9.root.as_posix()}}
         uo_base = (
             ui.path("UO Classic Client base [optional]: ").strip().replace("\\", "/")
         )
@@ -1488,6 +1567,21 @@ def cmd_setup(args: SimpleNamespace) -> int:
                 lines.append(f'root     = "{item["root"]}"')
             if "archive" in item:
                 lines.append(f'archive  = "{item["archive"]}"')
+
+    if selected_u9:
+        import json
+
+        lines += [
+            "",
+            "[u9.game]",
+            f"base = {json.dumps(selected_u9.root.as_posix())}",
+            "",
+            "[u9.paths]",
+        ]
+        for key, resource in selected_u9.paths.items():
+            lines.append(
+                f"{key} = {json.dumps(resource.relative_to(selected_u9.root).as_posix())}"
+            )
 
     if uo_base:
         lines += [

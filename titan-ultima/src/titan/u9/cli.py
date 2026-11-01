@@ -28,6 +28,7 @@ from titan.u9.activity import (
     U9Activities,
     U9ActivityError,
 )
+from titan.u9.cli_paths import ConfiguredU9App, paired_u9_texture_key, resolve_u9_input
 from titan.u9.asset_reports import (
     MODEL_REPORT_COLUMNS,
     TEXTURE_REPORT_COLUMNS,
@@ -196,6 +197,11 @@ from titan.u9.texture import (
     mip_dimensions,
     parse_texture_set,
 )
+from titan.u9.texture_export import (
+    U9TextureExportError,
+    export_texture_archives,
+    print_texture_export_progress,
+)
 from titan.u9.texture_writer import (
     U9TextureWriteError,
     frame_encoding,
@@ -210,7 +216,7 @@ from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 # Typer sub-app
 # ============================================================================
 
-u9_app = typer.Typer(
+u9_app = ConfiguredU9App(
     name="u9",
     help="Ultima 9: Ascension — archive, palette, texture, sound, model, world, script, and navigation commands.",
     no_args_is_help=True,
@@ -1529,6 +1535,9 @@ def _find_palette(
     """
     if explicit:
         return explicit, False
+    configured = resolve_u9_input(None, "palette", owner=beside)
+    if configured:
+        return configured, True
     if not beside:
         return None, False
     directory = os.path.dirname(os.path.abspath(beside))
@@ -1582,8 +1591,31 @@ def _load_selectors(textures_path: Optional[str], *, quiet: bool = False) -> dic
     if not textures_path:
         return {}
     partner = SDINFO_FOR_ARCHIVE.get(os.path.basename(textures_path).lower())
+    configured_key = paired_u9_texture_key(textures_path)
+    if partner is None and configured_key in {"sdinfo", "sdinfo16", "sdinfoc"}:
+        partner = {
+            "sdinfo": "sdInfo.flx",
+            "sdinfo16": "sdInfo16.flx",
+            "sdinfoc": "sdInfoC.flx",
+        }[configured_key]
     if partner is None:
         return {}
+    key = {
+        "sdinfo.flx": "sdinfo",
+        "sdinfo16.flx": "sdinfo16",
+        "sdinfoc.flx": "sdinfoc",
+    }[partner.casefold()]
+    configured = resolve_u9_input(None, key, owner=textures_path)
+    if configured:
+        try:
+            return {
+                record.index: record.format_selector
+                for record in U9SdInfo.from_file(configured).records()
+            }
+        except (U9SdInfoError, OSError) as error:
+            raise typer.BadParameter(
+                f"Could not read format table {configured}: {error}"
+            ) from error
     directory = os.path.dirname(os.path.abspath(textures_path))
     try:
         entries = os.listdir(directory)
@@ -2013,6 +2045,37 @@ def cmd_texture_export(args: SimpleNamespace) -> int:
         f"({surface.width}x{surface.height}) -> {out_path}"
     )
     return 0
+
+
+def cmd_texture_export_all(args: SimpleNamespace) -> int:
+    """Export every texture frame, using only the best available tier by default."""
+    try:
+        result = export_texture_archives(
+            args.source,
+            args.output,
+            palette_path=args.palette,
+            all_mips=args.all_mips,
+            entry_id=args.entry,
+            all_tiers=args.all_tiers,
+            progress=print_texture_export_progress,
+        )
+    except (OSError, U9TextureExportError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for failure in result.errors[:10]:
+        details = ", ".join(
+            f"{key} {failure[key]}"
+            for key in ("entry", "frame", "mip")
+            if key in failure
+        )
+        location = (
+            f"{failure['archive']} ({details})" if details else str(failure["archive"])
+        )
+        print(f"ERROR: {location}: {failure['error']}", file=sys.stderr)
+    print(f"Exported {result.images_written} PNG(s); {len(result.errors)} error(s).")
+    for manifest in result.manifests:
+        print(f"  Manifest: {manifest}")
+    return 1 if result.errors else 0
 
 
 def cmd_icon_export(args: SimpleNamespace) -> int:
@@ -8076,6 +8139,65 @@ def texture_export_cmd(
                 mip_level=mip_level,
                 palette=palette,
                 output=output,
+            )
+        )
+    )
+
+
+@u9_app.command("texture-export-all")
+def texture_export_all_cmd(
+    source: Annotated[
+        str,
+        typer.Argument(
+            help="Texture FLX, STATIC directory or installation root (default: configured STATIC)"
+        ),
+    ],
+    output: Annotated[
+        str,
+        typer.Option(
+            "-o", "--output", help="Output root; each archive gets its own folder"
+        ),
+    ] = "u9_textures",
+    palette: Annotated[
+        Optional[str],
+        typer.Option(
+            "-p",
+            "--palette",
+            help="ankh.pal override; otherwise use config or the archive's companion",
+        ),
+    ] = None,
+    all_mips: Annotated[
+        bool,
+        typer.Option(
+            "--all-mips", help="Export every stored mip level as well as base images"
+        ),
+    ] = False,
+    all_tiers: Annotated[
+        bool,
+        typer.Option(
+            "--all-tiers",
+            help="Export all available bitmap tiers instead of only the highest quality",
+        ),
+    ] = False,
+    entry: Annotated[
+        Optional[int],
+        typer.Option(
+            "--entry",
+            min=0,
+            help="Limit export to this texture entry ID in each archive",
+        ),
+    ] = None,
+) -> None:
+    """Export every texture frame; default to the best tier at full resolution."""
+    raise SystemExit(
+        cmd_texture_export_all(
+            SimpleNamespace(
+                source=source,
+                output=output,
+                palette=palette,
+                all_mips=all_mips,
+                all_tiers=all_tiers,
+                entry=entry,
             )
         )
     )

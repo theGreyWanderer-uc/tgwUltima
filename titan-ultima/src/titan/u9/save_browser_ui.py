@@ -323,6 +323,12 @@ def run_u9_save_browser(
     report_only: bool = False,
 ) -> int:
     """Browse without modifying saves; redirected input uses shared line menus."""
+    if source is None and game_dir is None:
+        from titan.u9.install import configured_u9_path
+
+        game_dir = configured_u9_path("base")
+        if game_dir is not None and static_directory is None:
+            static_directory = configured_u9_path("static")
     print("\nTitan U9 Save Browser")
     try:
         if source is None and slot is not None:
@@ -379,7 +385,8 @@ def save_browse_cmd(
     game_dir: Annotated[
         Path | None,
         typer.Option(
-            "--game-dir", help="Installation or savegame folder for save discovery"
+            "--game-dir",
+            help="Installation or savegame folder (default: [u9.game].base)",
         ),
     ] = None,
     slot: Annotated[
