@@ -83,6 +83,45 @@ nonfixed  = "U8SAVE.000"
 # # Commands resolve bare data names below <base>/DATA.
 # base = "C:/Path/To/Ultima Underworld 2"
 #
+# [u9.game]
+# # Detected by `titan setup`; save-browse uses this when no source is supplied.
+# base = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 9"
+#
+# [u9.paths]
+# # Relative paths resolve from [u9.game].base; actual filename case is retained.
+# static   = "static"
+# runtime  = "runtime"
+# sound    = "sound"
+# savegame = "savegame"
+# palette  = "static/ankh.pal"
+# bitmap16 = "static/bitmap16.flx"
+# bitmapc  = "static/bitmapC.flx"
+# bitmapsh = "static/bitmapsh.flx"
+# sdinfo16 = "static/sdInfo16.flx"
+# sdinfoc  = "static/sdInfoC.flx"
+# sdinfo   = "static/sdInfo.flx"
+# # Optional default texture tier. Omit to use bitmap16.
+# textures = "static/bitmap16.flx"
+# # Setup adds these and other supported assets when present. Without explicit
+# # overrides, commands look for their usual filenames in the folders above.
+# sappear    = "static/sappear.flx"
+# types      = "static/TYPES.DAT"
+# typenames  = "static/TYPENAME.FLX"
+# animations = "static/anim.flx"
+# registry   = "static/registry.txt"
+# triggers   = "static/triggers.flx"
+# activities = "static/activity.flx"
+# text       = "static/text.flx"
+# text_keys  = "static/text.dat"
+# books      = "static/BOOKS-EN.FLX"
+# npcs       = "runtime/NPC.FLX"
+# processes  = "savegame/processes.dat"
+# categories = "sound/sfxcat.flx"
+# templates  = "sound/SFXTMPL.FLX"
+# # This reference is deliberately user-selected; setup never assigns the
+# # installed maps as their own trusted creation-time reference.
+# fixed_reference = "C:/Trusted/U9/static"
+#
 # [u7bg.game]
 # base     = "C:/Path/To/Ultima7/ULTIMA7"
 # variant  = "blackgate"

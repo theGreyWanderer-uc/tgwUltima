@@ -10,6 +10,20 @@ work for the next release.
 
 ### Added
 
+- **U9 texture batch export:** `texture-export-all` uses configured paths to
+  export every frame from the highest-quality available tier at base resolution.
+  `--all-mips` includes smaller stored mip levels; `--all-tiers` requests other
+  quality tiers. Numeric PNG names, matched palettes/format tables, per-archive
+  manifests and a standard-library progress bar are included.
+- **U9 configured CLI inputs:** commands resolve game resources from U9 settings,
+  accept bare installed filenames, and allow known archive paths to be omitted
+  before IDs/search terms. Explicit paths and user-created inputs stay explicit;
+  external sources use their own companion files and texture tiers stay paired
+  with their matching format tables.
+- **U9 installation setup:** `titan setup` discovers common and nested installs,
+  validates bitmap archives, format tables and palette, and records their paths.
+  `titan config` inspects U9 settings; `u9 save-browse` uses the configured game
+  when no source or `--game-dir` is supplied.
 - **UO map inventory:** added `uo map-inventory`, the UO counterpart of
   `u7 map-inventory`. It counts every land and static tile a facet uses,
   ranked by placements, with the tiledata name, a derived category (wall,

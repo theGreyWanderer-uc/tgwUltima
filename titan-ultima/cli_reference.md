@@ -6460,6 +6460,47 @@ titan u9 texture-export static/Texture8.9 1087 -p static/ankh.pal -o panels/
 
 ---
 
+#### `u9 texture-export-all`
+
+Export every texture entry and animation frame as RGBA PNG. With no source,
+use the configured U9 STATIC directory. Directory sources select only the
+highest-quality available tier: `bitmap16`, then `bitmapC`, then `bitmapsh`.
+Only base-resolution images (mip 0) are exported by default.
+
+```bash
+titan u9 texture-export-all [SOURCE] [-o DIR] [-p PALETTE]
+                            [--all-mips] [--all-tiers] [--entry ID]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `SOURCE` | Optional texture FLX, STATIC folder or U9 installation root; defaults to `[u9.paths].static` |
+| `-o DIR`, `--output DIR` | Output root (default: `u9_textures/`), with one subfolder per archive |
+| `-p FILE`, `--palette FILE` | Palette override; otherwise use configured or adjacent `ankh.pal` |
+| `--all-mips` | Include smaller stored mip levels; does **not** enable other quality tiers |
+| `--all-tiers` | Export every available bitmap tier from a directory; does **not** enable smaller mip levels |
+| `--entry ID` | Export only this entry ID in each selected archive |
+
+Palettes and matching `sdInfo` tables follow the same config/explicit-source
+rules as other U9 commands. Missing palettes cause errors for paletted frames;
+they do not produce grey fallback images. Empty slots are skipped, entries with
+zero frames are recorded, and decode errors are retained in each archive's
+`manifest.json`. Other entries continue, and any error produces a nonzero exit
+status. Source archives are read only; matching output PNGs are replaced.
+
+For example, the default export writes
+`u9_textures/bitmap16/texture_04423_frame_000_mip_00.png`. A standard-library
+progress bar reports processed entries and PNG counts.
+
+```bash
+titan u9 texture-export-all -o textures/
+titan u9 texture-export-all --all-mips -o textures_with_mips/
+titan u9 texture-export-all --all-tiers --all-mips -o every_tier_and_mip/
+titan u9 texture-export-all bitmapC.flx -o compressed_textures/
+```
+
+---
+
 #### `u9 icon-list`
 
 List candidate 2D UI icon entries in a texture archive: entries **not**
@@ -9291,6 +9332,7 @@ A value on the command line always wins.
 | `u9 texture-info` | Inspect one bitmap or terrain-panel texture set |
 | `u9 texture-frame-report` | Export dynamic per-tier/per-frame metadata and animation evidence |
 | `u9 texture-export` | Export one texture frame or stored mip to PNG |
+| `u9 texture-export-all` | Export all frames from the highest-quality tier; optionally include all tiers and/or stored mips |
 | `u9 texture-import` | Replace one texture frame or a batch of frames from same-size PNGs, re-encoded in each frame's existing format so the entry keeps its length and header |
 | `u9 sdinfo-list` | List texture metadata records |
 | `u9 sdinfo-show` | Show one texture metadata record |

@@ -70,6 +70,171 @@ def _u7_install(root: Path, *, lowercase: bool = False) -> Path:
     return root
 
 
+def _u9_install(root: Path) -> Path:
+    from titan.u9.flx_writer import build_flx
+    from titan.u9.install import U9_RESOURCE_NAMES
+
+    static = root / "STATIC"
+    static.mkdir(parents=True)
+    for key, name in U9_RESOURCE_NAMES.items():
+        (static / name.upper()).write_bytes(
+            bytes(1024) if key == "palette" else build_flx({0: bytes(48)})
+        )
+    for name in ("sound", "runtime", "savegame"):
+        (root / name).mkdir()
+    return root
+
+
+def test_u9_candidates_include_spaced_windows_layouts_on_multiple_drives(
+    setup_workspace,
+):
+    from titan.u9.install import u9_install_candidates
+
+    candidates = u9_install_candidates({})
+    for drive in "CDEFG":
+        for layout in ("Program Files (x86)/GOG Galaxy/Games", "GOG Games", ""):
+            assert Path(f"{drive}:/") / layout / "Ultima 9" in candidates
+    assert candidates.index(
+        Path("C:/Program Files (x86)/GOG Galaxy/Games/Ultima 9")
+    ) < candidates.index(Path("C:/GOG Games/Ultima 9"))
+    assert candidates.index(Path("C:/GOG Games/Ultima 9")) < candidates.index(
+        Path("C:/Ultima 9")
+    )
+
+
+def test_setup_detects_u9_nested_install_and_records_actual_case(
+    setup_workspace, monkeypatch
+):
+    root = _u9_install(setup_workspace / "home/GOG Games/Ultima 9/game")
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads((Path.cwd() / "titan.toml").read_text())
+    assert saved["u9"]["game"]["base"] == root.as_posix()
+    assert saved["u9"]["paths"]["palette"] == "STATIC/ANKH.PAL"
+    assert saved["u9"]["paths"]["sdinfo16"] == "STATIC/SDINFO16.FLX"
+    assert saved["u9"]["paths"]["savegame"] == "savegame"
+
+
+@pytest.mark.parametrize("problem", ["missing", "header", "bounds", "palette"])
+def test_setup_does_not_select_incomplete_u9_install(
+    setup_workspace, monkeypatch, capsys, problem
+):
+    root = _u9_install(setup_workspace / "home/GOG Games/Ultima 9")
+    if problem == "missing":
+        (root / "STATIC/ANKH.PAL").unlink()
+    elif problem == "header":
+        (root / "STATIC/BITMAP16.FLX").write_bytes(b"not an FLX")
+    elif problem == "palette":
+        (root / "STATIC/ANKH.PAL").write_bytes(bytes(12))
+    else:
+        path = root / "STATIC/BITMAP16.FLX"
+        path.write_bytes(path.read_bytes()[:-1])
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    assert "u9" not in tomllib.loads((Path.cwd() / "titan.toml").read_text())
+    assert "Incomplete or damaged Ultima 9" in capsys.readouterr().out
+
+
+def test_setup_accepts_quoted_u9_base_with_spaces(setup_workspace, monkeypatch):
+    root = _u9_install(setup_workspace / "custom game/Ultima 9")
+    _answer_setup(monkeypatch, {"Ultima IX base": f'"{root}"'})
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads((Path.cwd() / "titan.toml").read_text())
+    assert saved["u9"]["game"]["base"] == root.as_posix()
+
+
+def test_setup_declining_u9_correction_preserves_base(setup_workspace, monkeypatch):
+    outer = setup_workspace / "wrapper"
+    _u9_install(outer / "game")
+    path = Path.cwd() / "titan.toml"
+    path.write_text(f'[u9.game]\nbase="{outer.as_posix()}"\n')
+    _answer_setup(monkeypatch, {"Are these paths correct?": "n"})
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    assert tomllib.loads(path.read_text())["u9"]["game"]["base"] == outer.as_posix()
+
+
+def test_u9_config_inspection_and_shared_resolution(setup_workspace, capsys):
+    from titan.u9.install import configured_u9_path
+
+    root = _u9_install(setup_workspace / "install")
+    path = Path.cwd() / "titan.toml"
+    path.write_text(
+        f'[u9.game]\nbase="{root.as_posix()}"\n'
+        '[u9.paths]\nstatic="static"\npalette="static/ankh.pal"\n'
+        'bitmap16="static/bitmap16.flx"\nmissing="static/missing.flx"\n'
+    )
+    assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
+    report = capsys.readouterr().out
+    assert "[u9.game]" in report and "[u9.paths]" in report
+    assert "[OK]" in next(
+        line for line in report.splitlines() if line.strip().startswith("bitmap16")
+    )
+    assert "[NOT FOUND]" in next(
+        line for line in report.splitlines() if line.strip().startswith("missing")
+    )
+    assert configured_u9_path("palette") == root / "STATIC/ANKH.PAL"
+
+
+def test_u9_discovery_skips_backups_and_accepts_static_path(setup_workspace):
+    from titan.u9.install import discover_u9_installs
+
+    outer = setup_workspace / "collection"
+    root = _u9_install(outer / "game")
+    _u9_install(outer / "backup/copy")
+    _u9_install(outer / "other_backup/copy")
+    _u9_install(outer / "patch/copy")
+    assert [item.root for item in discover_u9_installs(outer)] == [root]
+    assert discover_u9_installs(root / "STATIC")[0].root == root
+    assert discover_u9_installs(outer, max_depth=0) == []
+
+
+def test_setup_preserves_u9_custom_paths_and_confirms_base_correction(
+    setup_workspace, monkeypatch
+):
+    outer = setup_workspace / "wrapper"
+    root = _u9_install(outer / "game")
+    path = Path.cwd() / "titan.toml"
+    original = (
+        f'[u9.game]\nbase="{outer.as_posix()}"\n[u9.paths]\npalette="custom.pal"\n'
+    )
+    path.write_text(original)
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads(path.read_text())
+    assert saved["u9"]["game"]["base"] == root.as_posix()
+    assert saved["u9"]["paths"]["palette"] == "custom.pal"
+    assert path.with_name("titan.toml.bak").read_text() == original
+
+
+def test_u9_save_browser_uses_config_only_without_explicit_source(
+    setup_workspace, monkeypatch
+):
+    from titan.u9 import save_browser_ui
+
+    root = _u9_install(setup_workspace / "install")
+    monkeypatch.setattr(
+        _config,
+        "_config",
+        {"u9": {"game": {"base": str(root)}, "paths": {"static": "STATIC"}}},
+    )
+    seen = []
+    monkeypatch.setattr(
+        save_browser_ui, "choose_u9_save_browser_source", lambda game: seen.append(game)
+    )
+    assert save_browser_ui.run_u9_save_browser() == 0
+    assert seen == [root]
+    seen.clear()
+    other = setup_workspace / "other"
+    assert save_browser_ui.run_u9_save_browser(game_dir=other) == 0
+    assert seen == [other]
+
+
+def test_u9_save_browser_help_mentions_config_default():
+    result = CliRunner().invoke(cli.app, ["u9", "save-browse", "--help"])
+    assert result.exit_code == 0
+    assert "[u9.game].base" in result.output
+
+
 def test_setup_menu_cancellation_preserves_files(setup_workspace, monkeypatch):
     from titan import _wizard_ui as ui
     import questionary
