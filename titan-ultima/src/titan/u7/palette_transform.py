@@ -18,9 +18,10 @@ conversion, matching Exult.
   brightness-contiguous run of palette entries) onto another.  Ramps are
   **not** a fixed layout -- they're detected by scanning palette 0 for
   brightness discontinuities, with forced breaks at the six
-  colour-cycling ranges (``get_ramps``, porting ``palette.cc:581-654``),
-  then remapped proportionally by source/target ramp size
-  (``generate_remap_xformtable``, porting ``palette.cc:697-724``).
+  colour-cycling ranges (``get_ramps``), then remapped proportionally by
+  source/target ramp size (``generate_remap_xformtable``).  Both are
+  written from a behavioural spec and produce output identical to
+  Exult's ``Palette::get_ramps`` / ``Generate_remap_xformtable``.
 """
 
 from __future__ import annotations
@@ -59,85 +60,88 @@ class Ramp:
     end: int
 
 
+def _ramp_boundaries(
+    colors: Sequence[Tuple[int, int, int]], threshold: int
+) -> list[int]:
+    """Indices 2-255 that begin a new ramp.
+
+    Every colour-cycling range start is a boundary.  Below the first
+    cycling range, an index is also a boundary when its brightness
+    (R+G+B) differs from the previous index's by more than *threshold*.
+    """
+    cycle_starts = {rng.start for rng in CYCLE_RANGES}
+    gradient_limit = min(cycle_starts)
+    brightness = [sum(rgb) for rgb in colors[:256]]
+    return [
+        idx
+        for idx in range(2, 256)
+        if idx in cycle_starts
+        or (
+            idx < gradient_limit
+            and abs(brightness[idx] - brightness[idx - 1]) > threshold
+        )
+    ]
+
+
 def get_ramps(
     colors: Sequence[Tuple[int, int, int]], *, threshold: int = DEFAULT_RAMP_THRESHOLD
 ) -> list[Ramp]:
-    """Port of Exult's ``Palette::get_ramps`` (``palette.cc:581-654``).
+    """Split palette indices 1-255 into brightness-contiguous ramps.
 
-    Scans *colors* (normally palette 0 -- Exult always derives ramps from
-    the day palette regardless of which palette is active) for brightness
-    discontinuities greater than *threshold*, with forced ramp breaks at
-    each of the six palette-cycling range starts.  Index 0 is never
-    included in any ramp.  Returns at most 32 ramps, matching Exult's
-    fixed-size ``Ramp ramps[32]``.
+    *colors* is normally palette 0: ramps are always derived from the day
+    palette, whichever palette is active.  Index 0 belongs to no ramp.
+    Ramps run from one boundary (see :func:`_ramp_boundaries`) to just
+    before the next; the final ramp ends at 255.  Matching Exult's
+    ``Palette::get_ramps`` output, no boundaries yields no ramps, and at
+    most 32 ramps are kept -- when truncated, the last kept ramp still
+    ends just before the boundary that would have started ramp 33.
     """
     if len(colors) < 256:
         return []
 
-    cycle_starts = frozenset(rng.start for rng in CYCLE_RANGES)
-    first_cycle_start = min(cycle_starts)
-
-    starts = [1]
-    ends: list[int] = []
-    r = 0
-    hit_cap = False
-    last = sum(colors[1])
-
-    for c in range(2, 256):
-        brightness = sum(colors[c])
-        is_break = (
-            (c < first_cycle_start and abs(brightness - last) > threshold)
-            or c in cycle_starts
-        )
-        if is_break:
-            ends.append(c - 1)
-            r += 1
-            if r >= _MAX_RAMPS:
-                hit_cap = True
-                break
-            starts.append(c)
-        last = brightness
-
-    if r == 0:
+    boundaries = _ramp_boundaries(colors, threshold)
+    if not boundaries:
         return []
-    if not hit_cap:
-        ends.append(255)
 
-    return [Ramp(s, e) for s, e in zip(starts, ends)]
+    starts = [1, *boundaries]
+    ends = [b - 1 for b in boundaries] + [255]
+    return [Ramp(s, e) for s, e in zip(starts, ends)][:_MAX_RAMPS]
+
+
+def _rescale(position: int, source: Ramp, target: Ramp) -> int:
+    """Map *position* in *source* to the same relative spot in *target*.
+
+    The relative position is quantized to 1/256 steps first, and both
+    divisions floor, so results match Exult's integer remap exactly.
+    """
+    source_span = source.end - source.start
+    target_span = target.end - target.start
+    fraction = (position - source.start) * 256 // source_span if source_span else 0
+    return (target.start + fraction * target_span // 256) & 0xFF
 
 
 def generate_remap_xformtable(ramps: Sequence[Ramp], remaps: Dict[int, int]) -> bytes:
-    """Port of Exult's ``Palette::Generate_remap_xformtable``
-    (``palette.cc:697-724``).
+    """Build a 256-entry index table moving whole ramps onto other ramps.
 
-    *remaps* maps a source ramp number to a target ramp number for every
-    ramp that should be remapped -- a dict rather than Exult's
-    sentinel-terminated 32-int array, which encodes the same "which ramps
-    remap to which" input differently.  Ramps not present in *remaps*, or
-    mapping to themselves, or referencing an out-of-range ramp number, are
-    left as identity (Titan tightens Exult's ``to > num_ramps`` bound to
-    ``>=`` since this port's ``ramps`` list is sized exactly to the
-    detected count, unlike Exult's fixed 32-slot array).
+    *remaps* maps source ramp number -> target ramp number.  Each index in
+    a source ramp is placed at the proportionally equivalent index of its
+    target ramp (:func:`_rescale`).  Every other index maps to itself, as
+    do entries that remap a ramp to itself, name a ramp number outside
+    *ramps*, or have a source ramp starting at index 0.  Later entries win
+    where source ramps overlap.  Output matches Exult's
+    ``Palette::Generate_remap_xformtable`` for the same remaps.
     """
-    num_ramps = len(ramps)
     table = bytearray(range(256))
+    valid = range(len(ramps))
 
     for source_ramp, target_ramp in remaps.items():
-        if source_ramp == target_ramp:
+        if source_ramp == target_ramp or source_ramp not in valid or target_ramp not in valid:
             continue
-        if not (0 <= source_ramp < num_ramps) or not (0 <= target_ramp < num_ramps):
+        source, target = ramps[source_ramp], ramps[target_ramp]
+        if source.start == 0:
             continue
-
-        from_ramp = ramps[source_ramp]
-        to_ramp = ramps[target_ramp]
-        from_size = from_ramp.end - from_ramp.start
-        to_size = to_ramp.end - to_ramp.start
-        if from_ramp.start == 0:
-            continue
-
-        for c in range(from_ramp.start, from_ramp.end + 1):
-            offset = ((c - from_ramp.start) * 256) // from_size if from_size else 0
-            table[c] = (to_ramp.start + (offset * to_size) // 256) & 0xFF
+        for idx in range(source.start, source.end + 1):
+            table[idx] = _rescale(idx, source, target)
 
     return bytes(table)
 
