@@ -1,3 +1,6 @@
+[md.game]
+base = "D:/_Repos/tgwUltima/mddata/MARTIAN"
+
 [uo.game]
 # Default install when a uo command's CLIENT argument is omitted.
 install = "classic"

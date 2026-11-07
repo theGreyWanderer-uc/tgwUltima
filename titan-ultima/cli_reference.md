@@ -34,6 +34,7 @@ titan uw2 <command>             # Ultima Underworld II: Labyrinth of Worlds
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 titan u6 <command>              # Ultima 6: The False Prophet
+titan md <command>              # Martian Dreams maps, actors, saved state and text
 titan u3 <command>              # Ultima III NES map conversion
 titan u9 <command>              # Ultima 9: Ascension
 titan uo <command>              # Ultima Online Classic Client
@@ -5155,9 +5156,18 @@ titan u6 tile-export-all -g "C:/Ultima6" -o tiles_png/
 Render the U6 surface world or a dungeon level to PNG, with animated
 tiles and optional world-object overlay.
 
+With `--objects`, a crop includes visible sprite cells even when the object's
+anchor lies just beyond its right or bottom edge. Object layering and animation
+ticks use the existing U6 rules. See the [crop audit](reference/u6/render/u6_map_crop_reference.md).
+Objects with the invisibility flag are hidden by default; `--show-invisible`
+includes them and requires `--objects`. The z-order audit accepts the same
+visibility option. Crop x/y must be nonnegative, width/height must be positive,
+and the entire region must fit the selected 1024×1024 surface or 256×256
+underground map. Invalid regions report an error without writing the output.
+
 ```
 titan u6 map-render [-g DIR] [-p FILE] [--region x,y,w,h] [--dungeon N]
-                     [--full] [--tick N] [--objects] [-o FILE]
+                     [--full] [--tick N] [--objects] [--show-invisible] [-o FILE]
 ```
 
 | Argument | Description |
@@ -5169,6 +5179,7 @@ titan u6 map-render [-g DIR] [-p FILE] [--region x,y,w,h] [--dungeon N]
 | `--full` | Render the entire surface (very large image) |
 | `--tick N` | Animation tick, for water/animated tiles (default: `0`) |
 | `--objects` | Overlay world objects (furniture, items, etc.) from `LZOBJBLK`/`LZDNGBLK` |
+| `--show-invisible` | Include invisible world objects; requires `--objects`; default is hidden |
 | `-o FILE`, `--output FILE` | Output PNG path |
 
 **Examples**
@@ -5187,26 +5198,31 @@ titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
 
 #### `u6 map-audit-zorder`
 
-Whole-map audit for unresolved object z-order ties in `map-render
---objects`. Reproduces that command's own anchor/overflow/layer-tier
-rules and flags every world coordinate where two or more objects land
-on the exact same final tier -- a coin-flip decided by file order, not
-a deliberate hierarchy. A reported pair is a *candidate*, not a
-confirmed bug -- cross-check against a real screenshot before trusting
-one.
+Inspect ordered object overlaps in `map-render --objects` at animation tick zero.
+Uses the renderer's original U6 cell-stack rules, without object/tile/coordinate
+exceptions. Ordinary cells prepend, foreground anchors insert before existing
+foreground cells, and foreground overflow appends. Background cells replace the
+selected ground tile. Earlier ordinary records therefore appear above later ones.
+
+Rows show distinct named overlays with intersecting opaque pixels: `UNDER`,
+`OVER`, `order` and `overlap_pixels` describe the actual draw order. The header is
+`total ordered overlap candidates`. These are deterministic overlaps to inspect,
+not unresolved ties or confirmed rendering errors. Backgrounds are not competing
+overlays. See the [U6 layer policy](reference/u6/render/u6_object_layering_reference.md) for validation and scope.
 
 ```
 titan u6 map-audit-zorder [-g DIR] [--min-winner-opacity F] [--min-loser-opacity F]
-                           [--limit N] [--dungeons]
+                           [--limit N] [--dungeons] [--show-invisible]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `-g DIR`, `--gamedir DIR` | U6 game directory |
-| `--min-winner-opacity F` | Min opacity for a tied tile to count as a plausible occluding "winner" (default: `0.60`) |
-| `--min-loser-opacity F` | Min opacity for a tied tile to count as a real, hideable "loser" (default: `0.10`) |
+| `--min-winner-opacity F` | Minimum opacity of the top overlay (default: `0.60`) |
+| `--min-loser-opacity F` | Minimum opacity of an underlying overlay (default: `0.10`) |
 | `--limit N` | Max rows to print, `0` = unlimited (default: `200`) |
 | `--dungeons` | Also scan all 5 dungeon levels |
+| `--show-invisible` | Include invisible world objects in the audit, matching that render mode |
 
 **Examples**
 ```bash
@@ -5498,6 +5514,92 @@ titan u6 schedule-dump SCHEDULE --actor 0
 ```
 
 ---
+
+## Martian Dreams commands (`titan md`)
+
+### `map-render`
+
+Render the MD surface or an underground level using the shared U6 format
+readers and MD-specific resource wrappers, palette and animation defaults.
+
+```text
+titan md map-render -g <MARTIAN-or-parent> --region 385,596,64,64 --objects --actors -o md_start.png
+titan md map-render -g <MARTIAN> --dungeon 0 --objects -o underground.png
+titan md map-render -g <MARTIAN> --full --objects -o world.png
+```
+
+| Option | Description |
+|---|---|
+| `-g`, `--gamedir` | MARTIAN directory or installation parent; defaults to `[md.game] base` |
+| `-p`, `--palette` | Palette path; defaults to the game's `MDPAL` |
+| `--region x,y,w,h` | Crop in tiles; must fit within the selected map |
+| `--dungeon 0-4` | Select an underground level instead of the surface |
+| `--full` | Entire selected map; cannot be combined with `--region` |
+| `--objects` | Overlay visible world objects with multi-tile footprints |
+| `--actors` | Overlay MD party/NPC/creature appearances between ordinary objects and foreground cells |
+| `--savegame DIR` | Read DOS `OBJLIST` clock/world flags and any selected actor/object overlays |
+| `--show-markers` | Include MD marker tiles 2041-2047; requires `--objects` |
+| `--show-invisible` | Include invisible world-object sprites; requires `--objects`; default is hidden |
+| `--tick N` | Nonnegative animation tick for automatically animated tiles |
+| `--palette-tick N` | VGA palette update phase, independent of tile tick; `0` keeps original colors |
+| `--lighting` | Apply DOS lighting/dither masks, visible wall faces and object-cell clipping to a region up to 11x11 tiles, viewed from its center; default atlas output is full bright |
+| `-o`, `--output` | Output PNG; defaults to `md_surface.png` or `md_underground_N.png` |
+
+Specify `--region`, `--dungeon` or `--full`. The surface produces a
+16384x16384 image; a complete underground level produces a 4096x4096 image.
+Objects and actors default to the packaged initial world. Actor 118 talk flag 5
+selects the filled cistern; canals require both flags 5 and 6 (opened valves).
+Both use fixed dry/wet art, independent of `--tick`. Power flags control
+machinery animations and restore load-time lamp/furnace frames and steam leaks;
+watches follow the saved hour. See [power-state reference](reference/md/animation/md_power_animation_reference.md) for the
+verified stop/start ranges and timing.
+Invisible NPCs are hidden, while invisible party members retain outlines.
+`--show-invisible` controls world objects; actor overlays retain their existing
+NPC visibility and party-outline rules. Marker inclusion still uses `--show-markers`,
+and `--lighting` still applies normal visibility and wall-corner clipping.
+Cistern filling/release cutscenes and transient effects are not simulated.
+`--lighting` reads the selected save's clock, dream illumination, readied party
+lights and selected actor's brown-berry timer. Nearby powered lamp posts and
+other local light sources contribute through the surrounding view context.
+Visible brick, interior and iron wall faces follow neighboring visibility;
+objects are clipped per footprint cell at unseen wall corners. See the
+[viewport compositor trace](reference/md/render/md_viewport_reference.md) for wall families and native checks.
+See [lighting and palette reference](reference/md/palette/md_lighting_palette_reference.md) for original
+clock thresholds, palette ranges, bounded-view semantics and executable checks.
+See [water-state reference](reference/md/animation/md_water_animation_reference.md) for water-state evidence.
+No MD save-editing commands are exposed.
+
+### Actor, save-state and reference commands
+
+All commands below accept `-g/--gamedir` (or `[md.game] base`) and
+`-o/--output FILE`. Output is UTF-8; omit the file for stdout.
+
+| Command | Selection | Output |
+|---|---|---|
+| `actor-list` | `--actor 0-255`; defaults to active slots; `--savegame DIR` selects saved actors | JSON actor names, positions, appearance, stats and raw flags |
+| `gamestate-dump` | `--savegame DIR`; defaults to initial state | JSON party, game clock, gender, dream flags, berry timers, power, cistern pressure, opened valves and resulting canal state |
+| `converse-dump` | `--item N`; defaults to all NPC scripts | `TALK.LZC` bytecode disassembly, retaining unknown opcodes and operands |
+| `converse-report` | All NPC scripts | JSON coverage and unknown opcode locations |
+| `look-dump` | `--tile 0-2047`; defaults to stored name records | JSON raw/singular/plural names and range-end tile numbers |
+| `book-dump` | `--book N`; defaults to all text records | `MDTEXT.LZC` text with line/page markers preserved |
+
+The MD actor tables use base appearance `0x16f1`, talk flags `0x18f1`,
+movement flags `0x1af1`, combat mode `0x13f1`, movement points `0x15f1`,
+and worktype `0x11f1`. The byte at `0x12f1` is retained as raw `magic`,
+matching Nuvie's loader; its MD gameplay semantics are not established.
+Cold is status bit 0, replacing U6's protection meaning.
+
+MD game time starts at `0x1cf3`. Canal restoration is actor 118 talk flag 6
+(retail Trippet script, item 53, offset 2038); power is actor 115 flag 2.
+These inspections never interpret U6 karma, sacred-quest or Gargish bytes
+as MD state. `TALK.LZC` record 0 is non-NPC build text and is excluded from
+normal dialogue exports. MD `0xdf` at Dr. Blood's offsets 2243 and 2710 is
+`SET_YSTRING`: evaluate an actor expression, apply the game's actor-ID
+resolution, and assign `"you"` for resolved actor 1 or the actor's name to
+string variable `0x22` (`$Y`). Unlike `0xd8` (`SETNAME`), it special-cases
+actor 1. The MD-specific name was verified in retail `GAME.EXE` and bounded
+machine-code emulation; the context-free U6 opcode table remains unchanged.
+See [the investigation](reference/md/converse/md_converse_opcode_df_reference.md) for addresses and reproduction.
 
 ## Ultima 9 commands (`titan u9`)
 
@@ -9273,7 +9375,7 @@ A value on the command line always wins.
 | `u6 tile-export` | Export one U6 tile to PNG |
 | `u6 tile-export-all` | Batch-export a range of U6 tiles to PNG |
 | `u6 map-render` | Render the U6 surface world or a dungeon level to PNG |
-| `u6 map-audit-zorder` | Flag candidate object z-order ties in `map-render --objects` |
+| `u6 map-audit-zorder` | Inspect engine-ordered object pixel overlaps in `map-render --objects` |
 | `u6 object-list` | List world objects in a surface block or dungeon level |
 | `u6 egg-list` | List every egg (object spawner) in a surface block or dungeon level |
 | `u6 actor-list` | List the NPC/actor identity table |

@@ -34,6 +34,7 @@ exult/
 titan-ultima/reference/
 
 # Local game/runtime data
+mddata/
 u6data/
 u7data/
 u8data/

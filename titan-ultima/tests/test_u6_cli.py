@@ -349,7 +349,7 @@ class MapAuditZorderCliTests(unittest.TestCase):
         # BASETILE[10] -> tnum 20 ("apple"), BASETILE[11] -> tnum 21 ("banana"):
         # both plain/opaque MAPTILES-range tiles (MASKTYPE all-zero "plain"
         # format, TILEFLAG all-zero -> neither background/foreground/
-        # supporting, so both land in the same "plain" layer tier).
+        # supporting, so both are ordinary overlay cells).
         basetile = bytearray(2048)
         struct.pack_into("<H", basetile, 10 * 2, 20)
         struct.pack_into("<H", basetile, 11 * 2, 21)
@@ -359,7 +359,7 @@ class MapAuditZorderCliTests(unittest.TestCase):
             f.write(struct.pack("<H", 20) + b"apple\x00" + struct.pack("<H", 21) + b"banana\x00")
 
         # Two distinct objects (obj_n=10, obj_n=11) at the identical position
-        # (5,5,0) -- a genuine same-tier tie, replacing the base fixture's
+        # (5,5,0) -- an ordinary stack overlap, replacing the base fixture's
         # single obj_n=3 object.
         rec_a = struct.pack("<BBBBBBBB", 0x00, *pack_position(5, 5, 0), 10, 0, 1, 0)
         rec_b = struct.pack("<BBBBBBBB", 0x00, *pack_position(5, 5, 0), 11, 0, 1, 0)
@@ -387,13 +387,13 @@ class MapAuditZorderCliTests(unittest.TestCase):
         rc = cmd_map_audit_zorder(self._args())
         self.assertEqual(rc, 1)
 
-    def test_detects_the_seeded_tie(self):
+    def test_describes_the_seeded_overlap(self):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = cmd_map_audit_zorder(self._args())
         self.assertEqual(rc, 0)
         output = buf.getvalue()
-        self.assertIn("total true-tie candidates: 1", output)
+        self.assertIn("total ordered overlap candidates: 1", output)
         self.assertIn("apple", output)
         self.assertIn("banana", output)
 
@@ -541,14 +541,8 @@ class OverlappingObjectForegroundOrderTests(unittest.TestCase):
         self.assertEqual(img.getpixel((5 * 16, 5 * 16)), (255, 0, 0))
 
 
-class SupportingObjectLayerOrderTests(unittest.TestCase):
-    """
-    An item resting on a supporting object (e.g. a knife on a table) must
-    render on top of it, not the reverse -- found from a real render where
-    tools/tableware placed on a table (TILEFLAG's is_supporting, "other
-    objects can be placed on top of this one") were hidden underneath it
-    because the table happened to come later in LZOBJBLK's file order.
-    """
+class SupportingFlagDoesNotRankTests(unittest.TestCase):
+    """The supporting flag controls placement, not layering; earlier records draw last."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -590,9 +584,9 @@ class SupportingObjectLayerOrderTests(unittest.TestCase):
             f.write(bytes(pal))
 
         # Both objects on-map at the identical coordinate (10, 10, 0). The
-        # supporting "table" (obj_n=11) is written LAST -- a plain
-        # file-order composite would let it paint over the "knife" (obj_n=10)
-        # and hide it instead.
+        # supporting "table" (obj_n=11) is written FIRST. The native
+        # ordinary-cell insertion keeps it above the later knife; the
+        # supporting bit does not override record order.
         b0, b1, b2 = pack_position(10, 10, 0)
         item_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 10, 0, 1, 0)
         table_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 11, 0, 1, 0)
@@ -603,7 +597,7 @@ class SupportingObjectLayerOrderTests(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def test_item_on_table_wins_regardless_of_file_order(self):
+    def test_supporting_flag_does_not_override_stored_order(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
         rc = cmd_map_render(SimpleNamespace(
             gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
@@ -613,19 +607,11 @@ class SupportingObjectLayerOrderTests(unittest.TestCase):
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5) within it.
-        self.assertEqual(img.getpixel((5 * 16, 5 * 16)), (255, 0, 0))
+        self.assertEqual(img.getpixel((5 * 16, 5 * 16)), (0, 0, 255))
 
 
-class AnchorBeatsOverflowCellTests(unittest.TestCase):
-    """
-    An object's own anchor cell must win over a *different* object's
-    overflow/secondary cell landing on the same spot, even if that overflow
-    cell is is_foreground -- found from a real render where a hammer
-    (anchored on its own tile) was hidden under a forge hood's overhanging
-    secondary cell, which is flagged is_foreground for an unrelated reason
-    (the hood's own top surface). Foreground only settles ties when the
-    cell in question isn't outclassed by someone's actual anchor placement.
-    """
+class ForegroundOverflowCoversAnchorTests(unittest.TestCase):
+    """Native foreground overflow appends above an ordinary neighboring anchor."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -687,7 +673,7 @@ class AnchorBeatsOverflowCellTests(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def test_anchor_wins_over_foreign_overflow_cell(self):
+    def test_foreground_overflow_covers_ordinary_anchor(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
         rc = cmd_map_render(SimpleNamespace(
             gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
@@ -697,20 +683,11 @@ class AnchorBeatsOverflowCellTests(unittest.TestCase):
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5) within it.
-        self.assertEqual(img.getpixel((5 * 16, 5 * 16)), (255, 0, 0))
+        self.assertEqual(img.getpixel((5 * 16, 5 * 16)), (0, 0, 255))
 
 
 class OverflowCellsPreserveForegroundOrderTests(unittest.TestCase):
-    """
-    Two objects' overflow cells landing on the same spot must still resolve
-    by TILEFLAG's own is_foreground/is_supporting ranking *among
-    themselves*, even when a third object's anchor also lands there and
-    wins overall -- found from a real render where a forge hood's overflow
-    cell (is_foreground) is supposed to stay visually above the fire's
-    overflow cell beneath it, but an earlier version of the fix collapsed
-    every non-anchor cell to one flat "loses to anchor" tier, letting file
-    order decide hood vs. fire and sometimes drawing the fire on top.
-    """
+    """Foreground overflow covers both ordinary overflow and ordinary anchor pixels."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -781,7 +758,7 @@ class OverflowCellsPreserveForegroundOrderTests(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def test_hood_overflow_still_beats_fire_overflow_under_hammer(self):
+    def test_foreground_hood_overflow_covers_fire_and_hammer(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
         rc = cmd_map_render(SimpleNamespace(
             gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
@@ -792,21 +769,12 @@ class OverflowCellsPreserveForegroundOrderTests(unittest.TestCase):
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 255, 0))  # hammer's own opaque pixel wins
+        self.assertEqual(img.getpixel((80, 80)), (0, 255, 0))  # native foreground overflow wins
         self.assertEqual(img.getpixel((88, 88)), (0, 255, 0))  # hammer transparent here: hood (green), not fire (blue)
 
 
-class WarmObjectYieldsToAnchoredItemTests(unittest.TestCase):
-    """
-    A heat/light source (is_warm, e.g. a forge's fire) anchored at the same
-    coordinate as an unrelated item (e.g. a pair of pliers set down next to
-    it) must render underneath that item, not over it -- found from two
-    real forges where the fire and the pliers are anchored at the
-    *identical* spot; with neither flagged supporting/foreground, both fell
-    into the same plain tier, and the fire (92% opaque in the real data)
-    happened to win the file-order tiebreak and completely hid the pliers
-    (21% opaque) underneath it.
-    """
+class WarmObjectRecordOrderTests(unittest.TestCase):
+    """The earlier pliers record remains above a later warm fire record."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -961,16 +929,8 @@ class BackgroundAnchorYieldsToForeignOverflowCellTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # bed fabric wins over the carpet's anchor
 
 
-class CarpetObjTypeIsAlwaysBackgroundTests(unittest.TestCase):
-    """
-    Every carpet (obj_n=303) frame must be treated as background, even when
-    that specific frame's own TILEFLAG byte isn't flagged is_background --
-    found from a real carpet where only 2 of its 18 frames (the
-    heavily-repeated fill piece) carry the flag; the many border/corner
-    frames don't, even though they're the same floor-covering object. A
-    table+candle pair anchored on one of those unflagged corner frames was
-    still getting covered by the carpet underneath it.
-    """
+class UnflaggedCarpetRecordOrderTests(unittest.TestCase):
+    """An earlier candle record remains above an unflagged carpet record."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1115,15 +1075,8 @@ class AnimatedPlaceholderObjectCellTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # resolved to tile 601, not left blank
 
 
-class MisflaggedCookfireTileTests(unittest.TestCase):
-    """
-    Tiles 1132-1133 are one specific cookfire orientation that LOOK.LZD
-    names identically to its sibling orientation (which IS flagged
-    is_foreground), but TILEFLAG omits the flag on this pair -- a one-off
-    data omission, not a pattern covering the whole object (its own "logs"
-    frame, same obj_n, correctly isn't foreground). Found from a cookfire
-    that rendered underneath the logs it should appear to burn on top of.
-    """
+class CookfireRecordOrderTests(unittest.TestCase):
+    """Earlier cookfire cells remain above later logs without tile-ID promotion."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1183,29 +1136,15 @@ class MisflaggedCookfireTileTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # cookfire wins over the logs
 
 
-class MisflaggedForegroundGroundClutterWinnerTests(unittest.TestCase):
-    """
-    Ground clutter found in a dungeon loot pile, none of it flagged
-    anything at all in TILEFLAG, so ties there were decided by file-order
-    coincidence. A first attempt demoted the *losing* side (pile of bones,
-    dead gargoyle, armor) to background/tier 0, but that regressed two
-    other confirmed cases -- a leather armor piece hidden under a table,
-    and a pile of bones hidden under an altar's overflow cell -- since a
-    table/altar's own is_supporting tier is *also* 0, so the demoted loser
-    stopped being able to win against supporting furniture it should
-    still show on top of. Promoting the specific *winning* tile to
-    foreground instead avoids that: real tile numbers are used here (not
-    synthetic placeholders) since the fix is keyed to exact tile numbers,
-    not obj_n.
-    """
+class BodyAndBonesRecordOrderTests(unittest.TestCase):
+    """Earlier body cells remain above later bones without tile-ID promotion."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         _make_synthetic_gamedir(self.tmpdir.name)
 
-        # BASETILE[10] = 1262 (a real "dead body" tile, promoted to
-        # foreground). BASETILE[11] = 1271 (the real "pile of bones" tile,
-        # left plain).
+        # BASETILE[10] = 1262 ("dead body"); BASETILE[11] = 1271
+        # ("pile of bones"). Both are ordinary cells; record order ranks them.
         basetile = bytearray(2048)
         struct.pack_into("<H", basetile, 10 * 2, 1262)
         struct.pack_into("<H", basetile, 11 * 2, 1271)
@@ -1260,24 +1199,15 @@ class MisflaggedForegroundGroundClutterWinnerTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # dead body wins over the bones
 
 
-class MisflaggedForegroundUtensilOverBloodTests(unittest.TestCase):
-    """
-    A butcher-room cleaver/knife (obj_n=113/114, tiles 637-639) and blood
-    splatter (obj_n=338, tiles 1259-1261) are both unflagged in TILEFLAG,
-    so they tie at the plain tier and file order decides -- confirmed via
-    a real screenshot crop showing blood pixels bleeding onto the
-    cleaver's blade. Blood is meant to show on tables and on carcass
-    parts, but not on top of hand tools/utensils, so the utensil tile is
-    the one promoted to foreground (not blood demoted, per the
-    promote-the-winner lesson from the ground-clutter regression).
-    """
+class UtensilAndBloodRecordOrderTests(unittest.TestCase):
+    """An earlier cleaver record remains above later blood."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         _make_synthetic_gamedir(self.tmpdir.name)
 
         # BASETILE[10] = 1259 (the real "blood" tile, plain). BASETILE[11]
-        # = 637 (the real "cleaver" tile, promoted to foreground).
+        # = 637 (the real "cleaver" tile, also ordinary).
         basetile = bytearray(2048)
         struct.pack_into("<H", basetile, 10 * 2, 1259)
         struct.pack_into("<H", basetile, 11 * 2, 637)
@@ -1332,23 +1262,15 @@ class MisflaggedForegroundUtensilOverBloodTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # cleaver (foreground) wins over blood (plain)
 
 
-class MisflaggedForegroundBowOverMapTests(unittest.TestCase):
-    """
-    A dungeon2 loot pile's "magic bow" (tile 565) and "part of a map"
-    (tile 1757) share an exact coordinate and are both unflagged in
-    TILEFLAG, so they tie at the plain tier -- confirmed by rendering the
-    full dungeon 2 map at the reported coordinates (149, 5) and finding
-    the map fragment's own tile winning the coin flip, completely hiding
-    the bow the user was searching for underneath it.
-    """
+class BowAndMapRecordOrderTests(unittest.TestCase):
+    """An earlier bow record remains above a later map fragment."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         _make_synthetic_gamedir(self.tmpdir.name)
 
         # BASETILE[10] = 1757 (the real "part of a map" tile, plain).
-        # BASETILE[11] = 565 (the real "magic bow" tile, promoted to
-        # foreground).
+        # BASETILE[11] = 565 (the real "magic bow" tile, also ordinary).
         basetile = bytearray(2048)
         struct.pack_into("<H", basetile, 10 * 2, 1757)
         struct.pack_into("<H", basetile, 11 * 2, 565)
@@ -1403,23 +1325,8 @@ class MisflaggedForegroundBowOverMapTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # bow (foreground) wins over the map (plain)
 
 
-class SignNorthLosesToPostOnlyAtDoublePlaqueCoordsTests(unittest.TestCase):
-    """
-    Sign plaque tile 1243 ("north") appears at 11 real-map coordinates; at
-    9 of them it's the only plaque on its post and must beat the post
-    like any other plaque (obj_n=332 frame 3 has no TILEFLAG bits set, so
-    without an explicit rule it ties the post -- but its *actual* LZOBJBLK
-    seq happens to be higher than the post's at all 11 spots, so left
-    alone it already wins everywhere). At exactly 2 of those coordinates
-    (294,407 and 284,410, real-world bones_altar-room signposts) it's
-    paired with a second, winning plaque ("south", tile 1241, promoted to
-    foreground) sharing the same post: confirmed against a real
-    screenshot that only one plank should show there, with the post
-    visible in the gaps, not two side-by-side planks. A global tile-based
-    demotion of 1243 would fix those 2 but break the other 9, so the fix
-    is a (world_x, world_y) coordinate override
-    (SIGN_NORTH_LOSES_TO_POST_AT) applied only at those exact spots.
-    """
+class SignStackOrderIsCoordinateIndependentTests(unittest.TestCase):
+    """Identical record order produces identical sign stacks at all coordinates."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1478,7 +1385,7 @@ class SignNorthLosesToPostOnlyAtDoublePlaqueCoordsTests(unittest.TestCase):
         # region (290,403,10,10) -> world (294,407) is pixel-tile (4,4), origin (64, 64).
         self.assertEqual(img.getpixel((64, 64)), (255, 0, 0))  # post wins over the north plaque
 
-    def test_north_plaque_still_beats_post_at_an_unrelated_coordinate(self):
+    def test_post_also_beats_later_north_plaque_at_unrelated_coordinate(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
         rc = cmd_map_render(SimpleNamespace(
             gamedir=self.tmpdir.name, palette=None, region="45,45,10,10", dungeon=None,
@@ -1488,28 +1395,18 @@ class SignNorthLosesToPostOnlyAtDoublePlaqueCoordsTests(unittest.TestCase):
 
         img = Image.open(out_path).convert("RGB")
         # region (45,45,10,10) -> world (50,50) is pixel-tile (5,5), origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # north plaque wins over the post here
+        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # earlier post wins here too
 
 
-class MisflaggedForegroundSignSouthOverNorthTests(unittest.TestCase):
-    """
-    A directional-sign puzzle room has two sign coordinates (both on the
-    bones_altar room's east/west signpost) where sign frame 1241
-    ("south"-facing) and 1243 ("north"-facing) share the exact same tile,
-    both unflagged in TILEFLAG, tying at the plain tier. Confirmed against
-    a real screenshot: the north frame was winning the coin flip at both
-    coordinates, but south is correct. These are the only 2 coordinates
-    on the whole map (surface + all 5 dungeons) where 1241/1243 tie, so
-    promoting 1241 is a safe global fix.
-    """
+class SouthAndNorthSignRecordOrderTests(unittest.TestCase):
+    """An earlier south plaque remains above a later north plaque."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         _make_synthetic_gamedir(self.tmpdir.name)
 
         # BASETILE[10] = 1243 (the real "north" sign tile, plain).
-        # BASETILE[11] = 1241 (the real "south" sign tile, promoted to
-        # foreground).
+        # BASETILE[11] = 1241 (the real "south" sign tile, also ordinary).
         basetile = bytearray(2048)
         struct.pack_into("<H", basetile, 10 * 2, 1243)
         struct.pack_into("<H", basetile, 11 * 2, 1241)
@@ -1561,20 +1458,11 @@ class MisflaggedForegroundSignSouthOverNorthTests(unittest.TestCase):
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # south (foreground) wins over north (plain)
+        self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # earlier south record wins over later north record
 
 
-class ClutterStillLosesToSupportingFurnitureTests(unittest.TestCase):
-    """
-    The ground-clutter regression itself: a plain-tier object (a dropped
-    piece of armor, a pile of bones) that also happens to be a confirmed
-    "loser" against some other plain-tier rival must still win against
-    is_supporting furniture it's placed on/in, the same as any other plain
-    object -- it must NOT be demoted to background/tier 0 globally just
-    because it loses one specific matchup. Found from a leather armor
-    piece hidden under a table, and a pile of bones hidden under an
-    altar's overflow cell, after a first (wrong) fix demoted both tiles.
-    """
+class ArmorAndFurnitureRecordOrderTests(unittest.TestCase):
+    """An earlier armor record remains above a later table without extra tiers."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1617,9 +1505,8 @@ class ClutterStillLosesToSupportingFurnitureTests(unittest.TestCase):
             f.write(bytes(pal))
 
         # Both on-map at the identical coordinate (10, 10, 0). Armor
-        # written FIRST, table written LAST -- if armor were still
-        # (wrongly) demoted to background, the table's is_supporting tier
-        # would tie it and file order could hide the armor.
+        # written FIRST, table written LAST. Native ordinary-cell insertion
+        # retains the armor above the table, without a supporting tier.
         b0, b1, b2 = pack_position(10, 10, 0)
         armor_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 10, 0, 1, 0)
         table_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 11, 0, 1, 0)
@@ -1644,17 +1531,8 @@ class ClutterStillLosesToSupportingFurnitureTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # armor (plain) wins over the table (supporting)
 
 
-class MisflaggedBasketTileTests(unittest.TestCase):
-    """
-    A basket (obj_n=191, tile 758 specifically -- the same obj_n's other
-    frames are "open crate"/"crate"/"small jug"/"milk bottle") must be
-    treated as supporting even though TILEFLAG doesn't flag it: its
-    contents should show on top of it. Confirmed against a real screenshot
-    showing baskets and a bunch of grapes as distinct, both-visible
-    objects, not grapes nested invisibly inside a basket, which is what
-    six placements sharing a basket's coordinate with a grapes anchor were
-    rendering.
-    """
+class GrapesAndBasketRecordOrderTests(unittest.TestCase):
+    """Earlier grapes remain above a later basket without a tile-specific rule."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1718,23 +1596,8 @@ class MisflaggedBasketTileTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # grapes win over the basket
 
 
-class MisflaggedSignpostTileTests(unittest.TestCase):
-    """
-    A sign plaque (obj_n=332 frames 0/1/2, tiles 1240-1242) must beat its
-    own signpost (frame 6, tile 1246) even though TILEFLAG flags neither.
-    Confirmed against a real screenshot showing a plaque and its post as
-    distinct, both-visible shapes -- not the plaque completely erased by
-    its own post, which is what 26 placements sharing a signpost's
-    coordinate with a plaque anchor were rendering. (Demoting the post
-    to supporting instead, rather than promoting the plaque, was tried
-    first and reverted: it also let sign "north", tile 1243 -- the
-    *losing* plaque at the 2 coordinates that pair two plaques on one
-    post -- win its own now-uncontested tie against the post, producing
-    an unwanted second plank. See MisflaggedForegroundSignSouthOverNorthTests.)
-    A 4th plaque frame (frame 7, tile 1247) was found the same way after
-    the fact, at 4 more real coordinates -- see
-    Frame7SignPlaqueAlsoBeatsSignpostTests.
-    """
+class SignAndPostRecordOrderTests(unittest.TestCase):
+    """An earlier sign plaque remains above its later signpost."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1798,15 +1661,8 @@ class MisflaggedSignpostTileTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # sign wins over the signpost
 
 
-class Frame7SignPlaqueAlsoBeatsSignpostTests(unittest.TestCase):
-    """
-    obj_n=332 frame 7 (tile 1247) is a 4th plain-horizontal sign plaque,
-    found after the fact at 4 more real coordinates (375,599),
-    (570,348), (905,394), and dungeon2's (66,234,3), each paired only
-    with its own signpost (no second plaque) -- same "post wins file
-    order and erases the plaque" bug as frames 0-2, confirmed the post's
-    seq is lower than the plaque's at all 4.
-    """
+class Frame7SignRecordOrderTests(unittest.TestCase):
+    """Frame-seven plaques obey the same stored stack order as other frames."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1868,15 +1724,8 @@ class Frame7SignPlaqueAlsoBeatsSignpostTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # sign wins over the signpost
 
 
-class SecretDoorObjTypeIsAlwaysBackgroundTests(unittest.TestCase):
-    """
-    A secret door (obj_n=334) must be treated as background even though
-    TILEFLAG never flags it is_background -- it's drawn 100% opaque and
-    wall-colored by design (the whole point is to be indistinguishable
-    from a normal wall), so an unrelated decoration anchored on the same
-    tile (e.g. a picture hung to mark/disguise the door) always lost the
-    plain-tier tie to it and became completely invisible.
-    """
+class PictureAndSecretDoorRecordOrderTests(unittest.TestCase):
+    """An earlier picture remains above a later secret door without an object override."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1941,23 +1790,15 @@ class SecretDoorObjTypeIsAlwaysBackgroundTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # picture wins over the secret door
 
 
-class DoorwayObjTypeIsAlwaysBackgroundTests(unittest.TestCase):
-    """
-    A doorway (obj_n=301) must be treated as background even though its
-    own TILEFLAG entry is is_foreground, same as the door that fills it --
-    a 1990s U6 level-design reference (it-he.org's "List of Useful
-    Objects") says to place the doorway first and put the door on top, but
-    a whole-map audit found 30+ doorways winning that tie by file-order
-    coincidence instead, nearly erasing their own door.
-    """
+class DoorAndDoorwayRecordOrderTests(unittest.TestCase):
+    """Foreground doors and doorways retain their stored relative stack order."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         _make_synthetic_gamedir(self.tmpdir.name)
 
-        # BASETILE[10] = 601 ("door", is_foreground). BASETILE[301] = 750
-        # ("doorway", also is_foreground in the real data -- only obj_n
-        # distinguishes it here).
+        # BASETILE[10] = 601 ("door", is_foreground); BASETILE[301] = 750
+        # ("doorway", also is_foreground). Record order separates them.
         basetile = bytearray(2048)
         struct.pack_into("<H", basetile, 10 * 2, 601)
         struct.pack_into("<H", basetile, 301 * 2, 750)
@@ -2021,15 +1862,8 @@ class DoorwayObjTypeIsAlwaysBackgroundTests(unittest.TestCase):
         self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # door wins over the doorway
 
 
-class WallMountObjTypeIsAlwaysSupportingTests(unittest.TestCase):
-    """
-    A wall mount (obj_n=140) must be treated as supporting even though
-    TILEFLAG never flags it is_supporting -- it's a rack a decorative sword
-    or shield hangs on, the same "things get placed on top of this" role
-    as a table, but a decorative sword anchored on the exact same tile as
-    its wall mount tied at the plain tier and lost to it, hiding the sword
-    entirely.
-    """
+class SwordAndWallMountRecordOrderTests(unittest.TestCase):
+    """An earlier sword remains above a later mount without a supporting override."""
 
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()

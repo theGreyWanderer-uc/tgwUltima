@@ -79,6 +79,10 @@ nonfixed  = "U8SAVE.000"
 # globs    = "globs/"
 # nonfixed = "U8SAVE.000"
 #
+# [md.game]
+# # MARTIAN itself or its installation parent. Added manually; no setup detection yet.
+# base = "C:/Path/To/Martian Dreams/MARTIAN"
+#
 # [uw2.game]
 # # Commands resolve bare data names below <base>/DATA.
 # base = "C:/Path/To/Ultima Underworld 2"

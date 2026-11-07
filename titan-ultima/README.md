@@ -6,6 +6,7 @@ TITAN is a Python CLI and library for working with proprietary data formats
 from *Ultima 8: Pagan*, *Ultima Underworld: The Stygian Abyss*,
 *Ultima Underworld II: Labyrinth of Worlds*,
 *Ultima 7: The Black Gate / Serpent Isle*, *Ultima 6: The False Prophet*,
+*Martian Dreams*,
 and the *Ultima Online Classic Client*.
 It reads, extracts, converts, inspects, and
 reconstructs archives, shapes/tiles, palettes, music, speech, maps, world
@@ -16,7 +17,7 @@ Deterministic *Ultima III: Exodus* NES Sosaria-to-U7 map conversion is
 available under `titan u3`.
 
 Run `titan --help`, `titan uw1 --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`,
-`titan u6 --help`, `titan u3 --help`, `titan u9 --help`, `titan uo --help`, or see the full
+`titan u6 --help`, `titan md --help`, `titan u3 --help`, `titan u9 --help`, `titan uo --help`, or see the full
 [CLI reference](cli_reference.md).
 
 ---
@@ -244,7 +245,84 @@ flags, dialogue, and text/reference data.
 | Text and reference data | Fonts (English + runic/gargoyle); object names; books/signs; NPC daily schedules | `titan u6 book-dump BOOK.DAT --book 0` |
 
 See the [U6 commands reference](cli_reference.md#ultima-6-commands-titan-u6)
-for the full command list.
+for the full command list. The [U6 reference status index](reference/u6/u6_format_status.md)
+links the confirmed rendering contracts and their scope.
+
+Map crops retain visible cells of multi-tile objects whose anchors lie just
+outside the region. The [U6 crop audit](reference/u6/render/u6_map_crop_reference.md) documents the
+before/after boundary checks.
+Invisible world objects are hidden by default; add `--show-invisible` alongside
+`--objects` to reveal them. The z-order audit accepts the same visibility option.
+Rendering and auditing share the [original U6 cell-stack rules](reference/u6/render/u6_object_layering_reference.md),
+verified against bounded runs of the original executable. Object, tile and
+coordinate-specific layering exceptions have been removed. The audit describes
+ordered pixel overlaps for inspection; its candidate count is not an error count.
+Invalid crop coordinates, dimensions or
+map bounds produce a clear error before the output file is written.
+
+### Martian Dreams (initial)
+
+The [MD reference status index](reference/md/md_format_status.md) links the
+verified format semantics, renderer behavior and native validation.
+
+`titan md map-render` reuses the U6 tile, map, animation and object decoders
+with an explicit MD resource profile. It reads MD's size-prefixed libraries
+and `MDPAL` directly; no extraction or renaming of game files is required.
+Use the `MARTIAN` directory or its installation parent with `--gamedir`,
+or add `[md.game] base = "<install>/MARTIAN"` to `titan.toml` manually.
+
+```powershell
+titan md map-render -g "<install>/MARTIAN" --region 385,596,64,64 --objects --actors -o md_start.png
+titan md map-render -g "<install>/MARTIAN" --dungeon 0 --objects -o md_underground.png
+titan md map-render -g "<install>/MARTIAN" --full --objects -o md_world.png
+```
+
+The surface is 1024x1024 tiles (16384x16384 pixels); underground levels
+0-4 are 256x256 tiles. `--region x,y,width,height` crops either map.
+`--objects` includes multi-tile sprites and respects invisible objects,
+foreground flags and MD's hidden markers (`--show-markers` reveals them).
+Add `--show-invisible` with `--objects` to include invisible world-object sprites.
+Background cells draw beneath ordinary objects using the original MD flag and
+per-cell precedence; see the [background-layering checks](reference/md/render/md_object_layering_reference.md).
+`--actors` adds party members, NPCs and creatures between ordinary objects
+and foreground cells. MD cold, appearance and flag fields use explicit MD
+layouts. Invisible NPCs are hidden; invisible party members retain outlines.
+`--savegame <DOS SAVEGAME directory>` selects the saved clock and world flags,
+plus saved actor/object placements when their overlays are enabled. Initial
+placements are the default. Saved cistern pressure and canal-valve flags select
+fixed dry/wet art; changing `--tick` cannot switch the water state. Power flags
+control machinery and restore saved lamp/furnace/steam-leak art; watches follow the game hour.
+The [power-system trace](reference/md/animation/md_power_animation_reference.md) verifies stopped/forward modes and frame timing.
+`--lighting` adds DOS light falloff, blockers, windows, readied party lights,
+brown-berry vision and original darkness masks to crops up to 11x11 tiles,
+viewed from their center. It also selects visible brick/interior/iron wall faces
+and clips object footprint cells at unseen wall corners, following the
+[viewport compositor trace](reference/md/render/md_viewport_reference.md).
+The [scene audit](reference/md/render/md_scene_validation_reference.md) checks real-map crops across all levels
+and includes object/actor footprints wrapping across the surface world seam.
+Atlas exports stay full bright by default.
+`--palette-tick N` selects VGA color cycling separately from tile animation ticks;
+zero keeps the original colors. See the [lighting/palette trace](reference/md/palette/md_lighting_palette_reference.md).
+Cistern filling/release cutscenes and transient effects are not simulated. The original executable trace
+and reproducible water-state probe are documented in [water-state reference](reference/md/animation/md_water_animation_reference.md).
+
+MD inspections are read-only:
+
+| Command | Reads |
+|---|---|
+| `actor-list [--actor N] [--savegame DIR]` | Active actor slots or one slot, names, stats, appearance and raw flags (JSON) |
+| `gamestate-dump [--savegame DIR]` | Party, Gregorian clock, gender, dream state, berry timers and world flags (JSON) |
+| `converse-dump [--item N]` | NPC scripts in `TALK.LZC`, excluding the non-NPC build-text record |
+| `converse-report` | Script counts and unresolved opcode offsets/operands (JSON) |
+| `look-dump [--tile N]` | Correctly unwrapped `LOOK.LZC` name records and range lookup (JSON) |
+| `book-dump [--book N]` | `MDTEXT.LZC` books/signs with page markers preserved |
+
+All accept `-g/--gamedir` and `-o/--output FILE`; inspections print to stdout
+when output is omitted. Retail `TALK.LZC` contains 99 NPC scripts. Dr. Blood's
+two `0xdf` instructions decode as MD `SET_YSTRING`: select an actor's name
+for `$Y`, with `"you"` for resolved actor 1. This was verified against the
+original executable and bounded emulation; the U6 opcode table is unchanged.
+See the [opcode investigation](reference/md/converse/md_converse_opcode_df_reference.md) for reproducible evidence.
 
 ### Ultima 9 (early)
 

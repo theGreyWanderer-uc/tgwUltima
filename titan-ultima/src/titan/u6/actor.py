@@ -72,7 +72,7 @@ Example::
 
 from __future__ import annotations
 
-__all__ = ["U6Actor", "U6Actors", "U6ActorError"]
+__all__ = ["U6Actor", "U6Actors", "U6ActorError", "U6ActorLayout", "U6_ACTOR_LAYOUT"]
 
 import struct
 from dataclasses import dataclass
@@ -98,6 +98,32 @@ OFFSET_TALK_FLAGS = 0x17F1
 OFFSET_MOVEMENT_FLAGS = 0x19F1
 
 REQUIRED_SIZE = OFFSET_MOVEMENT_FLAGS + NUM_ACTORS  # smallest buffer this module can fully read
+
+
+@dataclass(frozen=True)
+class U6ActorLayout:
+    """Offsets of the actor tables that differ between U6-engine games."""
+
+    base_appearance: int = OFFSET_BASE_APPEARANCE
+    talk_flags: int = OFFSET_TALK_FLAGS
+    movement_flags: int = OFFSET_MOVEMENT_FLAGS
+    combat_mode: int = OFFSET_COMBAT_MODE
+    magic: int = OFFSET_MAGIC
+
+    @property
+    def required_size(self) -> int:
+        """Minimum OBJLIST length needed for all actor fields in this layout."""
+        return max(
+            REQUIRED_SIZE,
+            self.base_appearance + NUM_ACTORS * 2,
+            self.talk_flags + NUM_ACTORS,
+            self.movement_flags + NUM_ACTORS,
+            self.combat_mode + NUM_ACTORS,
+            self.magic + NUM_ACTORS,
+        )
+
+
+U6_ACTOR_LAYOUT = U6ActorLayout()
 
 # Status flag bits (confirmed against Nuvie's Actor.h)
 STATUS_PROTECTED = 0x01
@@ -204,9 +230,10 @@ class U6Actors:
     """Parser for the actor identity tables within ``objlist``."""
 
     @classmethod
-    def parse(cls, data: bytes) -> list[U6Actor]:
-        if len(data) < REQUIRED_SIZE:
-            raise U6ActorError(f"objlist data too short: {len(data)} bytes, need at least {REQUIRED_SIZE}")
+    def parse(cls, data: bytes, *, layout: U6ActorLayout = U6_ACTOR_LAYOUT) -> list[U6Actor]:
+        """Decode raw actor tables with explicit game offsets; defaults remain Ultima VI."""
+        if len(data) < layout.required_size:
+            raise U6ActorError(f"objlist data too short: {len(data)} bytes, need at least {layout.required_size}")
 
         def bytes_at(offset: int) -> bytes:
             return data[offset:offset + NUM_ACTORS]
@@ -219,10 +246,10 @@ class U6Actors:
         experience = struct.unpack_from(f"<{NUM_ACTORS}H", data, OFFSET_EXPERIENCE)
         hp = bytes_at(OFFSET_HP)
         level = bytes_at(OFFSET_LEVEL)
-        combat_mode = bytes_at(OFFSET_COMBAT_MODE)
-        magic = bytes_at(OFFSET_MAGIC)
-        talk_flags = bytes_at(OFFSET_TALK_FLAGS)
-        movement_flags = bytes_at(OFFSET_MOVEMENT_FLAGS)
+        combat_mode = bytes_at(layout.combat_mode)
+        magic = bytes_at(layout.magic)
+        talk_flags = bytes_at(layout.talk_flags)
+        movement_flags = bytes_at(layout.movement_flags)
 
         actors: list[U6Actor] = []
         for i in range(NUM_ACTORS):
@@ -234,7 +261,7 @@ class U6Actors:
             obj_n = b1 | ((b2 & 0x03) << 8)
             frame_n = (b2 & 0xFC) >> 2
 
-            base_off = OFFSET_BASE_APPEARANCE + i * 2
+            base_off = layout.base_appearance + i * 2
             bb1, bb2 = data[base_off], data[base_off + 1]
             base_obj_n = bb1 | ((bb2 & 0x03) << 8)
             old_frame_n = (bb2 & 0xFC) >> 2

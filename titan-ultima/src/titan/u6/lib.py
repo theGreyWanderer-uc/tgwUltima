@@ -7,9 +7,9 @@ records. Two offset widths exist -- 16-bit ("lib_16") and 32-bit
 ("lib_32"). The Worlds of Ultima titles (Martian Dreams, Savage Empire)
 additionally prefix the whole file with a 4-byte total-size field
 ("s_lib_16"/"s_lib_32") that plain Ultima 6: The False Prophet does not
-have; that variant is supported here (``has_size_header=True``) but is
-not yet validated against real MD/SE data, since our own game files are
-False Prophet.
+have; that variant is supported here (``has_size_header=True``). It has
+been validated against 52 retail MD libraries (532 nonempty records).
+Savage Empire data has not yet been validated.
 
 The offset table's length isn't stored explicitly. Nuvie's
 ``U6Lib_n::calculate_num_offsets`` works it out by scanning forward

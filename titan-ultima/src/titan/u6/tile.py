@@ -98,6 +98,7 @@ import numpy as np
 from PIL import Image
 
 from titan.u6.lzw import U6Lzw
+from titan.u6.game_profile import U6GameProfile, U6_PROFILE
 
 MASKTYPE_PLAIN = 0x00
 MASKTYPE_TRANSPARENT = 0x05
@@ -148,15 +149,13 @@ class U6Tiles:
         return len(self.tiles)
 
     @classmethod
-    def from_directory(cls, dirpath: str | os.PathLike[str]) -> U6Tiles:
-        """Load MASKTYPE.VGA, MAPTILES.VGA, and OBJTILES.VGA from a game directory."""
-        def p(name: str) -> str:
-            return os.path.join(dirpath, name)
-
-        masktype_raw = U6Lzw.decompress_file(p("MASKTYPE.VGA"))
-        maptiles = U6Lzw.decompress_file(p("MAPTILES.VGA"))
-        with open(p("OBJTILES.VGA"), "rb") as f:
-            objtiles = f.read()
+    def from_directory(
+        cls, dirpath: str | os.PathLike[str], *, profile: U6GameProfile = U6_PROFILE
+    ) -> U6Tiles:
+        """Load game tile graphics using an explicit profile; defaults preserve U6 storage."""
+        masktype_raw = profile.read_resource(dirpath, "MASKTYPE.VGA")
+        maptiles = profile.read_resource(dirpath, "MAPTILES.VGA")
+        objtiles = profile.read_resource(dirpath, "OBJTILES.VGA")
         return cls.from_parts(masktype_raw, maptiles, objtiles)
 
     @classmethod

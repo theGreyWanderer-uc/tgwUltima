@@ -10,6 +10,12 @@ work for the next release.
 
 ### Added
 
+- **Martian Dreams map rendering:** added `md map-render` for surface and
+  underground maps, with object/actor overlays and DOS save support. Saved
+  water and power states select the correct art; optional viewport lighting
+  and VGA palette cycling reproduce the verified original-engine rules.
+- **Martian Dreams inspection:** added read-only actor, game-state, dialogue,
+  object-name and book reports, including MD-specific dialogue opcode decoding.
 - **U9 texture batch export:** `texture-export-all` uses configured paths to
   export every frame from the highest-quality available tier at base resolution.
   `--all-mips` includes smaller stored mip levels; `--all-tiers` requests other
@@ -131,6 +137,12 @@ work for the next release.
 
 ### Changed
 
+- **U6/MD object visibility:** map renders hide invisible world objects by
+  default. `--show-invisible` includes them with `--objects`; U6's overlap
+  audit accepts the same visibility option.
+- **U6 overlap audit:** `map-audit-zorder` now describes actual engine-ordered
+  pixel overlaps, including the drawing rule and overlap count, rather than
+  treating them as unresolved layer ties.
 - **U7/U8 container navigation:** added persistent result lists, nested
   navigation, separate container/contents filters and clearer item identities.
   Existing U7 batch tree and CSV queries remain available.
@@ -147,6 +159,10 @@ work for the next release.
 
 ### Fixed
 
+- **U6 map rendering:** replaced object, tile and coordinate layering
+  exceptions with the original engine's cell-stack rules. Multi-tile sprites
+  retain visible cells at crop edges, and invalid regions are rejected before
+  writing output.
 - **U9 music:** the saved music node's first field is now `key` (the link of
   the trigger object that started the music), not `track`; `track` remains
   as an alias. The trigger references correct the music opcodes' call
