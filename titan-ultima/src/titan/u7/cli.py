@@ -174,9 +174,14 @@ def _resolve_ucxt_intrinsics_data(
     intrinsics_data: str | None = None,
 ) -> Optional[str]:
     """Resolve optional UCXT intrinsic-name table for U7 raw usecode output."""
-    if intrinsics_data and Path(intrinsics_data).is_file():
-        return intrinsics_data
     game_key = game.lower()
+    if game_key not in ("bg", "si"):
+        raise ValueError("U7 intrinsic game must be bg or si")
+    if intrinsics_data is not None:
+        path = Path(intrinsics_data).expanduser()
+        if not path.is_file():
+            raise ValueError(f"U7 intrinsic table not found: {path}")
+        return str(path)
     filename = "u7bgintrinsics.data" if game_key == "bg" else "u7siintrinsics.data"
     candidates: list[Path] = []
     for drive in ("C", "D"):
@@ -341,7 +346,7 @@ def _load_shape_count(
 
 def cmd_palette_export(args: SimpleNamespace) -> int:
     """Export palette(s) from PALETTES.FLX or a .pal file."""
-    from titan.u7.palette import U7Palette
+    from titan.u7.palette import PaletteEncoding, U7Palette
 
     filepath = args.file
     if not os.path.isfile(filepath):
@@ -353,7 +358,20 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
 
     slots = U7Palette.enumerate_slots(filepath)
     count = len(slots)
-    encoding = getattr(args, "encoding", None) or "auto"
+    encoding_value = getattr(args, "encoding", None) or "auto"
+    encoding: PaletteEncoding
+    if encoding_value == "auto":
+        encoding = "auto"
+    elif encoding_value == "6bit":
+        encoding = "6bit"
+    elif encoding_value == "8bit":
+        encoding = "8bit"
+    else:
+        print(
+            f"ERROR: Unknown encoding {encoding_value!r}; expected 'auto', '6bit', or '8bit'",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.index is not None:
         if args.index < 0 or args.index >= count:
@@ -901,7 +919,11 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
             f"{len(gif_frames)} steps @ {duration}ms"
         )
     else:
-        if not has_cycle_pixels(shape.frames[target_frame].pixels):
+        pixels = shape.frames[target_frame].pixels
+        if pixels is None:
+            print(f"ERROR: Frame {target_frame} has no pixel data", file=sys.stderr)
+            return 1
+        if not has_cycle_pixels(pixels):
             print(
                 f"NOTE: frame {target_frame} has no colour-cycling pixels; "
                 "the animation will look static.",
@@ -1546,6 +1568,79 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
 # ============================================================================
 
 # ---- flex ------------------------------------------------------------------
+
+
+@u7_app.command("ireg-dump")
+def ireg_dump_cmd(
+    file: Annotated[str, typer.Argument(help="Raw U7IREG stream to inspect")],
+    static: Annotated[
+        Optional[str],
+        typer.Option("--static", help="Owner's STATIC for class metadata"),
+    ] = None,
+    patch_dir: Annotated[
+        Optional[str], typer.Option("--patch-dir", help="Owner's sparse metadata patch")
+    ] = None,
+    game: Annotated[Literal["bg", "si"], typer.Option("--game")] = "bg",
+    custom_game: Annotated[
+        bool, typer.Option("--custom-game", help="Use custom STATIC text defaults")
+    ] = False,
+    superchunk: Annotated[
+        int,
+        typer.Option("--superchunk", min=0, max=143, help="World placement context"),
+    ] = 0,
+    output: Annotated[
+        Optional[str],
+        typer.Option("-o", "--output", help="Write a new JSON file (default: stdout)"),
+    ] = None,
+) -> None:
+    """Inspect objects, saved slot IDs and specials, retaining the complete raw stream."""
+    from dataclasses import asdict
+    from titan.u7.map import U7MapRenderer
+    from titan.u7.ireg_metadata import U7IregContext
+    from titan.u7.world import WorldQueryParams, load_ireg_context, load_query_metadata
+
+    try:
+        context = U7IregContext(game=game)
+        if static:
+            params = WorldQueryParams(
+                static_dir=static,
+                base_static=static,
+                patch_dir=patch_dir,
+                game=game,
+                custom_game=custom_game,
+            )
+            context = load_ireg_context(params, load_query_metadata(params)[0])
+        elif patch_dir:
+            raise ValueError("IREG --patch-dir requires --static")
+        source = Path(file)
+        stream = U7MapRenderer.parse_ireg_stream(
+            source.read_bytes(), superchunk, context=context
+        )
+        report = {
+            "file": str(source),
+            "game": game,
+            "superchunk": superchunk,
+            "objects": [asdict(obj) for obj in stream.objects],
+            "stream": asdict(stream.extras),
+        }
+        content = json.dumps(report, indent=2) + "\n"
+        if output:
+            destination = Path(output)
+            if destination.resolve() == source.resolve():
+                raise ValueError("IREG report output must differ from the source file")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("x", encoding="utf-8") as target:
+                target.write(content)
+        else:
+            print(content, end="")
+        for warning in stream.extras.warnings:
+            print(f"WARNING: {warning}", file=sys.stderr)
+        if context is not None:
+            for warning in context.warnings:
+                print(f"WARNING: {warning}", file=sys.stderr)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1)
 
 
 @u7_app.command("flex-create")
@@ -3109,6 +3204,7 @@ def cmd_shape_frame_report(args: SimpleNamespace) -> int:
 
 def cmd_static_data_dump(args: SimpleNamespace) -> int:
     """Dump U7 static metadata tables."""
+    from titan.u7.gameplay_metadata import validate_gameplay_format
     from titan.u7.names import U7ShapeNames
     from titan.u7.shapeinfo import (
         U7Ammos,
@@ -3120,37 +3216,162 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
         U7Xforms,
     )
 
-    static_dir = args.static
+    kind = args.kind.lower()
+    try:
+        data_format = validate_gameplay_format(getattr(args, "data_format", "exult"))
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    if data_format == "retail" and kind not in (
+        "weapons",
+        "weapon",
+        "ammo",
+        "ammos",
+        "armor",
+        "armors",
+    ):
+        print(
+            "ERROR: --data-format retail supports weapon, ammo and armor dumps.",
+            file=sys.stderr,
+        )
+        return 1
+    source_file = getattr(args, "file", None)
+    if source_file and kind not in (
+        "container",
+        "containers",
+        "weapons",
+        "weapon",
+        "ammo",
+        "ammos",
+        "armor",
+        "armors",
+    ):
+        print(
+            "ERROR: --file is for explicit container/combat metadata inspection.",
+            file=sys.stderr,
+        )
+        return 1
+    static_dir = args.static or (str(Path(source_file).parent) if source_file else None)
     if not static_dir:
         static_dir, _ = _resolve_u7_paths(getattr(args, "game", "bg"))
     if not static_dir or not os.path.isdir(static_dir):
         print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
         return 1
 
-    kind = args.kind.lower()
     names = U7ShapeNames.from_static_dir(static_dir)
     game = getattr(args, "game", "bg")
     exult_flx_path = getattr(args, "exult_flx", None) or _resolve_u7_exult_flx(game)
+    metadata_warnings: list[str] = []
     if kind in ("weapons", "weapon"):
-        weapons = U7Weapons.from_dir(static_dir, game=game)
+        try:
+            weapons = (
+                U7Weapons.from_file(source_file, game=game, data_format=data_format)
+                if source_file
+                else U7Weapons.from_dir(
+                    static_dir,
+                    game=game,
+                    patch_dir=getattr(args, "patch_dir", None),
+                    data_format=data_format,
+                )
+            )
+        except (OSError, ValueError) as error:
+            print(f"ERROR: weapon metadata unavailable: {error}", file=sys.stderr)
+            return 1
         content = weapons.dump_csv(names)
         label = f"{len(weapons.records)} weapon row(s)"
+        metadata_warnings = weapons.warnings
     elif kind in ("ammo", "ammos"):
-        ammos = U7Ammos.from_dir(static_dir)
+        try:
+            ammos = (
+                U7Ammos.from_file(source_file, data_format=data_format)
+                if source_file
+                else U7Ammos.from_dir(
+                    static_dir,
+                    patch_dir=getattr(args, "patch_dir", None),
+                    data_format=data_format,
+                )
+            )
+        except (OSError, ValueError) as error:
+            print(f"ERROR: ammo metadata unavailable: {error}", file=sys.stderr)
+            return 1
         content = ammos.dump_csv(names)
         label = f"{len(ammos.records)} ammo row(s)"
+        metadata_warnings = ammos.warnings
     elif kind in ("armor", "armors"):
-        armors = U7Armors.from_dir(static_dir)
+        try:
+            armors = (
+                U7Armors.from_file(source_file, data_format=data_format)
+                if source_file
+                else U7Armors.from_dir(
+                    static_dir,
+                    patch_dir=getattr(args, "patch_dir", None),
+                    data_format=data_format,
+                )
+            )
+        except (OSError, ValueError) as error:
+            print(f"ERROR: armor metadata unavailable: {error}", file=sys.stderr)
+            return 1
         content = armors.dump_csv(names)
         label = f"{len(armors.records)} armor row(s)"
+        metadata_warnings = armors.warnings
     elif kind in ("container", "containers"):
-        containers = U7Containers.from_dir(
-            static_dir,
-            game=game,
-            exult_flx_path=exult_flx_path,
-        )
+        try:
+            containers = (
+                U7Containers.from_file(source_file)
+                if source_file
+                else U7Containers.from_dir(
+                    static_dir,
+                    game=game,
+                    exult_flx_path=exult_flx_path,
+                    patch_dir=getattr(args, "patch_dir", None),
+                    custom_game=getattr(args, "custom_game", False),
+                )
+            )
+        except (OSError, ValueError) as error:
+            print(f"ERROR: container metadata unavailable: {error}", file=sys.stderr)
+            return 1
         content = containers.dump_csv(names)
         label = f"{len(containers.records)} container row(s)"
+        metadata_warnings = containers.warnings
+    elif kind in ("gump", "gumps"):
+        from titan.u7.gump_metadata import load_u7_gump_sources, read_u7_gump_metadata
+
+        try:
+            gumps = read_u7_gump_metadata(
+                load_u7_gump_sources(
+                    static_dir,
+                    patch_dir=getattr(args, "patch_dir", None),
+                    game=game,
+                    exult_flx=exult_flx_path,
+                    custom_game=getattr(args, "custom_game", False),
+                )
+            )
+        except (OSError, ValueError) as error:
+            print(f"ERROR: gump metadata unavailable: {error}", file=sys.stderr)
+            return 1
+        content = gumps.dump_csv()
+        label = "gump layout/checkmark metadata"
+        metadata_warnings = gumps.warnings
+    elif kind in ("paperdoll", "paperdol"):
+        from titan.u7.gump_metadata import load_u7_gump_sources
+        from titan.u7.paperdoll_metadata import read_u7_paperdoll_metadata
+
+        try:
+            paperdoll = read_u7_paperdoll_metadata(
+                load_u7_gump_sources(
+                    static_dir,
+                    patch_dir=getattr(args, "patch_dir", None),
+                    game=game,
+                    exult_flx=exult_flx_path,
+                    custom_game=getattr(args, "custom_game", False),
+                )
+            )
+        except (OSError, ValueError) as error:
+            print(f"ERROR: paperdoll metadata unavailable: {error}", file=sys.stderr)
+            return 1
+        content = paperdoll.dump_csv()
+        label = "paperdoll character/item/layout metadata"
+        metadata_warnings = paperdoll.warnings
     elif kind in ("xform", "xforms"):
         xforms = U7Xforms.from_dir(static_dir)
         content = xforms.dump_csv()
@@ -3170,15 +3391,23 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
         if not path.is_file():
             print(f"ERROR: usecode file not found in {static_dir}", file=sys.stderr)
             return 1
-        usecode = U7UsecodeIndex.from_file(str(path))
+        try:
+            usecode = U7UsecodeIndex.from_file(str(path))
+        except (OSError, ValueError) as error:
+            print(f"ERROR: {error}", file=sys.stderr)
+            return 1
         content = usecode.dump_csv()
         label = f"{len(usecode.functions)} usecode function row(s)"
+        metadata_warnings = usecode.warnings
     else:
         print(
-            "ERROR: kind must be weapons, ammo, armor, container, xforms, blends, or usecode",
+            "ERROR: kind must be weapons, ammo, armor, container, gumps, paperdoll, xforms, blends, or usecode",
             file=sys.stderr,
         )
         return 1
+
+    for warning in metadata_warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:
@@ -3202,8 +3431,19 @@ def _load_u7_intrinsic_names_for_cli(args: SimpleNamespace) -> dict[int, str]:
     if not path:
         return {}
     try:
-        return load_u7_intrinsic_names(path)
-    except (OSError, ValueError):
+        names = load_u7_intrinsic_names(path)
+        if not names:
+            raise ValueError(f"U7 intrinsic table contains no entries: {path}")
+        return names
+    except (OSError, ValueError) as error:
+        if getattr(args, "intrinsics_data", None) is not None:
+            raise ValueError(
+                f"Cannot read U7 intrinsic table {path}: {error}"
+            ) from error
+        print(
+            f"Warning: intrinsic names unavailable; using numeric IDs: {error}",
+            file=sys.stderr,
+        )
         return {}
 
 
@@ -3219,9 +3459,20 @@ def cmd_usecode_scan_intrinsic(args: SimpleNamespace) -> int:
     except ValueError:
         print(f"ERROR: invalid intrinsic id: {args.intrinsic}", file=sys.stderr)
         return 1
+    if not 0 <= intrinsic_id <= 0xFFFF:
+        print("ERROR: intrinsic id must be between 0 and 65535", file=sys.stderr)
+        return 1
 
-    names = _load_u7_intrinsic_names_for_cli(args)
-    usecode = U7UsecodeFile.from_file(args.file)
+    try:
+        names = _load_u7_intrinsic_names_for_cli(args)
+        usecode = U7UsecodeFile.from_file(
+            args.file, strict=bool(getattr(args, "strict", False))
+        )
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in usecode.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
     fmt = (getattr(args, "format", None) or "table").lower()
     if fmt == "csv":
         content = usecode.scan_intrinsic_csv(intrinsic_id, names)
@@ -3258,6 +3509,11 @@ def cmd_usecode_scan_intrinsic(args: SimpleNamespace) -> int:
 def cmd_usecode_disasm(args: SimpleNamespace) -> int:
     """Raw-disassemble a single U7 USECODE function."""
     from titan.u7.usecode import U7UsecodeFile
+    from titan.u7.usecode_analysis import (
+        U7UsecodeWorld,
+        U7UsecodeDefinition,
+        validate_usecode_function,
+    )
 
     if not os.path.isfile(args.file):
         print(f"ERROR: USECODE file not found: {args.file}", file=sys.stderr)
@@ -3266,14 +3522,61 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
     if disasm_all and args.function is not None:
         print("ERROR: use either FUNCTION or --all, not both", file=sys.stderr)
         return 1
-    if not disasm_all and args.function is None:
+    symbols_only = bool(getattr(args, "symbols", False))
+    if symbols_only and (
+        args.function is not None or disasm_all or getattr(args, "original", False)
+    ):
+        print(
+            "ERROR: use --symbols without FUNCTION, --all or --original",
+            file=sys.stderr,
+        )
+        return 1
+    if not disasm_all and args.function is None and not symbols_only:
         print("ERROR: provide FUNCTION or --all", file=sys.stderr)
         return 1
 
-    names = _load_u7_intrinsic_names_for_cli(args)
-    usecode = U7UsecodeFile.from_file(args.file)
-    if disasm_all:
+    try:
+        names = _load_u7_intrinsic_names_for_cli(args)
+        usecode = U7UsecodeFile.from_file(
+            args.file, strict=bool(getattr(args, "strict", False))
+        )
+        world = U7UsecodeWorld()
+        world.add_stream(usecode, source=args.file)
+        stream_warnings = list(usecode.warnings)
+        patch_file = getattr(args, "patch_file", None)
+        if patch_file:
+            patch = U7UsecodeFile.from_file(
+                patch_file, strict=bool(getattr(args, "strict", False))
+            )
+            world.add_stream(patch, source=patch_file, patch=True)
+            stream_warnings.extend(patch.warnings)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in stream_warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
+    annotate = bool(getattr(args, "annotate", False))
+    original = bool(getattr(args, "original", False))
+
+    def definitions_for_view() -> list[U7UsecodeDefinition]:
+        if disasm_all and not patch_file and not original:
+            return [
+                U7UsecodeDefinition(usecode, record, args.file)
+                for record in usecode.functions
+            ]
+        return list((world.originals if original else world.definitions).values())
+
+    if symbols_only:
+        from dataclasses import asdict
+
+        content = json.dumps([asdict(symbol) for symbol in world.symbols], indent=2)
+    elif disasm_all and not patch_file and not annotate and not original:
         content = usecode.disassemble_all(names)
+    elif disasm_all:
+        content = "\n\n".join(
+            definition.disassemble(annotate=annotate, intrinsic_names=names)
+            for definition in definitions_for_view()
+        )
     else:
         try:
             func_id = int(str(args.function), 0)
@@ -3281,11 +3584,31 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
             print(f"ERROR: invalid function id: {args.function}", file=sys.stderr)
             return 1
         try:
-            content = usecode.disassemble(func_id, names)
+            definition = world.get_function(func_id, original=original)
+            if definition is None:
+                raise KeyError(
+                    f"Function 0x{func_id:X} has no {'original' if original else 'effective'} definition"
+                )
+            content = definition.disassemble(annotate=annotate, intrinsic_names=names)
         except KeyError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
 
+    if getattr(args, "validate", False):
+        for definition in definitions_for_view():
+            if (
+                not disasm_all
+                and args.function is not None
+                and definition.record.func_id != int(str(args.function), 0)
+            ):
+                continue
+            for issue in validate_usecode_function(
+                definition.stream, definition.record
+            ):
+                print(
+                    f"Warning: function 0x{issue.function:X} at 0x{issue.file_offset:X}: {issue.message}",
+                    file=sys.stderr,
+                )
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:
             f.write(content)
@@ -3370,6 +3693,7 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
         print("Sex:    decoded from original new-game data (raw bit 9 inverted)")
         npcs = U7NPCData.from_initgame_file(
             filepath,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
         )
@@ -3377,12 +3701,14 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
         print("Sex:    decoded from Exult runtime type_flags bit 9")
         npcs = U7NPCData.from_save(
             archive,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
         )
     else:
         npcs = U7NPCData.from_file(
             filepath,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
             npc_flavor="auto",
@@ -3424,7 +3750,13 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
         return 1
 
     print(f"Source: {filepath} (loose schedule.dat)")
-    sched = U7Schedules.from_file(filepath)
+    try:
+        sched = U7Schedules.from_file(filepath, strict=True)
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in sched.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
 
     npc_names: dict[int, str] | None = None
     npc_file_arg = getattr(args, "npc_file", None)
@@ -3456,6 +3788,7 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
             if npc_save is not None:
                 npc_data = U7NPCData.from_save(
                     npc_save,
+                    game=getattr(args, "game", "bg"),
                     container_shapes=container_shapes,
                     valid_shape_count=valid_shape_count,
                 )
@@ -3467,6 +3800,7 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
                     raise ValueError("npc.dat path could not be resolved")
                 npc_data = U7NPCData.from_file(
                     npc_file,
+                    game=getattr(args, "game", "bg"),
                     container_shapes=container_shapes,
                     valid_shape_count=valid_shape_count,
                 )
@@ -3613,6 +3947,14 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     def add_row(name: str, status: str, note: str = "") -> None:
         rows.append((name, source_size(name), status, note))
 
+    def state_row(name: str, warnings: list[str], note: str) -> None:
+        add_row(
+            name,
+            "parsed with warnings" if warnings else "parsed",
+            "; ".join([note, *warnings]),
+        )
+        lines.extend(f"Warning: {warning}" for warning in warnings)
+
     source_kind = (
         "INITGAME.DAT Flex archive"
         if initgame_flex_source
@@ -3641,6 +3983,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     if npc_data is not None:
         npcs = U7NPCData.from_bytes(
             npc_data,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
             npc_flavor=("original-new-game" if initgame_flex_source else "runtime"),
@@ -3669,6 +4012,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
     if mon_data is not None:
         monsters = U7NPCData.from_monsnpcs_bytes(
             mon_data,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
         )
         lines.append(
@@ -3681,7 +4025,11 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
         sched = U7Schedules.from_bytes(sched_data)
         lines.append(sched.dump_summary(npc_names))
         total = sum(len(entries) for entries in sched.entries.values())
-        add_row("schedule.dat", "parsed", f"{total} entries ({sched.format})")
+        add_row(
+            "schedule.dat",
+            "parsed_with_warnings" if sched.warnings else "parsed",
+            f"{total} entries ({sched.format}); {'; '.join(sched.warnings)}",
+        )
 
     flag_data = data_for("flaginit")
     if flag_data is not None:
@@ -3698,7 +4046,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
             f"{info.real_minute:02d}:{info.real_second:02d}, "
             f"party size {info.party_size}"
         )
-        add_row("saveinfo.dat", "parsed", f"party size {info.party_size}")
+        state_row("saveinfo.dat", info.warnings, f"party size {info.party_size}")
 
     gwin_data = data_for("gamewin.dat")
     if gwin_data is not None:
@@ -3708,7 +4056,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
             f"day {gwin.clock_day}, {gwin.clock_hour:02d}:"
             f"{gwin.clock_minute:02d}"
         )
-        add_row("gamewin.dat", "parsed", "camera/time state")
+        state_row("gamewin.dat", gwin.warnings, "camera/time state")
 
     usedat_data = data_for("usecode.dat")
     if usedat_data is not None:
@@ -3718,21 +4066,26 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
             f"Usecode runtime: party={usedat.party_members}, "
             f"timers={len(usedat.timers)} ({nonzero} nonzero)"
         )
-        add_row("usecode.dat", "parsed summary", "party/timers/saved pos")
+        state_row("usecode.dat", usedat.warnings, "party/timers/saved pos")
 
     usevars_data = data_for("usecode.var")
     if usevars_data is not None:
         usevars = U7UsecodeVars.from_bytes(usevars_data)
-        add_row(
+        state_row(
             "usecode.var",
-            "parsed summary",
-            f"{usevars.global_static_count} global statics",
+            usevars.warnings,
+            f"{usevars.global_static_count} global statics, "
+            f"{usevars.local_static_blocks} local blocks",
         )
 
     keyring_data = data_for("keyring.dat")
     if keyring_data is not None:
         keyring = U7Keyring.from_bytes(keyring_data)
-        add_row("keyring.dat", "parsed", f"{len(keyring.keys)} keys")
+        state_row(
+            "keyring.dat",
+            keyring.warnings,
+            f"{len(keyring.unique_keys)} unique keys, {len(keyring.keys)} stored",
+        )
 
     frames_data = data_for("frames.flg")
     if frames_data is not None:
@@ -3831,6 +4184,7 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
 def cmd_monster_defs(args: SimpleNamespace) -> int:
     """Dump static U7 MONSTERS.DAT monster definitions."""
     from titan.u7.monster import U7MonsterDefinitions
+    from titan.u7.actor_flags import load_u7_actor_flags
 
     source = Path(args.file)
     if source.is_dir():
@@ -3843,8 +4197,31 @@ def cmd_monster_defs(args: SimpleNamespace) -> int:
         mod_defs = U7MonsterDefinitions.from_file(mod_file, game=args.game)
         defs = U7MonsterDefinitions.merge(defs, mod_defs)
 
+    patch_dirs = [Path(mod_file).parent] if mod_file else []
+    source_dir = source if source.is_dir() else source.parent
+    if source_dir.name.lower() != "static":
+        patch_dirs.insert(0, source_dir)
+    shape_info = getattr(args, "shape_info", None)
+    try:
+        actor_flags = load_u7_actor_flags(
+            game=args.game,
+            exult_flx_path=getattr(args, "exult_flx", None),
+            patch_dirs=patch_dirs,
+            patch_files=[shape_info] if shape_info is not None else (),
+        )
+    except (OSError, ValueError) as error:
+        print(f"ERROR: actor flag metadata unavailable: {error}", file=sys.stderr)
+        return 1
+
     fmt = getattr(args, "format", "summary") or "summary"
-    content = defs.dump_csv() if fmt == "csv" else defs.dump_summary()
+    content = (
+        defs.dump_csv(actor_flags) if fmt == "csv" else defs.dump_summary(actor_flags)
+    )
+    if fmt == "csv":
+        for warning in [*defs.warnings, *defs.validate_semantics()]:
+            print(f"Warning: {warning}", file=sys.stderr)
+    for warning in actor_flags.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:
@@ -3870,6 +4247,7 @@ def cmd_monster_dump(args: SimpleNamespace) -> int:
     )
     monsters, source_file = live_monsters_from_source(
         args.file,
+        game=getattr(args, "game", "bg"),
         container_shapes=container_shapes,
     )
     fmt = getattr(args, "format", "summary") or "summary"
@@ -3923,6 +4301,7 @@ def cmd_monster_equipment(args: SimpleNamespace) -> int:
 
     monster_shapes = _parse_int_list(getattr(args, "monster_shape", None))
     fmt = getattr(args, "format", "summary") or "summary"
+    diagnostics: list[str] = []
     if fmt == "csv":
         content = monster_equipment_csv(
             static,
@@ -3930,6 +4309,7 @@ def cmd_monster_equipment(args: SimpleNamespace) -> int:
             mod_monsters=getattr(args, "mod_monsters", None),
             equip_file=getattr(args, "equip_file", None),
             monster_shapes=monster_shapes or None,
+            diagnostics=diagnostics,
         )
     else:
         content = monster_equipment_summary(
@@ -3938,7 +4318,11 @@ def cmd_monster_equipment(args: SimpleNamespace) -> int:
             mod_monsters=getattr(args, "mod_monsters", None),
             equip_file=getattr(args, "equip_file", None),
             monster_shapes=monster_shapes or None,
+            diagnostics=diagnostics,
         )
+
+    for warning in diagnostics:
+        print(f"Warning: {warning}", file=sys.stderr)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:
@@ -3993,6 +4377,8 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
     """Dump actual NPC inventory/equipment from save, GAMEDAT, or npc.dat."""
     from titan.u7.names import U7ShapeNames
     from titan.u7.save import U7NPCData, U7ReadyTypes, U7Save
+    from titan.u7.world import WorldQueryParams, load_query_metadata, load_ireg_context
+    from titan.u7.ready_metadata import U7ReadyMetadata
 
     source = Path(args.file)
     static = getattr(args, "static", None)
@@ -4010,28 +4396,64 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
 
     container_shapes = _load_container_shapes(args, fallback_static=static)
     valid_shape_count = _load_shape_count(args, fallback_static=static)
+    metadata_params = WorldQueryParams(
+        static_dir=static,
+        base_static=static,
+        patch_dir=getattr(args, "patch_dir", None),
+        game=getattr(args, "game", "bg"),
+        custom_game=getattr(args, "custom_game", False),
+    )
+    tfa, _, _, _ = load_query_metadata(metadata_params)
+    ireg_context = load_ireg_context(metadata_params, tfa)
+    if metadata_params.patch_dir:
+        from titan.u7.shape_archive import find_archive
+        from titan.u7.flex import U7FlexArchive
+
+        patch_shapes = find_archive(Path(metadata_params.patch_dir), "SHAPES.VGA")
+        if patch_shapes is not None:
+            valid_shape_count = max(
+                valid_shape_count or 0,
+                len(U7FlexArchive.from_file(str(patch_shapes)).records),
+            )
     if source.is_dir() or source.name.lower() == "npc.dat":
         npc_file = _resolve_loose_data_file(str(source), "npc.dat")
         npcs = U7NPCData.from_file(
             npc_file,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
             npc_flavor="auto",
+            ireg_context=ireg_context,
         )
         print(f"Source: {npc_file} (loose npc.dat)")
     else:
         save = U7Save.from_file(str(source))
         npcs = U7NPCData.from_save(
             save,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
+            ireg_context=ireg_context,
         )
         print(f"Source: {source} ({save.container_format.upper()} save)")
 
     names = U7ShapeNames.from_static_dir(static)
-    ready_types = U7ReadyTypes.from_dir(static, game=getattr(args, "game", "bg"))
     npc_nums = _parse_int_list(getattr(args, "npc", None))
-    content = npcs.dump_inventory_csv(names, ready_types, npc_nums or None)
+    effective_ready = U7ReadyMetadata.from_dir(
+        static,
+        patch_dir=getattr(args, "patch_dir", None),
+        game=getattr(args, "game", "bg"),
+        custom_game=getattr(args, "custom_game", False),
+    )
+    ready_types = U7ReadyTypes(
+        dict(effective_ready.preferred), list(effective_ready.records)
+    )
+    content = npcs.dump_inventory_csv(
+        names,
+        ready_types,
+        npc_nums or None,
+        effective_ready=effective_ready,
+    )
 
     if args.output:
         with open(args.output, "w", encoding="utf-8", newline="") as f:
@@ -4056,12 +4478,19 @@ def cmd_save_list(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    save = U7Save.from_file(filepath)
+    try:
+        save = U7Save.from_file(filepath, strict=getattr(args, "strict", False))
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in save.warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
     entries = save.list_entries()
 
     print(f"U7 Save: {filepath}")
     print(f"Title:   {save.title}")
     print(f"Format:  {save.container_format.upper()}")
+    print(f"Complete: {save.complete}")
     print(f"Entries: {len(entries)}")
     print()
     print(f"{'Name':<24} {'Size':>10}")
@@ -4078,41 +4507,34 @@ def cmd_save_list(args: SimpleNamespace) -> int:
 def cmd_save_extract(args: SimpleNamespace) -> int:
     """Extract files from an Exult U7 savegame archive."""
     from titan.u7.save import U7Save
+    from titan.u7.save_extraction import extract_u7_save_members
 
     filepath = args.file
     if not os.path.isfile(filepath):
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    save = U7Save.from_file(filepath)
-    entries = save.list_entries()
-
     outdir = args.output or Path(filepath).stem
-    os.makedirs(outdir, exist_ok=True)
-
     entry_filter = getattr(args, "entry", None)
-    extracted = 0
-    for name, size in entries:
-        if entry_filter and name.lower() != entry_filter.lower():
-            continue
-        data = save.get_data(name)
-        if data is None:
-            continue
-        # Handle entries with subdirectory names (e.g. "map00/u7ireg12")
-        out_path = os.path.join(outdir, name)
-        out_parent = os.path.dirname(out_path)
-        if out_parent:
-            os.makedirs(out_parent, exist_ok=True)
-        with open(out_path, "wb") as f:
-            f.write(data)
-        print(f"  {name:<24} {size:>10,} bytes")
-        extracted += 1
-
-    if entry_filter and extracted == 0:
-        print(f"ERROR: Entry '{entry_filter}' not found in archive", file=sys.stderr)
+    try:
+        save = U7Save.from_file(filepath, strict=getattr(args, "strict", True))
+        for warning in save.warnings:
+            print(f"WARNING: {warning}", file=sys.stderr)
+        plan, manifest = extract_u7_save_members(
+            save.members, outdir, entry=entry_filter
+        )
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
         return 1
-
-    print(f"\nExtracted {extracted} file(s) -> {outdir.rstrip(os.sep)}/")
+    for member, path in plan:
+        print(
+            f"  [{member.index}] {member.name:<24} {len(member.data):>10,} bytes -> {path}"
+        )
+    if manifest is not None:
+        print(f"Member mapping: {manifest}")
+    print(
+        f"\nExtracted {sum(not member.is_directory for member, _ in plan)} file(s) -> {outdir}/"
+    )
     return 0
 
 
@@ -4191,6 +4613,8 @@ def cmd_save_info(args: SimpleNamespace) -> int:
     lines.append(f"File:    {filepath}")
     lines.append(f"Title:   {save.title}")
     lines.append(f"Format:  {save.container_format.upper()}")
+    lines.append(f"Complete: {save.complete}")
+    lines.extend(f"Warning: {warning}" for warning in save.warnings)
 
     # Identity
     try:
@@ -4205,8 +4629,8 @@ def cmd_save_info(args: SimpleNamespace) -> int:
     try:
         info = U7SaveInfo.from_save(save)
         lines.append(info.dump())
-    except (ValueError, KeyError):
-        lines.append("(saveinfo.dat not found)")
+    except (ValueError, KeyError) as exc:
+        lines.append(f"(cannot read saveinfo.dat: {exc})")
 
     lines.append("")
 
@@ -4214,8 +4638,8 @@ def cmd_save_info(args: SimpleNamespace) -> int:
     try:
         gs = U7GameState.from_save(save)
         lines.append(gs.dump())
-    except (ValueError, KeyError):
-        lines.append("(gamewin.dat not found)")
+    except (ValueError, KeyError) as exc:
+        lines.append(f"(cannot read gamewin.dat: {exc})")
 
     lines.append("")
 
@@ -4255,9 +4679,12 @@ def cmd_save_npcs(args: SimpleNamespace) -> int:
     valid_shape_count = _load_shape_count(args)
     npcs = U7NPCData.from_save(
         save,
+        game=getattr(args, "game", "bg"),
         container_shapes=container_shapes,
         valid_shape_count=valid_shape_count,
     )
+    for warning in npcs.warnings:
+        print(f"WARNING: {warning}", file=sys.stderr)
 
     fmt = getattr(args, "format", "summary") or "summary"
 
@@ -4292,13 +4719,20 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
     print(f"Source: {filepath} ({save.container_format.upper()} save)")
     print(f"Title:  {save.title}")
 
-    sched = U7Schedules.from_save(save)
+    try:
+        sched = U7Schedules.from_save(save, strict=True)
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+    for warning in sched.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
     npc_names: dict[int, str] | None = None
     try:
         container_shapes = _load_container_shapes(args)
         valid_shape_count = _load_shape_count(args)
         npc_names = U7NPCData.npc_name_map(
             save,
+            game=getattr(args, "game", "bg"),
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
         )
@@ -5025,7 +5459,7 @@ def static_data_dump_cmd(
     kind: Annotated[
         str,
         typer.Argument(
-            help="Table to dump: weapons, ammo, armor, container, xforms, blends, usecode"
+            help="Table to dump: weapons, ammo, armor, container, gumps, paperdoll, xforms, blends, usecode"
         ),
     ],
     static: Annotated[
@@ -5049,6 +5483,32 @@ def static_data_dump_cmd(
             help="Path to exult_bg.flx/exult_si.flx for Exult bundled fallbacks",
         ),
     ] = None,
+    patch_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--patch-dir", help="Combat/container/gump metadata patch directory"
+        ),
+    ] = None,
+    custom_game: Annotated[
+        bool,
+        typer.Option(
+            "--custom-game", help="Use custom-game STATIC container/gump defaults"
+        ),
+    ] = False,
+    file: Annotated[
+        Optional[str],
+        typer.Option(
+            "--file",
+            help="Inspect an explicit container/combat file independently of world defaults",
+        ),
+    ] = None,
+    data_format: Annotated[
+        Literal["exult", "retail"],
+        typer.Option(
+            "--data-format",
+            help="Weapon/ammo/armor count, removal and field interpretation",
+        ),
+    ] = "exult",
 ) -> None:
     """Dump U7 static metadata tables as CSV."""
     raise SystemExit(
@@ -5059,6 +5519,10 @@ def static_data_dump_cmd(
                 static=static,
                 output=output,
                 exult_flx=exult_flx,
+                patch_dir=patch_dir,
+                custom_game=custom_game,
+                file=file,
+                data_format=data_format,
             )
         )
     )
@@ -5090,6 +5554,10 @@ def usecode_scan_intrinsic_cmd(
             help="Optional UCXT-style intrinsic-name table",
         ),
     ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Reject incomplete Usecode function records"),
+    ] = False,
 ) -> None:
     """Scan raw U7 USECODE for CALLI/CALLIS references to one intrinsic."""
     raise SystemExit(
@@ -5101,6 +5569,7 @@ def usecode_scan_intrinsic_cmd(
                 format=format,
                 output=output,
                 intrinsics_data=intrinsics_data,
+                strict=strict,
             )
         )
     )
@@ -5132,6 +5601,35 @@ def usecode_disasm_cmd(
             help="Optional UCXT-style intrinsic-name table",
         ),
     ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option("--strict", help="Reject incomplete Usecode function records"),
+    ] = False,
+    annotate: Annotated[
+        bool,
+        typer.Option(
+            "--annotate", help="Annotate signed constants and resolved references"
+        ),
+    ] = False,
+    validate: Annotated[
+        bool,
+        typer.Option(
+            "--validate", help="Report branch/data/extern reference diagnostics"
+        ),
+    ] = False,
+    symbols: Annotated[
+        bool, typer.Option("--symbols", help="Export symbol/class metadata as JSON")
+    ] = False,
+    patch_file: Annotated[
+        Optional[str],
+        typer.Option("--patch-file", help="Overlay patch Usecode functions"),
+    ] = None,
+    original: Annotated[
+        bool,
+        typer.Option(
+            "--original", help="Inspect the original function retained by callo"
+        ),
+    ] = False,
 ) -> None:
     """Raw-disassemble one U7 USECODE function, or all functions with --all."""
     raise SystemExit(
@@ -5143,6 +5641,12 @@ def usecode_disasm_cmd(
                 all_functions=all_functions,
                 output=output,
                 intrinsics_data=intrinsics_data,
+                strict=strict,
+                annotate=annotate,
+                validate=validate,
+                symbols=symbols,
+                patch_file=patch_file,
+                original=original,
             )
         )
     )
@@ -5187,11 +5691,37 @@ def npc_browse_cmd(
     npc: Annotated[
         Optional[int], typer.Option("--npc", help="Initial NPC number", min=0)
     ] = None,
+    have_si_shapes: Annotated[
+        Optional[bool],
+        typer.Option(
+            "--si-shapes/--no-si-shapes",
+            help="Explicit runtime availability of imported SI skin shapes",
+        ),
+    ] = None,
+    avatar_skin: Annotated[
+        Optional[int],
+        typer.Option(
+            "--avatar-skin", help="Explicit Exult Avatar skin override", min=0
+        ),
+    ] = None,
+    avatar_sex: Annotated[
+        Optional[Literal["male", "female"]],
+        typer.Option("--avatar-sex", help="Explicit Exult Avatar sex override"),
+    ] = None,
 ) -> None:
     """Browse a world's NPC stats, schedules and nested inventory interactively."""
     from titan.u7.npc_browser import run_browser
 
-    raise SystemExit(run_browser(game=game, source=source, npc=npc))
+    raise SystemExit(
+        run_browser(
+            game=game,
+            source=source,
+            npc=npc,
+            have_si_shapes=have_si_shapes,
+            avatar_skin=avatar_skin,
+            avatar_female=None if avatar_sex is None else avatar_sex == "female",
+        )
+    )
 
 
 @u7_app.command("save-browse")
@@ -5374,6 +5904,14 @@ def monster_defs_cmd(
         Optional[str],
         typer.Option("-f", "--format", help="Output format: summary (default), csv"),
     ] = None,
+    exult_flx: Annotated[
+        Optional[str],
+        typer.Option("--exult-flx", help="BG/SI Exult bundle for actor flag defaults"),
+    ] = None,
+    shape_info: Annotated[
+        Optional[str],
+        typer.Option("--shape-info", help="Additional shape_info.txt actor flag patch"),
+    ] = None,
 ) -> None:
     """Dump decoded MONSTERS.DAT monster definitions."""
     raise SystemExit(
@@ -5384,6 +5922,8 @@ def monster_defs_cmd(
                 mod_file=mod_file,
                 output=output,
                 format=format,
+                exult_flx=exult_flx,
+                shape_info=shape_info,
             )
         )
     )
@@ -5561,6 +6101,18 @@ def npc_equipment_cmd(
         Optional[str],
         typer.Option("-f", "--format", help="Output format: csv"),
     ] = "csv",
+    patch_dir: Annotated[
+        Optional[str],
+        typer.Option(
+            "--patch-dir", help="Sparse mod READY and shape metadata overrides"
+        ),
+    ] = None,
+    custom_game: Annotated[
+        bool,
+        typer.Option(
+            "--custom-game", help="Use custom-game STATIC supplemental metadata"
+        ),
+    ] = False,
 ) -> None:
     """Dump actual NPC inventory/equipment with readied/backpack location split."""
     raise SystemExit(
@@ -5572,6 +6124,8 @@ def npc_equipment_cmd(
                 game=game,
                 output=output,
                 format=format,
+                patch_dir=patch_dir,
+                custom_game=custom_game,
             )
         )
     )
@@ -5580,9 +6134,15 @@ def npc_equipment_cmd(
 @u7_app.command("save-list")
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict/--permissive", help="Reject structural container errors"
+        ),
+    ] = False,
 ) -> None:
     """List contents of an Exult U7 savegame file (ZIP or FLEX)."""
-    raise SystemExit(cmd_save_list(SimpleNamespace(file=file)))
+    raise SystemExit(cmd_save_list(SimpleNamespace(file=file, strict=strict)))
 
 
 @u7_app.command("save-extract")
@@ -5598,6 +6158,13 @@ def save_extract_cmd(
         Optional[str],
         typer.Option("-e", "--entry", help="Extract only this named entry"),
     ] = None,
+    strict: Annotated[
+        bool,
+        typer.Option(
+            "--strict/--permissive",
+            help="Validate completely before extraction; permissive allows available partial payloads",
+        ),
+    ] = True,
 ) -> None:
     """Extract files from an Exult U7 savegame archive."""
     raise SystemExit(
@@ -5606,6 +6173,7 @@ def save_extract_cmd(
                 file=file,
                 output=output,
                 entry=entry,
+                strict=strict,
             )
         )
     )
@@ -5813,7 +6381,9 @@ def font_create_cmd(
 def map_inventory_cmd(
     static: Annotated[
         Optional[str],
-        typer.Argument(help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"),
+        typer.Argument(
+            help="Path to STATIC directory (default: from titan.toml u7bg/u7si)"
+        ),
     ] = None,
     game: Annotated[
         Optional[Literal["bg", "si"]],
@@ -5821,27 +6391,44 @@ def map_inventory_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output folder (default: u7data/map-inventory/<game>-map<NN>)"),
+        typer.Option(
+            "-o",
+            "--output",
+            help="Output folder (default: u7data/map-inventory/<game>-map<NN>)",
+        ),
     ] = None,
     map_num: Annotated[
         int,
-        typer.Option("--map-num", help="Map number: 0 = world map, 1+ = mapNN/ inside STATIC"),
+        typer.Option(
+            "--map-num", help="Map number: 0 = world map, 1+ = mapNN/ inside STATIC"
+        ),
     ] = 0,
     gamedat: Annotated[
         Optional[str],
-        typer.Option("--gamedat", help="Count movable objects from this GAMEDAT folder instead of INITGAME.DAT"),
+        typer.Option(
+            "--gamedat",
+            help="Count movable objects from this GAMEDAT folder instead of INITGAME.DAT",
+        ),
     ] = None,
     initgame: Annotated[
         Optional[str],
-        typer.Option("--initgame", help="INITGAME.DAT to read movable objects from (default: STATIC/INITGAME.DAT)"),
+        typer.Option(
+            "--initgame",
+            help="INITGAME.DAT to read movable objects from (default: STATIC/INITGAME.DAT)",
+        ),
     ] = None,
     no_ireg: Annotated[
         bool,
-        typer.Option("--no-ireg", help="Skip movable objects (u7ireg); count terrain, chunk and fixed objects only"),
+        typer.Option(
+            "--no-ireg",
+            help="Skip movable objects (u7ireg); count terrain, chunk and fixed objects only",
+        ),
     ] = False,
     contents: Annotated[
         bool,
-        typer.Option("--contents", help="Also count objects inside containers and bodies"),
+        typer.Option(
+            "--contents", help="Also count objects inside containers and bodies"
+        ),
     ] = False,
     no_previews: Annotated[
         bool,
@@ -5869,16 +6456,30 @@ def map_inventory_cmd(
     ] = None,
     superchunk: Annotated[
         Optional[list[str]],
-        typer.Option("--sc", help="Limit to a superchunk, hex or decimal (repeatable): 0x55"),
+        typer.Option(
+            "--sc", help="Limit to a superchunk, hex or decimal (repeatable): 0x55"
+        ),
     ] = None,
     tile_rect: Annotated[
         Optional[list[str]],
-        typer.Option("--tile-rect", help="Limit to a tile rectangle tx0,ty0,tx1,ty1 (repeatable)"),
+        typer.Option(
+            "--tile-rect", help="Limit to a tile rectangle tx0,ty0,tx1,ty1 (repeatable)"
+        ),
     ] = None,
-    cx0: Annotated[Optional[int], typer.Option("--cx0", help="Limit to chunks from X (0-191)")] = None,
-    cy0: Annotated[Optional[int], typer.Option("--cy0", help="Limit to chunks from Y (0-191)")] = None,
-    cx1: Annotated[Optional[int], typer.Option("--cx1", help="Limit to chunks to X (inclusive; default cx0)")] = None,
-    cy1: Annotated[Optional[int], typer.Option("--cy1", help="Limit to chunks to Y (inclusive; default cy0)")] = None,
+    cx0: Annotated[
+        Optional[int], typer.Option("--cx0", help="Limit to chunks from X (0-191)")
+    ] = None,
+    cy0: Annotated[
+        Optional[int], typer.Option("--cy0", help="Limit to chunks from Y (0-191)")
+    ] = None,
+    cx1: Annotated[
+        Optional[int],
+        typer.Option("--cx1", help="Limit to chunks to X (inclusive; default cx0)"),
+    ] = None,
+    cy1: Annotated[
+        Optional[int],
+        typer.Option("--cy1", help="Limit to chunks to Y (inclusive; default cy0)"),
+    ] = None,
 ) -> None:
     """Inventory every ground tile and object a U7 map uses, ranked by placements.
 
@@ -5929,7 +6530,9 @@ def map_inventory_cmd(
             if not all(0 <= v <= 191 for v in (cx0, cy0, x1, y1)):
                 raise ValueError("Chunk coordinates must be 0-191")
             area.append(chunk_rect(cx0, cy0, x1, y1))
-            labels.append(f"c{min(cx0, x1)}_{min(cy0, y1)}_{max(cx0, x1)}_{max(cy0, y1)}")
+            labels.append(
+                f"c{min(cx0, x1)}_{min(cy0, y1)}_{max(cx0, x1)}_{max(cy0, y1)}"
+            )
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         raise SystemExit(1)
@@ -5938,7 +6541,10 @@ def map_inventory_cmd(
     configured_static, _ = _resolve_u7_paths(game)
     static_dir = static or configured_static
     if not static_dir:
-        print("ERROR: Provide a STATIC directory or configure one in titan.toml", file=sys.stderr)
+        print(
+            "ERROR: Provide a STATIC directory or configure one in titan.toml",
+            file=sys.stderr,
+        )
         raise SystemExit(1)
     text_flx = text or (None if patch else _resolve_u7_text_flx(game, static_dir))
     try:
@@ -5966,7 +6572,7 @@ def map_inventory_cmd(
         raise SystemExit(1)
 
     objects, flats = summary["objects"], summary["flats"]
-    print(f"Sources: " + "; ".join(f"{k}: {v}" for k, v in summary["sources"].items()))
+    print("Sources: " + "; ".join(f"{k}: {v}" for k, v in summary["sources"].items()))
     print(
         f"Objects: {objects['placements']:,} placements, {objects['shapes']} shapes, "
         f"{objects['shape_frames']} shape:frames "
@@ -5974,13 +6580,20 @@ def map_inventory_cmd(
     )
     print(
         "  coverage by top shapes: "
-        + ", ".join(f"{k.replace('top_', '')}: {v}%" for k, v in objects["coverage_by_top_shapes_pct"].items())
+        + ", ".join(
+            f"{k.replace('top_', '')}: {v}%"
+            for k, v in objects["coverage_by_top_shapes_pct"].items()
+        )
     )
-    print(f"Ground: {flats['cells']:,} cells, {flats['shapes']} flat shapes, {flats['shape_frames']} shape:frames")
+    print(
+        f"Ground: {flats['cells']:,} cells, {flats['shapes']} flat shapes, {flats['shape_frames']} shape:frames"
+    )
     if contents:
         print(f"Container contents: {summary['contents']:,}")
     if area:
-        print(f"Area: {len(inventory.placements):,} placements listed in placements.csv")
+        print(
+            f"Area: {len(inventory.placements):,} placements listed in placements.csv"
+        )
     for warning in summary["warnings"]:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(f"Wrote {outdir}")
@@ -6252,6 +6865,12 @@ def container_browse_cmd(
         Literal["bg", "si"],
         typer.Option("--game", help="Use config section for BG or SI"),
     ] = "bg",
+    custom_game: Annotated[
+        bool,
+        typer.Option(
+            "--custom-game", help="Use custom-game STATIC container/gump defaults"
+        ),
+    ] = False,
     gamedat: Annotated[
         Optional[str],
         typer.Option(
@@ -6353,7 +6972,7 @@ def container_browse_cmd(
         format_results,
         run_wizard as _container_wizard,
     )
-    from titan.u7.names import U7ShapeNames, U7FrameNames
+    from titan.u7.text_names import load_u7_text_names
     from titan.u7.typeflag import U7TypeFlags
     from titan._config import exult_cfg
 
@@ -6365,8 +6984,6 @@ def container_browse_cmd(
     gamedat_dir = gamedat
     if not gamedat_dir:
         gamedat_dir = _resolve_u7_gamedat(game)
-
-    text_flx = text or _resolve_u7_text_flx(game, static_dir)
 
     _non_interactive = any(
         [
@@ -6388,11 +7005,12 @@ def container_browse_cmd(
             _container_wizard(
                 static_dir=static_dir,
                 gamedat_dir=gamedat_dir,
-                text_flx=text_flx,
+                text_flx=text,
                 exult_flx_path=_exult_flx,
                 mod_data_dir=mod_data,
                 map_num=map_num,
                 game=game,
+                custom_game=custom_game,
             )
         )
 
@@ -6444,30 +7062,14 @@ def container_browse_cmd(
         )
         raise SystemExit(1)
 
-    names: Optional[U7ShapeNames] = None
-    if text_flx:
-        try:
-            names = U7ShapeNames.from_file(text_flx)
-        except (FileNotFoundError, OSError):
-            pass
-    if names is None and static_dir:
-        names = U7ShapeNames.from_static_dir(static_dir)
-
-    frame_names: Optional[U7FrameNames] = None
-    if _exult_flx and text_flx and Path(_exult_flx).exists():
-        try:
-            frame_names = U7FrameNames.from_flx(_exult_flx, text_flx, game=game)
-        except Exception:
-            pass
-
-    # Overlay mod-specific names on top of base data
-    if mod_data and Path(mod_data).is_dir():
-        names = U7ShapeNames.from_mod_dir(mod_data, base=names) or names
-        if text_flx:
-            frame_names = (
-                U7FrameNames.from_mod_dir(mod_data, text_flx, base=frame_names)
-                or frame_names
-            )
+    selected_names = load_u7_text_names(
+        static_dir,
+        patch_dirs=[mod_data] if mod_data else (),
+        text_flx_path=text,
+        exult_flx_path=_exult_flx or _resolve_u7_exult_flx(game),
+        game=game,
+    )
+    names, frame_names = selected_names.names, selected_names.frames
 
     params = ContainerQueryParams(
         static_dir=static_dir or "",
@@ -6478,8 +7080,10 @@ def container_browse_cmd(
         contains_name_filter=contains_name or "",
         superchunks=superchunks,
         tile_rect=parsed_rect,
-        text_flx_path=text_flx,
+        text_flx_path=text,
         exult_flx_path=_exult_flx,
+        game=game,
+        custom_game=custom_game,
         map_num=map_num,
         output_format=format or "tree",
         output_path=output,

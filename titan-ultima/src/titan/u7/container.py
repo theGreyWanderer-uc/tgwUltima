@@ -24,7 +24,8 @@ __all__ = [
 
 import csv
 import io
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+import json
 from pathlib import Path
 from typing import Any, Optional
 from titan import _wizard_ui as ui
@@ -36,8 +37,10 @@ from titan.u7.map import (
 )
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.names import U7ShapeNames, U7FrameNames
-from titan.u7.world import _superchunks_for_rect
+from titan.u7.world import _superchunks_for_rect, object_name
+from titan.u7.text_names import load_u7_text_names
 from titan.u7.ireg import object_flag_names
+from titan.u7.ireg_metadata import U7IregContext
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +79,8 @@ class ContainerQueryParams:
     output_path: Optional[str] = None
     patch_dir: Optional[str] = None
     mod_data_dir: Optional[str] = None
+    game: str = "bg"
+    custom_game: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -224,14 +229,11 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
     except (FileNotFoundError, OSError):
         pass
 
-    names: Optional[U7ShapeNames] = None
-    if params.text_flx_path:
-        try:
-            names = U7ShapeNames.from_file(params.text_flx_path)
-        except (FileNotFoundError, OSError):
-            pass
-    if names is None:
-        names = U7ShapeNames.from_static_dir(params.static_dir)
+    names = load_u7_text_names(
+        params.static_dir,
+        text_flx_path=params.text_flx_path,
+        game=params.game,
+    ).names
 
     if params.patch_dir or params.mod_data_dir:
         from titan.u7.world import WorldQueryParams, load_query_metadata
@@ -243,10 +245,20 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
                 patch_dir=params.patch_dir,
                 mod_data_dir=params.mod_data_dir,
                 text_flx_path=params.text_flx_path,
+                game=params.game,
+                exult_flx_path=params.exult_flx_path,
             )
         )
 
     gamedat = Path(params.gamedat_dir)
+    ireg_context = U7IregContext.from_dir(
+        params.static_dir,
+        patch_dir=params.patch_dir,
+        tfa=tfa,
+        game=params.game,
+        exult_flx=params.exult_flx_path,
+        custom_game=params.custom_game,
+    )
 
     total_sc = C_NUM_SCHUNKS * C_NUM_SCHUNKS
     if params.superchunks:
@@ -275,7 +287,9 @@ def browse_containers(params: ContainerQueryParams) -> list[ContainerResult]:
         if ireg_path is None:
             continue
 
-        objects = U7MapRenderer.parse_ireg_deep(str(ireg_path), sc, tfa)
+        objects = U7MapRenderer.parse_ireg_deep(
+            str(ireg_path), sc, tfa, context=ireg_context
+        )
 
         for root_obj in objects:
             if not root_obj.children and tfa:
@@ -348,12 +362,14 @@ def _item_label(
     obj: U7MapObject,
     names: Optional[U7ShapeNames],
     frame_names: Optional[U7FrameNames],
+    tfa: Optional[U7TypeFlags] = None,
 ) -> str:
     """Return the best display label for an item, using frame name when available."""
     if frame_names:
-        fname = frame_names.get(obj.shape, obj.frame)
+        fname = object_name(obj, names, frame_names, tfa)
         if fname:
             return f"{obj.shape}:{obj.frame} ({fname})"
+        return str(obj.shape)
     shape_name = names.get(obj.shape) if names else ""
     return f"{obj.shape} ({shape_name})" if shape_name else str(obj.shape)
 
@@ -425,7 +441,7 @@ def _append_children(
     for i, child in enumerate(children):
         is_last = i == len(children) - 1
         branch = "└─ " if is_last else "├─ "
-        label = _item_label(child, names, frame_names)
+        label = _item_label(child, names, frame_names, tfa)
         suffix = _child_suffix(child, tfa)
 
         child_count = f"  [{len(child.children)} item(s)]" if child.children else ""
@@ -464,6 +480,9 @@ def format_csv(
             "item_quality_raw",
             "item_object_flags",
             "path",
+            "item_index_id",
+            "item_saved_slot",
+            "item_specials",
         ]
     )
 
@@ -506,9 +525,7 @@ def _write_children_csv(
         child_label = _item_label(child, names, frame_names)
         # item_name column: prefer frame name, fall back to shape name
         if frame_names:
-            child_name = frame_names.get(child.shape, child.frame) or (
-                names.get(child.shape) if names else ""
-            )
+            child_name = object_name(child, names, frame_names)
         else:
             child_name = names.get(child.shape) if names else ""
         path = " > ".join(path_parts + [child_label])
@@ -531,6 +548,9 @@ def _write_children_csv(
                 f"0x{child.raw_quality:02X}",
                 "|".join(object_flag_names(child.object_flags)),
                 path,
+                json.dumps(asdict(child.ireg_index_id)) if child.ireg_index_id else "",
+                child.ireg_index_id.slot_name if child.ireg_index_id else "",
+                json.dumps([special.as_row() for special in child.ireg_specials]),
             ]
         )
 
@@ -573,6 +593,7 @@ def run_wizard(
     mod_data_dir: Optional[str] = None,
     map_num: int = 0,
     game: str = "bg",
+    custom_game: bool = False,
 ) -> int:
     """Interactive questionary container-browse wizard. Returns exit code."""
     try:
@@ -616,7 +637,9 @@ def run_wizard(
         exult_flx_path = exult_cfg(f"{world.game}_flx")
     try:
         print("  Capturing containers and nested contents…")
-        session = load_u7_container_session(world, exult_flx=exult_flx_path)
+        session = load_u7_container_session(
+            world, exult_flx=exult_flx_path, custom_game=custom_game
+        )
         browse_u7_container_session(session)
         return 0
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):

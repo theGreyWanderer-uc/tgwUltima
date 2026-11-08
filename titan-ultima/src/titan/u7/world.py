@@ -28,7 +28,8 @@ __all__ = [
 import csv
 import io
 from collections import Counter
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -41,8 +42,12 @@ from titan.u7.map import (
 )
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.names import U7ShapeNames, U7FrameNames
+from titan.u7.text import SIVariant, TextEncoding
+from titan.u7.text_names import load_u7_text_names
 from titan.u7.shape_archive import find_archive
 from titan.u7.ireg import object_flag_names
+from titan.u7.ireg_metadata import U7IregContext
+from titan.u7.ireg_specials import U7IregIndexId, U7IregSpecial
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +100,9 @@ class WorldQueryParams:
 
     # Path to TEXT.FLX for name lookup (optional)
     text_flx_path: Optional[str] = None
+    exult_flx_path: Optional[str] = None
+    si_variant: SIVariant = "unmapped"
+    text_encoding: TextEncoding = "auto"
 
     # Area filtering — superchunk numbers (empty = all)
     superchunks: list[int] = field(default_factory=list)
@@ -104,6 +112,7 @@ class WorldQueryParams:
     # Sources to scan
     include_ifix: bool = True
     include_ireg: bool = False
+    custom_game: bool = False
 
     # Map number: 0 = default world map, 1+ = mapNN/ subdirectory
     map_num: int = 0
@@ -137,6 +146,11 @@ class PlacementRecord:
     # separate from `flags` above, which are shared TFA shape flags.
     quality_raw: int = 0
     object_flags: list[str] = field(default_factory=list)
+    ireg_kind: str = ""
+    ireg_data: dict[str, object] = field(default_factory=dict)
+    ireg_warnings: list[str] = field(default_factory=list)
+    ireg_index_id: U7IregIndexId | None = None
+    ireg_specials: list[U7IregSpecial] = field(default_factory=list)
 
     def shape_label(self) -> str:
         """Return '522 (locked chest)' or just '522' if unnamed."""
@@ -332,15 +346,6 @@ def load_query_metadata(
     for entry in tfa.entries[count:]:
         tfa._by_num.pop(entry.shape_num, None)
 
-    text = (
-        Path(params.text_flx_path).expanduser()
-        if params.text_flx_path
-        else effective_file("TEXT.FLX")
-    )
-    if text is not None and not text.is_file():
-        raise ValueError(f"TEXT.FLX does not exist: {text}")
-    names = U7ShapeNames.from_file(str(text)) if text else None
-    frames = None
     mod_dirs = list(
         dict.fromkeys(
             str(p)
@@ -351,11 +356,54 @@ def load_query_metadata(
             if p
         )
     )
-    for mod_dir in mod_dirs:
-        names = U7ShapeNames.from_mod_dir(mod_dir, base=names)
-        if text:
-            frames = U7FrameNames.from_mod_dir(mod_dir, str(text), base=frames)
-    return tfa, names, frames, count
+    bundle = params.exult_flx_path
+    if bundle is None:
+        from titan.u7.cli import _resolve_u7_exult_flx
+
+        bundle = _resolve_u7_exult_flx(params.game)
+    selected = load_u7_text_names(
+        base,
+        patch_dirs=mod_dirs,
+        text_flx_path=params.text_flx_path,
+        exult_flx_path=bundle,
+        game=params.game,
+        si_variant=params.si_variant,
+        encoding=params.text_encoding,
+    )
+    return tfa, selected.names, selected.frames, count
+
+
+def object_name(
+    obj: U7MapObject,
+    names: U7ShapeNames | None,
+    frames: U7FrameNames | None,
+    tfa: U7TypeFlags | None = None,
+) -> str:
+    """Resolve a bare object label using known quality classes; NPC context stays unknown."""
+    if frames is None:
+        return names.get(obj.shape) if names is not None else ""
+    entry = tfa.get(obj.shape) if tfa is not None else None
+    shape_class = entry.shape_class if entry is not None else None
+    has_quality = (
+        shape_class in (2, 6, 7, 11, 12, 13) if shape_class is not None else None
+    )
+    quality = obj.quality if shape_class in (2, 6, 7, 11) else -1
+    return frames.label(
+        obj.shape, obj.frame, names, quality=quality, has_quality=has_quality
+    )
+
+
+def load_ireg_context(params: WorldQueryParams, tfa: U7TypeFlags) -> U7IregContext:
+    """Load supplemental body/jawbone flags for the same owner as world TFA."""
+    base, patch = resolve_world_sources(params)
+    return U7IregContext.from_dir(
+        base,
+        patch_dir=patch,
+        tfa=tfa,
+        game=params.game,
+        exult_flx=params.exult_flx_path,
+        custom_game=params.custom_game,
+    )
 
 
 def run_query(params: WorldQueryParams) -> WorldResult:
@@ -364,6 +412,7 @@ def run_query(params: WorldQueryParams) -> WorldResult:
     validate_params(params)
     static, patch = resolve_world_sources(params)
     tfa, shape_names, frame_names, tfa_count = load_query_metadata(params)
+    ireg_context = load_ireg_context(params, tfa) if params.include_ireg else None
     if (params.shape_classes or params.tfa_flags) and not tfa_count:
         raise ValueError(
             "Cannot evaluate class/flag filters: TFA.DAT is missing or empty"
@@ -384,6 +433,11 @@ def run_query(params: WorldQueryParams) -> WorldResult:
         sc_list = list(range(total_sc))
 
     result = WorldResult(params=params)
+    if ireg_context is not None:
+        result.warnings.extend(ireg_context.warnings)
+    for metadata in (shape_names, frame_names):
+        if metadata is not None:
+            result.warnings.extend(metadata.warnings)
     if not tfa_count:
         result.warnings.append(
             "TFA.DAT is missing or empty; classes, flags and class-dependent IREG decoding are unavailable."
@@ -419,18 +473,14 @@ def run_query(params: WorldQueryParams) -> WorldResult:
                 ireg_path = find_archive(gamedat / "map00", ireg_name)
             if ireg_path is not None:
                 source_counts["IREG"] += 1
-                for obj in U7MapRenderer.parse_ireg(str(ireg_path), sc, tfa):
+                for obj in U7MapRenderer.parse_ireg(
+                    str(ireg_path), sc, tfa, context=ireg_context
+                ):
                     obj.source = "ireg"
                     objects.append(obj)
 
         for obj in objects:
-            name = (
-                frame_names.label(obj.shape, obj.frame, shape_names)
-                if frame_names
-                else shape_names.get(obj.shape)
-                if shape_names
-                else ""
-            )
+            name = object_name(obj, shape_names, frame_names, tfa)
             if (
                 params.name_filter
                 and not name
@@ -467,6 +517,11 @@ def run_query(params: WorldQueryParams) -> WorldResult:
                     flags=flags,
                     shape_name=name,
                     quality_raw=obj.raw_quality,
+                    ireg_kind=obj.ireg_kind,
+                    ireg_data=obj.ireg_data,
+                    ireg_warnings=obj.ireg_warnings,
+                    ireg_index_id=obj.ireg_index_id,
+                    ireg_specials=obj.ireg_specials,
                     object_flags=object_flag_names(obj.object_flags),
                 )
             )
@@ -524,13 +579,7 @@ def _matches(
         return False
 
     if params.name_filter:
-        name = (
-            frame_names.label(obj.shape, obj.frame, shape_names)
-            if frame_names
-            else shape_names.get(obj.shape)
-            if shape_names
-            else ""
-        )
+        name = object_name(obj, shape_names, frame_names, tfa)
         if params.name_filter.lower() not in name.lower():
             return False
 
@@ -611,6 +660,14 @@ def _format_full_text(result: WorldResult) -> str:
                 f"quality={rec.quality}  "
                 f"flags={'|'.join(rec.object_flags) if rec.object_flags else '-'}"
             )
+            if rec.ireg_index_id is not None:
+                lines.append(
+                    f"         saved index={rec.ireg_index_id.index}; slot={rec.ireg_index_id.slot_name or '-'}"
+                )
+            for special in rec.ireg_specials:
+                lines.append(
+                    f"         IREG {special.kind} at {special.offset}: {json.dumps(special.decoded)}"
+                )
 
     return "\n".join(lines)
 
@@ -634,6 +691,9 @@ def _format_csv(result: WorldResult) -> str:
             "shape_class",
             "shape_class_name",
             "flags",
+            "ireg_index_id",
+            "saved_slot_name",
+            "ireg_specials",
         ]
     )
     for rec in result.records:
@@ -653,6 +713,9 @@ def _format_csv(result: WorldResult) -> str:
                 rec.shape_class,
                 rec.shape_class_name,
                 "|".join(rec.flags),
+                json.dumps(asdict(rec.ireg_index_id)) if rec.ireg_index_id else "",
+                rec.ireg_index_id.slot_name if rec.ireg_index_id else "",
+                json.dumps([special.as_row() for special in rec.ireg_specials]),
             ]
         )
     return buf.getvalue()

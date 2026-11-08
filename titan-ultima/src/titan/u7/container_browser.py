@@ -6,7 +6,7 @@ import csv
 import html
 import io
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +33,13 @@ from titan.u7.container_gump import (
 from titan.u7.ireg import object_flag_names
 from titan.u7.map import U7MapObject
 from titan.u7.shape_browser import ShapeLibrary, load_library, owner_file
-from titan.u7.world import WorldQueryParams, load_query_metadata, resolve_world_sources
+from titan.u7.world import (
+    WorldQueryParams,
+    load_query_metadata,
+    object_name,
+    resolve_world_sources,
+)
+from titan.u7.ireg_specials import saved_slot_row
 
 U7_CONTAINER_BROWSER_OUTPUT = Path("titan-out/u7_container_browse_export")
 
@@ -63,43 +69,42 @@ class U7ContainerSession:
 
 
 def load_u7_container_session(
-    world: WorldQueryParams, *, exult_flx: str | None = None
+    world: WorldQueryParams, *, exult_flx: str | None = None, custom_game: bool = False
 ) -> U7ContainerSession:
     """Capture selected-map roots, nested containers, frame names and mod metadata once."""
     if not world.gamedat_dir:
         raise ValueError("U7 container browser: select a GAMEDAT directory")
     if exult_flx is None:
+        exult_flx = world.exult_flx_path
+    if exult_flx is None:
         from titan.u7.cli import _resolve_u7_exult_flx
 
         exult_flx = _resolve_u7_exult_flx(world.game)
-    tfa, names, frame_names, _ = load_query_metadata(world)
+    tfa, names, frame_names, _ = load_query_metadata(
+        replace(world, exult_flx_path=exult_flx or world.exult_flx_path)
+    )
     base, patch = resolve_world_sources(world)
-    diagnostics = []
-    text_path = Path(world.text_flx_path) if world.text_flx_path else None
-    if text_path is None:
-        from titan.u7.shape_archive import find_archive
+    from titan.u7.ready_metadata import U7ReadyMetadata
 
-        text_path = (
-            find_archive(patch, "TEXT.FLX") if patch else None
-        ) or find_archive(base, "TEXT.FLX")
-    if exult_flx and text_path:
-        from titan.u7.names import U7FrameNames
-
-        try:
-            frame_names = U7FrameNames.from_flx(
-                exult_flx, str(text_path), game=world.game
-            )
-            for directory in dict.fromkeys(
-                str(path) for path in (patch, world.mod_data_dir) if path
-            ):
-                frame_names = (
-                    U7FrameNames.from_mod_dir(
-                        directory, str(text_path), base=frame_names
-                    )
-                    or frame_names
-                )
-        except (ValueError, OSError) as error:
-            diagnostics.append(f"Per-frame names unavailable: {error}")
+    ready = U7ReadyMetadata.from_dir(
+        base,
+        patch_dir=patch,
+        game=world.game,
+        exult_flx=exult_flx,
+        custom_game=custom_game,
+    )
+    text_path = (
+        Path(names.text_banks.source)
+        if names is not None and names.text_banks is not None
+        else None
+    )
+    diagnostics = [
+        warning
+        for metadata in (names, frame_names)
+        if metadata is not None
+        for warning in metadata.warnings
+    ]
+    diagnostics.extend(ready.warnings)
     params = container.ContainerQueryParams(
         world.static_dir,
         world.gamedat_dir,
@@ -107,6 +112,9 @@ def load_u7_container_session(
         patch_dir=world.patch_dir,
         mod_data_dir=world.mod_data_dir,
         map_num=world.map_num,
+        game=world.game,
+        exult_flx_path=exult_flx,
+        custom_game=custom_game,
     )
     roots = container.browse_containers(params)
     items: dict[int | str, dict[str, Any]] = {}
@@ -124,9 +132,7 @@ def load_u7_container_session(
             )
             entry = tfa.get(obj.shape) if tfa else None
             shape_name = names.get(obj.shape) if names else ""
-            item_name = (
-                frame_names.get(obj.shape, obj.frame) if frame_names else ""
-            ) or shape_name
+            item_name = object_name(obj, names, frame_names, tfa)
             row = {
                 "item_id": number,
                 "identity_kind": "snapshot_browser_path",
@@ -152,6 +158,17 @@ def load_u7_container_session(
                 "raw_flag_byte": obj.raw_flag_byte,
                 "record_length": obj.record_length,
                 "is_extended": obj.is_extended,
+                "ireg_kind": obj.ireg_kind,
+                "ireg_data": obj.ireg_data,
+                "ireg_warnings": obj.ireg_warnings,
+                "ireg_raw_hex": obj.ireg_raw_hex,
+                "ireg_offset": obj.ireg_offset,
+                "ireg_specials": [special.as_row() for special in obj.ireg_specials],
+                "ireg_index_id": asdict(obj.ireg_index_id)
+                if obj.ireg_index_id
+                else None,
+                **saved_slot_row(obj.ireg_index_id),
+                "effective_ready": ready.resolve(obj.shape, obj.frame).as_row(),
                 "egg": asdict(obj.egg_meta) if obj.egg_meta else None,
                 "child_count": len(obj.children),
                 "is_npc": False,
@@ -176,6 +193,7 @@ def load_u7_container_session(
         f"U7 {world.game}",
         static,
         Path(world.patch_dir or world.mod_data_dir or world.static_dir),
+        standalone=custom_game,
         gamedat=Path(world.gamedat_dir),
     )
     # Guard every potential input path, including inherited metadata and IREG maps.
@@ -202,6 +220,7 @@ def load_u7_container_session(
     )
     try:
         session.gumps = load_u7_container_gumps(target, world.game, exult_flx=exult_flx)
+        session.diagnostics.extend(session.gumps.warnings)
         session.source_files = tuple(
             dict.fromkeys((*files, *session.gumps.source_files))
         )
@@ -386,6 +405,7 @@ def export_u7_container_bundle(
                 "frame": 0,
                 "mapping_source": source,
                 "area": asdict(composition.area),
+                "metadata": session.gumps.metadata.as_row(gump),
                 "pixel_area": composition.pixel_area,
                 "layout": composition.layout,
                 "seed": composition.seed,

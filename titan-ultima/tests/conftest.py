@@ -18,3 +18,14 @@ os.environ.pop("PY_COLORS", None)
 import typer.rich_utils  # noqa: E402  (must follow the env pinning above)
 
 typer.rich_utils.FORCE_TERMINAL = False
+
+import pytest  # noqa: E402
+
+from titan import _config  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def isolate_cli_config_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep loaded CLI settings from leaking between tests that invoke root commands."""
+    monkeypatch.setattr(_config, "_config", {})
+    monkeypatch.setattr(_config, "explicit_config_path", None)

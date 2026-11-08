@@ -52,6 +52,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_resolve_u7_paths", lambda game: (None, None))
     monkeypatch.setattr(cli, "_resolve_u7_gamedat", lambda game: None)
     monkeypatch.setattr(cli, "_resolve_u7_text_flx", lambda game, static: None)
+    monkeypatch.setattr(cli, "_resolve_u7_exult_flx", lambda game: None)
     return WorldQueryParams(static_dir=str(static), superchunks=[0, 1])
 
 
@@ -75,7 +76,7 @@ def test_patch_replaces_whole_ifix_and_inherits_missing_files(world, tmp_path):
     patch = tmp_path / "game" / "mods" / "Test" / "patch"
     write_ifix(patch, 0, [(150, 3, 9, 10)])
     (patch / "textmsg.txt").write_text(
-        "%%section shapes\n0096:mod door\n%%endsection\n"
+        "%%section shapes\n0x96:mod door\n%%endsection\n"
     )
     result = run_query(replace(world, static_dir=str(patch)))
     assert [(r.shape, r.frame) for r in result.records] == [(150, 3), (151, 2)]

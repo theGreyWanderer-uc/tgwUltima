@@ -85,6 +85,237 @@ def _u9_install(root: Path) -> Path:
     return root
 
 
+def _u6_install(root: Path) -> Path:
+    from titan.u6.install import U6_RESOURCE_NAMES
+
+    root.mkdir(parents=True)
+    for key, name in U6_RESOURCE_NAMES.items():
+        if key == "savegame":
+            (root / name).mkdir()
+        else:
+            (root / name).touch()
+    return root
+
+
+def test_u6_candidates_include_configured_and_gog_installs(setup_workspace):
+    from titan.u6.install import u6_install_candidates
+
+    configured = setup_workspace / "custom U6"
+    candidates = u6_install_candidates({"u6": {"game": {"base": str(configured)}}})
+    assert candidates[0] == configured
+    for drive in "CDEFG":
+        for layout in (
+            "Program Files (x86)/GOG Galaxy/Games",
+            "GOG Games",
+            "Ultima",
+            "",
+        ):
+            assert Path(f"{drive}:/") / layout / "Ultima 6" in candidates
+            assert Path(f"{drive}:/") / layout / "Ultima VI" in candidates
+
+
+@pytest.mark.parametrize("name", ["Ultima 6", "Ultima VI - The False Prophet"])
+def test_setup_detects_u6_and_inventories_resources(setup_workspace, monkeypatch, name):
+    root = _u6_install(setup_workspace / "home/Games/Heroic" / name)
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads((Path.cwd() / "titan.toml").read_text())
+    assert saved["u6"]["game"]["base"] == root.as_posix()
+    assert saved["u6"]["paths"]["palette"] == "U6PAL"
+    assert saved["u6"]["paths"]["converse_a"] == "CONVERSE.A"
+    assert saved["u6"]["paths"]["books"] == "BOOK.DAT"
+    assert saved["u6"]["paths"]["objlist"] == "SAVEGAME/OBJLIST"
+
+
+def test_u6_discovery_does_not_match_roman_u7_or_u8(setup_workspace):
+    from titan.u6.install import u6_install_candidates
+
+    launcher = setup_workspace / "home/Games/Heroic"
+    for name in ("Ultima VII - Complete", "Ultima VIII", "UltimaVII", "Martian Dreams"):
+        directory = launcher / name
+        directory.mkdir(parents=True, exist_ok=True)
+        assert directory not in u6_install_candidates({})
+
+
+def test_setup_accepts_quoted_u6_without_optional_saves(setup_workspace, monkeypatch):
+    root = _u6_install(setup_workspace / "custom game/Ultima6")
+    (root / "SAVEGAME/OBJLIST").unlink()
+    (root / "SAVEGAME").rmdir()
+    _answer_setup(monkeypatch, {"Ultima VI base": f'"{root}"'})
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads((Path.cwd() / "titan.toml").read_text())
+    assert saved["u6"]["game"]["base"] == root.as_posix()
+    assert "savegame" not in saved["u6"]["paths"]
+    assert "objlist" not in saved["u6"]["paths"]
+
+
+@pytest.mark.parametrize("missing", ["U6PAL", "MAP", "MAPTILES.VGA"])
+def test_setup_rejects_incomplete_u6_data(setup_workspace, monkeypatch, missing):
+    root = _u6_install(setup_workspace / "home/GOG Games/Ultima 6")
+    (root / missing).unlink()
+    (root / "MDPAL").touch()  # MD's palette must not stand in for U6PAL.
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    assert "u6" not in tomllib.loads((Path.cwd() / "titan.toml").read_text())
+
+
+@pytest.mark.parametrize("decline", [False, True])
+def test_setup_preserves_custom_u6_settings_and_backup(
+    setup_workspace, monkeypatch, decline
+):
+    root = _u6_install(setup_workspace / "custom U6")
+    path = Path.cwd() / "titan.toml"
+    original = (
+        f'[u6.game]\nbase="{root.as_posix()}"\n[u6.paths]\npalette="custom.pal"\n'
+    )
+    path.write_text(original)
+    _answer_setup(monkeypatch, {"Are these paths correct?": "n"} if decline else {})
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads(path.read_text())
+    assert saved["u6"]["game"]["base"] == root.as_posix()
+    assert saved["u6"]["paths"]["palette"] == "custom.pal"
+    assert ("converse_a" in saved["u6"]["paths"]) != decline
+    assert path.with_name("titan.toml.bak").read_text() == original
+
+
+def test_u6_only_config_inspects_relative_absolute_and_missing_paths(
+    setup_workspace, capsys
+):
+    root = _u6_install(setup_workspace / "Ultima6")
+    path = Path.cwd() / "titan.toml"
+    path.write_text(
+        f'[u6.game]\nbase="{root.as_posix()}"\n[u6.paths]\n'
+        f'palette="U6PAL"\nbooks="{(root / "BOOK.DAT").as_posix()}"\n'
+        'objlist="SAVEGAME/OBJLIST"\nmissing="MISSING.DAT"\n'
+    )
+    assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
+    report = capsys.readouterr().out
+    assert "[u6.game]" in report and "[u6.paths]" in report
+    for key in ("palette", "books", "objlist"):
+        assert "[OK]" in next(
+            line for line in report.splitlines() if line.strip().startswith(key)
+        )
+    assert "[NOT FOUND]" in next(
+        line for line in report.splitlines() if line.strip().startswith("missing")
+    )
+
+
+def _md_install(root: Path) -> Path:
+    from titan.md.install import MD_RESOURCE_NAMES
+
+    root.mkdir(parents=True)
+    for key, name in MD_RESOURCE_NAMES.items():
+        if key == "savegame":
+            (root / name).mkdir()
+        else:
+            (root / name).touch()
+    return root
+
+
+def test_martian_candidates_include_configured_and_gog_installs(setup_workspace):
+    from titan.md.install import martian_install_candidates
+
+    configured = setup_workspace / "custom/MARTIAN"
+    candidates = martian_install_candidates({"md": {"game": {"base": str(configured)}}})
+    assert candidates[0] == configured
+    for drive in "CDEFG":
+        for layout in (
+            "Program Files (x86)/GOG Galaxy/Games",
+            "GOG Games",
+            "Ultima",
+            "",
+        ):
+            assert Path(f"{drive}:/") / layout / "Martian Dreams" in candidates
+
+
+def test_setup_detects_martian_gog_layout_and_inventories_resources(
+    setup_workspace, monkeypatch
+):
+    root = _md_install(setup_workspace / "home/GOG Games/Martian Dreams/MARTIAN")
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads((Path.cwd() / "titan.toml").read_text())
+    assert saved["md"]["game"]["base"] == root.as_posix()
+    assert saved["md"]["paths"]["palette"] == "MDPAL"
+    assert saved["md"]["paths"]["talk"] == "TALK.LZC"
+    assert saved["md"]["paths"]["text"] == "MDTEXT.LZC"
+    assert saved["md"]["paths"]["objlist"] == "SAVEGAME/OBJLIST"
+
+
+@pytest.mark.parametrize("use_parent", [False, True])
+def test_setup_preserves_martian_base_custom_paths_and_backup(
+    setup_workspace, monkeypatch, use_parent
+):
+    root = _md_install(setup_workspace / "custom game/MARTIAN")
+    base = root.parent if use_parent else root
+    path = Path.cwd() / "titan.toml"
+    original = (
+        f'[md.game]\nbase="{base.as_posix()}"\n[md.paths]\npalette="custom.pal"\n'
+    )
+    path.write_text(original)
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads(path.read_text())
+    assert saved["md"]["game"]["base"] == base.as_posix()
+    assert saved["md"]["paths"]["palette"] == "custom.pal"
+    assert (
+        saved["md"]["paths"]["talk"] == ("MARTIAN/" if use_parent else "") + "TALK.LZC"
+    )
+    assert path.with_name("titan.toml.bak").read_text() == original
+
+
+def test_setup_accepts_quoted_martian_parent_without_optional_saves(
+    setup_workspace, monkeypatch
+):
+    root = _md_install(setup_workspace / "custom game/MARTIAN")
+    (root / "SAVEGAME/OBJLIST").unlink()
+    (root / "SAVEGAME").rmdir()
+    (root / "MAP").unlink()  # LZMAP also identifies a valid map install.
+    _answer_setup(monkeypatch, {"Martian Dreams base": f'"{root.parent}"'})
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    saved = tomllib.loads((Path.cwd() / "titan.toml").read_text())
+    assert saved["md"]["game"]["base"] == root.parent.as_posix()
+    assert saved["md"]["paths"]["lzmap"] == "MARTIAN/LZMAP"
+    assert "savegame" not in saved["md"]["paths"]
+    assert "objlist" not in saved["md"]["paths"]
+
+
+@pytest.mark.parametrize("missing", ["MDPAL", "MAPTILES.VGA"])
+def test_setup_rejects_incomplete_martian_data(setup_workspace, monkeypatch, missing):
+    root = _md_install(setup_workspace / "home/GOG Games/Martian Dreams/MARTIAN")
+    (root / missing).unlink()
+    _answer_setup(monkeypatch)
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    assert "md" not in tomllib.loads((Path.cwd() / "titan.toml").read_text())
+
+
+def test_martian_only_config_inspects_relative_and_missing_paths(
+    setup_workspace, capsys
+):
+    root = _md_install(setup_workspace / "MARTIAN")
+    path = Path.cwd() / "titan.toml"
+    path.write_text(
+        f'[md.game]\nbase="{root.as_posix()}"\n[md.paths]\n'
+        'palette="MDPAL"\nobjlist="SAVEGAME/OBJLIST"\nmissing="missing.lzc"\n'
+    )
+    assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
+    report = capsys.readouterr().out
+    assert "[md.game]" in report and "[md.paths]" in report
+    for key in ("palette", "objlist"):
+        assert "[OK]" in next(
+            line for line in report.splitlines() if line.strip().startswith(key)
+        )
+    assert "[NOT FOUND]" in next(
+        line for line in report.splitlines() if line.strip().startswith("missing")
+    )
+
+
+def test_setup_help_mentions_martian_dreams():
+    result = CliRunner().invoke(cli.app, ["setup", "--help"])
+    assert result.exit_code == 0
+    assert "Martian Dreams" in result.output
+
+
 def test_u9_candidates_include_spaced_windows_layouts_on_multiple_drives(
     setup_workspace,
 ):

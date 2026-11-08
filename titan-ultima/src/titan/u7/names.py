@@ -1,349 +1,405 @@
-"""
-Ultima 7 shape name table from TEXT.FLX, and per-frame names from shape_info.txt.
+"""U7 catalogue names and retained Exult frame/quality naming rules.
 
-TEXT.FLX is a Flex archive where record N is the null-terminated display name
-for shape N (e.g. record 522 → "locked chest").  Records 0x500+ are misc_names
-— per-frame item names such as "gavel", "quill", "inkwell" for shape 675.
-
-shape_info.txt (Exult supplemental data) maps (shape, frame) → misc_name index
-via ``%%section framenames`` entries of the form ``:shape/frame/qual/type/msgid``.
-
-Mod support: mods may supply ``textmsg.txt`` and ``shape_info.txt`` in their
-``patch/`` or ``data/`` directory.  ``textmsg.txt`` has three sections:
-
-- ``%%section shapes``     — shape number (hex) → name, overlays TEXT.FLX
-- ``%%section miscnames``  — misc_name index (hex) → name, overlays TEXT.FLX 0x500+
-- ``%%section msgs``       — NPC/dialogue text (not used here)
-
-The mod's ``shape_info.txt %%section framenames`` overlays the base framenames
-from ``exult_bg.flx`` / ``exult_si.flx``.  Load a merged set with
-``U7ShapeNames.from_mod_dir()`` and ``U7FrameNames.from_mod_dir()``.
-
-Example::
-
-    from titan.u7.names import U7ShapeNames, U7FrameNames
-
-    names  = U7ShapeNames.from_file("STATIC/TEXT.FLX")
-    frames = U7FrameNames.from_flx("exult_si.flx", "STATIC/TEXT.FLX", game="si")
-
-    # Overlay mod data on top of base data
-    names  = U7ShapeNames.from_mod_dir("patch/", base=names) or names
-    frames = U7FrameNames.from_mod_dir("patch/", "STATIC/TEXT.FLX", base=frames)
-
-    print(names.get(675))                # "desk item"
-    print(frames.get(675, 1))            # "quill"
-    print(frames.label(675, 1, names))   # "quill"
+TEXT.FLX shapes, messages and misc strings have separate namespaces.
+text_names.load_u7_text_names implements selected-source replacement;
+explicit sparse inspection overlay APIs remain available here.
 """
 
 from __future__ import annotations
 
-__all__ = ["U7ShapeNames", "U7FrameNames"]
-
-import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Sequence
 
 from titan.u7.flex import U7FlexArchive
+from titan.u7.text import (
+    SIVariant,
+    TextEncoding,
+    U7TextBanks,
+    U7TextMessages,
+    decode_text_source,
+)
+
+__all__ = [
+    "U7ShapeNames",
+    "U7FrameNames",
+    "U7FrameNameRule",
+    "U7NameResolution",
+    "format_u7_name",
+]
+
+
+def format_u7_name(raw: str, quantity: int = 1, *, bare: bool = False) -> str:
+    """Format prefix/stem/singular/plural fields; bare labels retain singular endings."""
+    if "/" not in raw:
+        return raw if bare or quantity <= 1 else f"{quantity} {raw}"
+    parts = raw.split("/", 3)
+    if len(parts) != 4:
+        return "?"
+    prefix, stem, singular, plural = parts
+    if bare:
+        return stem + singular
+    if quantity <= 1:
+        return (prefix + " " if prefix else "") + stem + singular
+    return f"{quantity} {stem}{plural}"
 
 
 def _clean_article_name(raw: str) -> str:
-    """Strip Exult article/plural formatting from a TEXT.FLX name.
-
-    Records in TEXT.FLX use the format ``article/name/prefix/suffix`` where
-    the article is a short word like ``a``, ``an``, or ``the``, and suffix
-    encodes plural rules (e.g. ``s``).  Examples::
-
-        '/potion//s'      → 'potion'
-        'a/black pearl//s' → 'black pearl'
-        '/gold coin//s'   → 'gold coin'
-        'lockpick'        → 'lockpick'   (unchanged)
-    """
-    if "/" not in raw:
-        return raw
-    parts = raw.split("/")
-    # First segment is an article (empty, or 1-3 chars: "a", "an", "the").
-    if len(parts) >= 2 and len(parts[0]) <= 3:
-        return parts[1].strip()
-    return parts[0].strip()
+    """Return a bare singular catalogue label, without discarding the singular suffix."""
+    return format_u7_name(raw, bare=True)
 
 
 class U7ShapeNames:
-    """Shape display names loaded from TEXT.FLX."""
+    """Shape-only names with retained raw morphology and optional full text banks."""
 
-    def __init__(self, names: list[str]) -> None:
-        self._names = names
-
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def from_file(cls, path: str) -> "U7ShapeNames":
-        """Load TEXT.FLX from an explicit path."""
-        flex = U7FlexArchive.from_file(path)
-        names: list[str] = []
-        for i in range(len(flex.records)):
-            rec = flex.get_record(i)
-            if rec:
-                text = rec.split(b"\x00", 1)[0].decode("latin-1", errors="replace").strip()
-                text = _clean_article_name(text)
-            else:
-                text = ""
-            names.append(text)
-        return cls(names)
+    def __init__(
+        self,
+        names: Sequence[str],
+        *,
+        banks: U7TextBanks | None = None,
+        warnings: Sequence[str] = (),
+    ) -> None:
+        self.raw_names = tuple(names)
+        self._names = [_clean_article_name(name) for name in names]
+        self.text_banks = banks
+        self.warnings = list(warnings)
+        self.warnings.extend(
+            f"Shape name {index} has malformed slash syntax."
+            for index, name in enumerate(names)
+            if "/" in name and len(name.split("/", 3)) != 4
+        )
 
     @classmethod
-    def from_static_dir(cls, static_dir: str) -> Optional["U7ShapeNames"]:
-        """Try to load TEXT.FLX from a STATIC directory. Returns None if absent."""
-        for name in ("TEXT.FLX", "text.flx"):
-            path = Path(static_dir) / name
-            if path.exists():
-                return cls.from_file(str(path))
-        return None
+    def from_file(
+        cls, path: str, *, game: str = "bg", si_variant: SIVariant = "unmapped"
+    ) -> U7ShapeNames:
+        banks = U7TextBanks.from_file(path, game=game, si_variant=si_variant)
+        return cls(banks.shapes, banks=banks, warnings=banks.warnings)
 
     @classmethod
-    def from_textmsg(cls, textmsg_path: str, base: Optional["U7ShapeNames"] = None) -> "U7ShapeNames":
-        """Load shape names from ``textmsg.txt %%section shapes``, overlaying on *base*.
+    def from_static_dir(
+        cls, static_dir: str, *, game: str = "bg"
+    ) -> U7ShapeNames | None:
+        textmsg = _text_file(Path(static_dir), "textmsg.txt")
+        if textmsg is not None:
+            return cls.from_textmsg(str(textmsg), mode="replace")
+        path = _text_file(Path(static_dir), "text.flx")
+        return cls.from_file(str(path), game=game) if path else None
 
-        Entries in the mod's textmsg.txt overlay TEXT.FLX entries for the same
-        shape number; shapes absent from textmsg.txt retain their base names.
-        If *base* is None, only mod-defined names are available.
-        """
-        in_section = False
-        overrides: dict[int, str] = {}
-        with open(textmsg_path, encoding="latin-1") as fh:
-            for line in fh:
-                line = line.strip()
-                if line == "%%section shapes":
-                    in_section = True
-                    continue
-                if line.startswith("%%"):
-                    if in_section:
-                        break
-                    continue
-                if not in_section or line.startswith("#") or ":" not in line:
-                    continue
-                idx_str, _, name = line.partition(":")
-                try:
-                    idx = int(idx_str, 16)
-                except ValueError:
-                    continue
-                overrides[idx] = _clean_article_name(name.strip())
-        names = list(base._names) if base is not None else []
-        for idx, name in overrides.items():
-            if idx >= len(names):
-                names.extend([""] * (idx - len(names) + 1))
-            names[idx] = name
-        return cls(names)
+    @classmethod
+    def from_textmsg(
+        cls,
+        textmsg_path: str,
+        base: U7ShapeNames | None = None,
+        *,
+        mode: Literal["overlay", "replace"] = "overlay",
+        encoding: TextEncoding = "auto",
+    ) -> U7ShapeNames:
+        """Apply an explicit sparse inspection overlay, or select a replacement shape bank."""
+        if mode not in ("overlay", "replace"):
+            raise ValueError(f"Unknown shape-name loading mode: {mode}")
+        text = U7TextMessages.from_file(textmsg_path, encoding=encoding)
+        previous = base.raw_names if base is not None and mode == "overlay" else ()
+        return cls(text.strings("shapes", previous), warnings=text.warnings)
 
     @classmethod
     def from_mod_dir(
         cls,
         mod_data_dir: str,
-        base: Optional["U7ShapeNames"] = None,
-    ) -> Optional["U7ShapeNames"]:
-        """Load/overlay shape names from a mod's ``textmsg.txt %%section shapes``.
+        base: U7ShapeNames | None = None,
+        *,
+        mode: Literal["overlay", "replace"] = "overlay",
+        encoding: TextEncoding = "auto",
+    ) -> U7ShapeNames | None:
+        """Load a mod's explicit inspection overlay; engine selection uses text_names."""
+        path = _text_file(Path(mod_data_dir), "textmsg.txt")
+        return (
+            cls.from_textmsg(str(path), base, mode=mode, encoding=encoding)
+            if path
+            else base
+        )
 
-        Returns *base* unchanged if no ``textmsg.txt`` is found in *mod_data_dir*.
-        """
-        textmsg = Path(mod_data_dir) / "textmsg.txt"
-        if not textmsg.exists():
-            return base
-        return cls.from_textmsg(str(textmsg), base=base)
-
-    # ------------------------------------------------------------------
-    # Lookup
-    # ------------------------------------------------------------------
+    def raw_get(self, shape_num: int) -> str:
+        """Return raw stored morphology, or empty text for an unknown shape."""
+        return self.raw_names[shape_num] if 0 <= shape_num < len(self.raw_names) else ""
 
     def get(self, shape_num: int) -> str:
-        """Return the display name for shape_num, or empty string if unknown."""
-        if 0 <= shape_num < len(self._names):
-            return self._names[shape_num]
-        return ""
+        """Return a bare singular label only from the shape namespace."""
+        return self._names[shape_num] if 0 <= shape_num < len(self._names) else ""
+
+    def display_name(self, shape_num: int, quantity: int = 1) -> str:
+        """Apply stored article/plural rules using the caller's effective quantity."""
+        return format_u7_name(self.raw_get(shape_num), quantity)
 
     def label(self, shape_num: int) -> str:
-        """Return '522 (locked chest)' style label, or just '522' if unnamed."""
         name = self.get(shape_num)
-        if name:
-            return f"{shape_num} ({name})"
-        return str(shape_num)
+        return f"{shape_num} ({name})" if name else str(shape_num)
 
     def find_shapes(self, pattern: str) -> list[int]:
-        """Return shape numbers whose name contains pattern (case-insensitive)."""
-        lower = pattern.lower()
-        return [i for i, n in enumerate(self._names) if lower in n.lower()]
+        lower = pattern.casefold()
+        return [
+            index for index, name in enumerate(self._names) if lower in name.casefold()
+        ]
 
     def __len__(self) -> int:
         return len(self._names)
 
 
+@dataclass(frozen=True)
+class U7FrameNameRule:
+    """A stored frame/quality rule keeps actions and message references until resolution."""
+
+    shape: int
+    frame: int
+    quality: int
+    type: int
+    msgid: int = 0
+    othermsg: int = -255
+    literal: str | None = None
+    source: str = ""
+    supplied_fields: int = 6
+
+
+@dataclass(frozen=True)
+class U7NameResolution:
+    """Distinguish displayed text, explicit emptiness, suppression and missing runtime context."""
+
+    kind: Literal["name", "empty", "suppressed", "default", "unresolved"]
+    text: str
+    rule: U7FrameNameRule | None = None
+    reason: str = ""
+
+
+def _text_file(directory: Path, filename: str) -> Path | None:
+    direct = directory / filename
+    if direct.is_file():
+        return direct
+    if directory.is_dir():
+        return next(
+            (
+                path
+                for path in directory.iterdir()
+                if path.is_file() and path.name.lower() == filename.lower()
+            ),
+            None,
+        )
+    return None
+
+
 class U7FrameNames:
-    """Per-frame shape names loaded from shape_info.txt + TEXT.FLX misc_names.
+    """Resolve retained frame/quality rules over current misc strings, not cached labels."""
 
-    Exult's ``%%section framenames`` in *shape_info.txt* maps every
-    ``(shape, frame)`` pair to an index into the misc_names region of
-    TEXT.FLX (records 0x500+).  This class parses both sources and
-    exposes a ``get(shape, frame)`` lookup.
-    """
+    _FLX_RECORD_BG = 7
+    _FLX_RECORD_SI = 4
 
-    def __init__(self, lookup: dict[tuple[int, int], str]) -> None:
-        self._lookup = lookup  # (shape, frame) → name; frame=-1 means wildcard
-
-    # ------------------------------------------------------------------
-    # Construction
-    # ------------------------------------------------------------------
+    def __init__(
+        self,
+        lookup: dict[tuple[int, int], str] | None = None,
+        *,
+        rules: Sequence[U7FrameNameRule] = (),
+        misc_names: Sequence[str] = (),
+        game: str = "bg",
+        si_variant: SIVariant = "unmapped",
+        warnings: Sequence[str] = (),
+    ) -> None:
+        self.rules = {(r.shape, r.frame, r.quality): r for r in rules}
+        for (shape, frame), value in (lookup or {}).items():
+            self.rules[(shape, frame, -1)] = U7FrameNameRule(
+                shape, frame, -1, 0, literal=value
+            )
+        self.misc_names = tuple(misc_names)
+        self.game = game
+        self.si_variant = si_variant
+        self.warnings = list(warnings)
 
     @staticmethod
     def _clean_misc_name(raw: str) -> str:
         return _clean_article_name(raw)
 
-    # Record index of shape_info.txt inside exult_bg.flx / exult_si.flx.
-    _FLX_RECORD_BG = 7
-    _FLX_RECORD_SI = 4
+    @classmethod
+    def _load_misc_names(
+        cls, text_flx_path: str, *, game: str = "bg", si_variant: SIVariant = "unmapped"
+    ) -> list[str]:
+        return list(
+            U7TextBanks.from_file(text_flx_path, game=game, si_variant=si_variant).misc
+        )
 
     @classmethod
-    def _load_misc_names(cls, text_flx_path: str) -> list[str]:
-        """Return misc_names list from TEXT.FLX (records 0x500+)."""
-        flex = U7FlexArchive.from_file(text_flx_path)
-        result: list[str] = []
-        for i in range(0x500, len(flex.records)):
-            rec = flex.get_record(i)
-            raw = (
-                rec.split(b"\x00", 1)[0].decode("latin-1", errors="replace").strip()
-                if rec
-                else ""
+    def from_text(
+        cls,
+        text: str,
+        misc_names: Sequence[str],
+        *,
+        game: str = "bg",
+        source: str = "",
+        si_variant: SIVariant = "unmapped",
+    ) -> U7FrameNames:
+        """Read shape_info decimal fields, retaining quality, actions and source defaults."""
+        parsed = U7TextMessages.from_bytes(text.encode("utf-8"))
+        rules = []
+        warnings = list(parsed.warnings)
+        for _, value in sorted(parsed.sections.get("framenames", {}).items()):
+            parts = value.split("/")
+
+            def number(index: int, default: int = 0) -> int:
+                if index >= len(parts):
+                    return default
+                try:
+                    return int(parts[index], 10)
+                except ValueError as error:
+                    raise ValueError(
+                        f"Invalid framenames numeric field: {value!r}"
+                    ) from error
+
+            shape = number(0, -1)
+            if not 0 <= shape <= 0xFFFF:
+                raise ValueError(f"Invalid framenames shape: {shape}")
+            frame, quality, kind = number(1), number(2), number(3)
+            rules.append(
+                U7FrameNameRule(
+                    shape,
+                    -1 if frame < 0 else frame & 255,
+                    -1 if quality < 0 else quality & 255,
+                    kind,
+                    number(4) if kind >= 0 else 0,
+                    number(5, -255) if kind >= 0 else -255,
+                    source=source,
+                    supplied_fields=len(parts),
+                )
             )
-            result.append(cls._clean_misc_name(raw))
-        return result
+        return cls(
+            rules=rules,
+            misc_names=misc_names,
+            game=game,
+            si_variant=si_variant,
+            warnings=warnings,
+        )
 
     @classmethod
     def _parse_framenames(
-        cls, lines: "list[str]", misc_names: list[str]
-    ) -> "dict[tuple[int, int], str]":
-        """Parse ``%%section framenames`` lines → lookup dict."""
-        lookup: dict[tuple[int, int], str] = {}
-        in_section = False
-        for line in lines:
-            line = line.strip()
-            if line == "%%section framenames":
-                in_section = True
-                continue
-            if line.startswith("%%"):
-                if in_section:
-                    break
-                continue
-            if not in_section or not line.startswith(":") or line.startswith("#"):
-                continue
-            parts = line[1:].split("/")
-            if len(parts) < 4:
-                continue
-            try:
-                shape = int(parts[0])
-                frame = int(parts[1])
-                typ   = int(parts[3])
-            except ValueError:
-                continue
-            if typ == 0 and len(parts) >= 5:
-                try:
-                    msgid = int(parts[4])
-                except ValueError:
-                    continue
-                if 0 <= msgid < len(misc_names) and misc_names[msgid]:
-                    lookup[(shape, frame)] = misc_names[msgid]
-            elif typ == -1:
-                lookup[(shape, frame)] = ""  # explicitly unnamed
-        return lookup
+        cls, lines: list[str], misc_names: list[str]
+    ) -> dict[tuple[int, int], str]:
+        """Compatibility preview of context-free rules; full rules live in from_text."""
+        parsed = cls.from_text("\n".join(lines), misc_names)
+        return {
+            (r.shape, r.frame): parsed.get(r.shape, r.frame)
+            for r in parsed.rules.values()
+            if r.quality == -1 and r.type in (0, -1)
+        }
 
     @classmethod
     def _load_misc_names_from_textmsg(
-        cls, textmsg_path: str, base: Optional[list[str]] = None
+        cls,
+        textmsg_path: str,
+        base: list[str] | None = None,
+        *,
+        encoding: TextEncoding = "auto",
     ) -> list[str]:
-        """Parse ``%%section miscnames`` from textmsg.txt, overlaying on *base*.
+        return U7TextMessages.from_file(textmsg_path, encoding=encoding).strings(
+            "miscnames", base or ()
+        )
 
-        The mod's misc_name entries (indexed from 0x0) overlay the base
-        TEXT.FLX misc_names at matching indices, and extend the table for
-        indices beyond the base game's range.
-        """
-        result: list[str] = list(base) if base else []
-        in_section = False
-        with open(textmsg_path, encoding="latin-1") as fh:
-            for line in fh:
-                line = line.strip()
-                if line == "%%section miscnames":
-                    in_section = True
-                    continue
-                if line.startswith("%%"):
-                    if in_section:
-                        break
-                    continue
-                if not in_section or line.startswith("#") or ":" not in line:
-                    continue
-                idx_str, _, name = line.partition(":")
-                try:
-                    idx = int(idx_str, 16)
-                except ValueError:
-                    continue
-                name = cls._clean_misc_name(name.strip())
-                if idx >= len(result):
-                    result.extend([""] * (idx - len(result) + 1))
-                result[idx] = name
-        return result
+    def with_misc(self, values: Sequence[str]) -> U7FrameNames:
+        """Rebind inherited message references without changing their frame/quality rules."""
+        return U7FrameNames(
+            rules=list(self.rules.values()),
+            misc_names=values,
+            game=self.game,
+            si_variant=self.si_variant,
+            warnings=self.warnings,
+        )
 
-    def merged_with(self, other: "U7FrameNames") -> "U7FrameNames":
-        """Return a new U7FrameNames with *other* entries overlaying self."""
-        merged = dict(self._lookup)
-        merged.update(other._lookup)
-        return U7FrameNames(merged)
+    def merged_with(self, other: U7FrameNames) -> U7FrameNames:
+        merged = dict(self.rules)
+        merged.update(other.rules)
+        return U7FrameNames(
+            rules=list(merged.values()),
+            misc_names=other.misc_names,
+            game=self.game,
+            si_variant=self.si_variant,
+            warnings=[*self.warnings, *other.warnings],
+        )
 
     @classmethod
     def from_mod_dir(
         cls,
         mod_data_dir: str,
-        text_flx_path: str,
-        base: Optional["U7FrameNames"] = None,
-    ) -> Optional["U7FrameNames"]:
-        """Load mod frame names from a mod's ``patch/`` or ``data/`` directory.
-
-        Looks for ``textmsg.txt`` (misc_names overlay) and ``shape_info.txt``
-        (framename mappings).  Merges with *base* if provided — mod entries
-        win on any (shape, frame) conflict.
-
-        Returns *base* unchanged if neither file is found; returns *base*
-        unchanged if ``shape_info.txt`` is absent (misc_names alone provide no
-        frame-to-name mappings).
-        """
-        mod_dir = Path(mod_data_dir)
-        textmsg = mod_dir / "textmsg.txt"
-        shape_info = mod_dir / "shape_info.txt"
-
-        if not shape_info.exists():
+        text_flx_path: str | None,
+        base: U7FrameNames | None = None,
+        *,
+        game: str | None = None,
+        si_variant: SIVariant = "unmapped",
+        encoding: TextEncoding = "auto",
+    ) -> U7FrameNames | None:
+        """Sparse inspection overlay, rebinding inherited rules even for misc-only changes."""
+        directory = Path(mod_data_dir)
+        textmsg, shape_info = (
+            _text_file(directory, "textmsg.txt"),
+            _text_file(directory, "shape_info.txt"),
+        )
+        if textmsg is None and shape_info is None:
             return base
-
-        misc_names = cls._load_misc_names(text_flx_path)
-        if textmsg.exists():
-            misc_names = cls._load_misc_names_from_textmsg(str(textmsg), base=misc_names)
-
-        with open(shape_info, encoding="latin-1") as fh:
-            lines = fh.readlines()
-        mod_lookup = cls._parse_framenames(lines, misc_names)
-        mod_frame_names = cls(mod_lookup)
-
-        if base is not None:
-            return base.merged_with(mod_frame_names)
-        return mod_frame_names
+        chosen_game = game or (base.game if base is not None else "bg")
+        variant = base.si_variant if base is not None else si_variant
+        misc = (
+            list(base.misc_names)
+            if base is not None
+            else cls._load_misc_names(
+                text_flx_path, game=chosen_game, si_variant=variant
+            )
+            if text_flx_path
+            else []
+        )
+        warnings = []
+        if textmsg is not None:
+            parsed = U7TextMessages.from_file(textmsg, encoding=encoding)
+            misc = parsed.strings("miscnames", misc)
+            warnings.extend(parsed.warnings)
+            if (
+                base is not None
+                and any(r.literal is not None for r in base.rules.values())
+                and "miscnames" in parsed.sections
+            ):
+                warnings.append(
+                    "Literal frame labels have no message references to rebind."
+                )
+        result = (
+            base.with_misc(misc)
+            if base is not None
+            else cls(misc_names=misc, game=chosen_game, si_variant=variant)
+        )
+        result.warnings.extend(warnings)
+        if shape_info is not None:
+            text, _ = decode_text_source(shape_info.read_bytes(), encoding)
+            result = result.merged_with(
+                cls.from_text(
+                    text,
+                    misc,
+                    game=chosen_game,
+                    source=str(shape_info),
+                    si_variant=variant,
+                )
+            )
+        return result
 
     @classmethod
-    def from_files(cls, shape_info_path: str, text_flx_path: str) -> "U7FrameNames":
-        """Parse shape_info.txt framenames + TEXT.FLX misc_names.
-
-        Args:
-            shape_info_path: Path to Exult's ``data/bg/shape_info.txt``.
-            text_flx_path:   Path to the game's ``STATIC/TEXT.FLX``.
-        """
-        misc_names = cls._load_misc_names(text_flx_path)
-        with open(shape_info_path, encoding="latin-1") as fh:
-            lines = fh.readlines()
-        return cls(cls._parse_framenames(lines, misc_names))
+    def from_files(
+        cls,
+        shape_info_path: str,
+        text_flx_path: str,
+        *,
+        game: str = "bg",
+        si_variant: SIVariant = "unmapped",
+        encoding: TextEncoding = "auto",
+    ) -> U7FrameNames:
+        text, _ = decode_text_source(Path(shape_info_path).read_bytes(), encoding)
+        return cls.from_text(
+            text,
+            cls._load_misc_names(text_flx_path, game=game, si_variant=si_variant),
+            game=game,
+            source=shape_info_path,
+            si_variant=si_variant,
+        )
 
     @classmethod
     def from_flx(
@@ -351,28 +407,21 @@ class U7FrameNames:
         exult_flx_path: str,
         text_flx_path: str,
         game: str = "bg",
-    ) -> "U7FrameNames":
-        """Load frame names from an installed ``exult_bg.flx`` / ``exult_si.flx``.
-
-        shape_info.txt is embedded as record 7 (BG) or record 4 (SI) inside
-        the Exult binary Flex archive that ships with every Exult installation.
-
-        Args:
-            exult_flx_path: Path to ``exult_bg.flx`` or ``exult_si.flx``.
-            text_flx_path:  Path to the game's ``STATIC/TEXT.FLX``.
-            game:           ``"bg"`` or ``"si"`` — selects the record index.
-        """
-        record_idx = cls._FLX_RECORD_BG if game == "bg" else cls._FLX_RECORD_SI
-        flx = U7FlexArchive.from_file(exult_flx_path)
-        rec = flx.get_record(record_idx)
-        if not rec:
-            raise ValueError(
-                f"Record {record_idx} in {exult_flx_path} is empty; "
-                "expected shape_info.txt content."
-            )
-        text = rec.decode("latin-1", errors="replace")
-        misc_names = cls._load_misc_names(text_flx_path)
-        return cls(cls._parse_framenames(text.splitlines(), misc_names))
+        *,
+        si_variant: SIVariant = "unmapped",
+    ) -> U7FrameNames:
+        data = U7FlexArchive.from_file(exult_flx_path, strict=True).get_record(
+            cls._FLX_RECORD_BG if game.lower() == "bg" else cls._FLX_RECORD_SI
+        )
+        if not data:
+            raise ValueError(f"Empty shape_info resource in {exult_flx_path}")
+        return cls.from_text(
+            data.decode("latin-1"),
+            cls._load_misc_names(text_flx_path, game=game, si_variant=si_variant),
+            game=game,
+            source=exult_flx_path,
+            si_variant=si_variant,
+        )
 
     @classmethod
     def from_static_and_exult(
@@ -380,73 +429,139 @@ class U7FrameNames:
         static_dir: str,
         exult_data_dir: str,
         game: str = "bg",
-    ) -> Optional["U7FrameNames"]:
-        """Convenience loader given a STATIC dir and an Exult data source.
-
-        Tries three sources in order:
-        1. ``exult_data_dir/exult_bg.flx`` — installed Exult binary Flex archive.
-        2. ``exult_data_dir/data/exult_bg.flx`` — alternate layout.
-        3. ``exult_data_dir/<game>/shape_info.txt`` — Exult source tree.
-
-        Args:
-            static_dir:     Path to the game's STATIC directory.
-            exult_data_dir: Exult install directory, ``data/`` subdirectory,
-                            or Exult source ``data/`` root.
-            game:           ``"bg"`` or ``"si"``.
-        """
-        text_flx = None
-        for name in ("TEXT.FLX", "text.flx"):
-            p = Path(static_dir) / name
-            if p.exists():
-                text_flx = str(p)
-                break
-        if text_flx is None:
+        *,
+        si_variant: SIVariant = "unmapped",
+    ) -> U7FrameNames | None:
+        text = _text_file(Path(static_dir), "text.flx")
+        if text is None:
             return None
+        root = Path(exult_data_dir)
+        for directory in (root, root / "data"):
+            resource = _text_file(directory, f"exult_{game}.flx")
+            if resource:
+                return cls.from_flx(
+                    str(resource), str(text), game, si_variant=si_variant
+                )
+        source = root / game / "shape_info.txt"
+        return (
+            cls.from_files(str(source), str(text), game=game, si_variant=si_variant)
+            if source.is_file()
+            else None
+        )
 
-        flx_name = f"exult_bg.flx" if game == "bg" else "exult_si.flx"
-        data_root = Path(exult_data_dir)
-
-        # Try binary .flx first (installed Exult)
-        for candidate in (
-            data_root / flx_name,
-            data_root / "data" / flx_name,
+    def rule_for(
+        self, shape: int, frame: int, quality: int = -1
+    ) -> U7FrameNameRule | None:
+        """Prefer exact frame/quality, frame wildcard-quality, quality wildcard-frame, then both."""
+        for key in dict.fromkeys(
+            (
+                (shape, frame, quality),
+                (shape, frame, -1),
+                (shape, -1, quality),
+                (shape, -1, -1),
+            )
         ):
-            if candidate.exists():
-                return cls.from_flx(str(candidate), text_flx, game=game)
-
-        # Fall back to raw text file (Exult source tree layout: data/bg/shape_info.txt)
-        shape_info = data_root / game / "shape_info.txt"
-        if shape_info.exists():
-            return cls.from_files(str(shape_info), text_flx)
-
+            if key in self.rules:
+                return self.rules[key]
         return None
 
-    # ------------------------------------------------------------------
-    # Lookup
-    # ------------------------------------------------------------------
+    def resolve(
+        self,
+        shape: int,
+        frame: int,
+        shape_names: U7ShapeNames | None = None,
+        *,
+        quality: int = -1,
+        has_quality: bool | None = None,
+        is_body: bool = False,
+        npc_name: str | None = None,
+        quantity: int | None = None,
+    ) -> U7NameResolution:
+        """Resolve static actions; NPC eligibility/name must come from explicit runtime context.
 
-    def get(self, shape: int, frame: int) -> str:
-        """Return the frame-specific name, or empty string if unknown.
-
-        Tries exact ``(shape, frame)`` first, then the wildcard
-        ``(shape, -1)`` entry (which applies to all frames).
+        quality is the caller's effective binding quality (-1 for NPC/non-quality
+        objects). npc_name=None means unavailable context; an empty name means a
+        known ineligible/unnamed NPC and selects the stored default instead.
         """
-        return self._lookup.get((shape, frame), self._lookup.get((shape, -1), ""))
+        rule = self.rule_for(shape, frame, quality)
+        shape_raw = shape_names.raw_get(shape) if shape_names is not None else ""
+
+        def display(raw: str) -> str:
+            return format_u7_name(
+                raw, 1 if quantity is None else quantity, bare=quantity is None
+            )
+
+        def default() -> U7NameResolution:
+            return U7NameResolution("default", display(shape_raw), rule)
+
+        if rule is None or rule.type == -255:
+            return default()
+        if rule.type < 0:
+            return U7NameResolution("suppressed", "", rule)
+        if rule.literal is not None:
+            value = display(rule.literal)
+            return U7NameResolution("name" if value else "empty", value, rule)
+        if not 0 <= rule.msgid < len(self.misc_names):
+            return default()
+        msg = self.misc_names[rule.msgid]
+        if rule.type == 0:
+            value = display(msg)
+            return U7NameResolution("name" if value else "empty", value, rule)
+        if has_quality is False and not is_body:
+            return default()
+        if has_quality is None and not is_body:
+            return U7NameResolution(
+                "unresolved", "", rule, "Item class/quality context is required."
+            )
+        if rule.type < 3:
+            other = (
+                self.misc_names[rule.othermsg]
+                if 0 <= rule.othermsg < len(self.misc_names)
+                else shape_raw
+            )
+        else:
+            if npc_name is None:
+                return U7NameResolution(
+                    "unresolved",
+                    "",
+                    rule,
+                    "Eligible NPC/body name context is required.",
+                )
+            if not npc_name:
+                if 0 <= rule.othermsg < len(self.misc_names):
+                    value = display(self.misc_names[rule.othermsg])
+                    return U7NameResolution("name" if value else "empty", value, rule)
+                return (
+                    U7NameResolution("suppressed", "", rule)
+                    if rule.othermsg < 0 and rule.othermsg != -255
+                    else default()
+                )
+            other = npc_name
+        value = other + msg if rule.type & 1 else msg + other
+        return U7NameResolution("name" if value else "empty", value, rule)
+
+    def get(self, shape: int, frame: int, quality: int = -1) -> str:
+        """Return a context-free bare label, preserving explicit suppression/empty results."""
+        return self.resolve(shape, frame, quality=quality).text
 
     def label(
         self,
         shape: int,
         frame: int,
-        shape_names: Optional["U7ShapeNames"] = None,
+        shape_names: U7ShapeNames | None = None,
+        *,
+        quality: int = -1,
+        has_quality: bool | None = None,
+        is_body: bool = False,
+        npc_name: str | None = None,
     ) -> str:
-        """Return the best available display name.
-
-        Frame name takes priority; falls back to shape name from
-        *shape_names* if provided, then empty string.
-        """
-        name = self.get(shape, frame)
-        if name:
-            return name
-        if shape_names is not None:
-            return shape_names.get(shape)
-        return ""
+        """Return a bare label; only default actions fall back to the shape name."""
+        return self.resolve(
+            shape,
+            frame,
+            shape_names,
+            quality=quality,
+            has_quality=has_quality,
+            is_body=is_body,
+            npc_name=npc_name,
+        ).text

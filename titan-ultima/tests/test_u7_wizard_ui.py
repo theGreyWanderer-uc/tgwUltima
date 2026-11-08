@@ -570,9 +570,11 @@ def owned_world(tmp_path, monkeypatch):
     monkeypatch.setattr(target_picker, "game_targets", lambda game: (target, [target]))
     parsed = []
 
-    def parser(path, sc, flags):
+    def parser(path, sc, flags, *, context=None):
         parsed.append(path)
         assert flags.get(522).shape_class == 6
+        if context is not None:
+            assert context.tfa is flags and context.game == "si"
         return [U7MapObject(1, 2, 0, 522, 0)]
 
     monkeypatch.setattr(container.U7MapRenderer, "parse_ireg_deep", parser)

@@ -30,6 +30,14 @@ from titan.u7.shape_archive import U7ShapeArchive, find_archive
 from titan.u7.shape_browser import ShapeLibrary, load_library
 from titan.u7.target_picker import game_targets, select_target
 from titan.u7.world import WorldQueryParams, load_query_metadata
+from titan.u7.avatar_metadata import U7AvatarMetadata, read_u7_avatar_metadata
+from titan.u7.gump_metadata import load_u7_gump_sources
+from titan.u7.ireg_metadata import U7IregContext
+from titan.u7.ireg_specials import saved_slot_row
+from titan.u7.ready_metadata import U7ReadyMetadata
+from titan.u7.typeflag import U7TypeFlags
+from titan.u7.usecode import U7UsecodeFile
+from titan.u7.usecode_analysis import U7UsecodeWorld
 
 PAGE_SIZE = 15
 NPC_PREVIEW_FRAME = 16
@@ -69,10 +77,18 @@ class Session:
     state: U7GameState | None = None
     names: U7ShapeNames | None = None
     ready: U7ReadyTypes | None = None
+    effective_ready: U7ReadyMetadata | None = None
+    ireg_context: U7IregContext | None = None
     warnings: list[str] = field(default_factory=list)
     game: str = "bg"
     preview_library: ShapeLibrary | None = field(default=None, repr=False)
     preview_error: str | None = None
+    avatar_metadata: U7AvatarMetadata | None = None
+    usecode_symbols: dict[str, int] | None = None
+    usecode_sources: list[str] = field(default_factory=list)
+    have_si_shapes: bool | None = None
+    avatar_skin: int | None = None
+    avatar_female: bool | None = None
 
     def overview(self) -> str:
         lines = [
@@ -123,31 +139,43 @@ def save_paths(target: ArchiveTarget) -> list[Path]:
 
 
 def _schedule_checks(data: bytes) -> None:
-    """Reject incomplete tables that the legacy reader tolerates as partial data."""
-    if len(data) < 4:
-        raise ValueError("schedule.dat header is incomplete")
-    marker = struct.unpack_from("<i", data)[0]
-    if marker < -2:
-        raise ValueError(f"Unsupported schedule.dat marker {marker}")
-    count = marker if marker >= 0 else struct.unpack_from("<I", data, 4)[0]
-    pos = 4 if marker >= 0 else (10 if marker == -2 else 8)
-    if len(data) < pos + count * 2:
-        raise ValueError("schedule.dat offset table is incomplete")
-    offsets = [struct.unpack_from("<H", data, pos + i * 2)[0] for i in range(count)]
-    if offsets != sorted(offsets):
-        raise ValueError("schedule.dat offsets are not cumulative")
-    pos += count * 2
-    if marker == -2 and struct.unpack_from("<H", data, 8)[0]:
-        length = struct.unpack_from("<H", data, pos)[0]
-        pos += 2 + length
-    required = pos + (offsets[-1] if offsets else 0) * (4 if marker >= 0 else 8)
-    if len(data) < required:
-        raise ValueError("schedule.dat entries are incomplete")
+    """Compatibility entry point for the shared strict schedule parser."""
+    U7Schedules.from_bytes(data, strict=True)
+
+
+def load_inventory_metadata(session: Session, tfa: U7TypeFlags | None) -> None:
+    """Share owner-specific READY and IREG context with NPC and monster browsers."""
+    target = session.target
+    try:
+        sources = load_u7_gump_sources(
+            target.static,
+            patch_dir=target.patch,
+            game=session.game,
+            custom_game=target.standalone,
+        )
+        session.effective_ready = U7ReadyMetadata.from_dir(
+            target.static,
+            patch_dir=target.patch,
+            game=session.game,
+            sources=sources,
+        )
+        session.warnings.extend(session.effective_ready.warnings)
+        # Retain the existing raw-preference interface for compatibility.
+        session.ready = U7ReadyTypes(
+            dict(session.effective_ready.preferred),
+            list(session.effective_ready.records),
+        )
+        session.ireg_context = U7IregContext.from_sources(
+            sources, tfa, game=session.game
+        )
+    except READ_ERRORS as error:
+        session.warnings.append(f"Inventory metadata unavailable: {error}")
 
 
 def _metadata(session: Session, game: str) -> tuple[set[int] | None, int | None]:
     target = session.target
     containers, shape_count = None, None
+    tfa: U7TypeFlags | None = None
     if target.static is not None:
         try:
             tfa, session.names, _, count = load_query_metadata(
@@ -184,19 +212,60 @@ def _metadata(session: Session, game: str) -> tuple[set[int] | None, int | None]
             shape_count = len(archive.effective.records)
         except READ_ERRORS as error:
             session.warnings.append(f"Shape bounds unavailable: {error}")
-    ready = owner_file(target, "READY.DAT")
-    if ready:
-        try:
-            session.ready = U7ReadyTypes.from_file(str(ready), game=game)
-        except READ_ERRORS as error:
-            session.warnings.append(f"Ready-slot preferences unavailable: {error}")
+    load_inventory_metadata(session, tfa)
+    try:
+        session.avatar_metadata = read_u7_avatar_metadata(
+            load_u7_gump_sources(
+                target.static,
+                patch_dir=target.patch,
+                game=game,
+                custom_game=target.standalone,
+            )
+        )
+        session.warnings.extend(session.avatar_metadata.warnings)
+    except READ_ERRORS as error:
+        session.warnings.append(f"Avatar metadata unavailable: {error}")
+    try:
+        world = U7UsecodeWorld()
+        paths: set[Path] = set()
+        for directory, patch in ((target.static, False), (target.patch, True)):
+            path = find_archive(directory, "USECODE") if directory is not None else None
+            if path is not None and path.resolve() not in paths:
+                paths.add(path.resolve())
+                world.add_stream(
+                    U7UsecodeFile.from_file(str(path), strict=True),
+                    source=str(path),
+                    patch=patch,
+                )
+                session.usecode_sources.append(str(path))
+        if paths:
+            session.usecode_symbols = world.symbol_values
+    except READ_ERRORS as error:
+        session.warnings.append(f"Named Usecode bindings unavailable: {error}")
+        session.usecode_symbols = None
     return containers, shape_count
 
 
-def load_session(target: ArchiveTarget, source: Source, game: str) -> Session:
+def load_session(
+    target: ArchiveTarget,
+    source: Source,
+    game: str,
+    *,
+    have_si_shapes: bool | None = None,
+    avatar_skin: int | None = None,
+    avatar_female: bool | None = None,
+) -> Session:
     path = existing_path(source.path.expanduser()).absolute()
     source = Source(path, source.kind)
     session = Session(target, source, game=game)
+    session.have_si_shapes = (
+        have_si_shapes
+        if have_si_shapes is not None
+        else True
+        if game == "si" and not target.standalone
+        else None
+    )
+    session.avatar_skin, session.avatar_female = avatar_skin, avatar_female
     directory = path if path.is_dir() else path.parent
     if path.is_dir() or path.name.casefold() == "npc.dat":
         if not path.exists():
@@ -217,6 +286,7 @@ def load_session(target: ArchiveTarget, source: Source, game: str) -> Session:
         flavor = "runtime" if source.kind == "live" else "auto"
     else:
         archive = U7Save.from_file(str(path))
+        session.warnings.extend(archive.warnings)
         session.title, session.format = archive.title, archive.container_format
         session.entries = archive.list_entries()
         data = archive.get_data
@@ -272,26 +342,34 @@ def load_session(target: ArchiveTarget, source: Source, game: str) -> Session:
                 continue
             if name == "npc.dat":
                 session.npcs = U7NPCData.from_bytes(
-                    blob, containers, shape_count, npc_flavor=flavor
+                    blob,
+                    containers,
+                    shape_count,
+                    npc_flavor=flavor,
+                    game=game,
+                    ireg_context=session.ireg_context,
                 )
+                session.warnings.extend(session.npcs.warnings)
                 expected = session.npcs.num_npcs1 + session.npcs.num_npcs2
                 if len(session.npcs.npcs) != expected:
                     session.warnings.append(
-                        f"npc.dat is partial: parsed {len(session.npcs.npcs)} of {expected} declared NPCs."
+                        f"npc.dat is partial: parsed {len(session.npcs.npcs)} of {expected} declared NPCs; the last NPC record is incomplete or absent."
                     )
                 elif session.npcs._parsed_bytes > len(blob):
                     session.warnings.append(
                         "npc.dat is partial: the last NPC record is incomplete."
                     )
             elif name == "schedule.dat":
-                _schedule_checks(blob)
-                session.schedules = U7Schedules.from_bytes(blob)
+                session.schedules = U7Schedules.from_bytes(blob, strict=True)
+                session.warnings.extend(session.schedules.warnings)
             elif parser is not None:
                 setattr(session, attr, parser(blob))
         except READ_ERRORS as error:
             session.warnings.append(f"Cannot read {name}: {error}")
-    if session.info and len(session.info.party) != session.info.party_size:
-        session.warnings.append("saveinfo.dat party roster is incomplete.")
+    if session.info:
+        session.warnings.extend(session.info.warnings)
+    if session.state:
+        session.warnings.extend(session.state.warnings)
     return session
 
 
@@ -330,8 +408,61 @@ def npc_detail(session: Session, npc: U7NPC) -> str:
             f"Party: {npc.in_party}; dead: {npc.is_dead}; unused: {npc.unused}",
             f"Flags: rflags=0x{npc.rflags:04X}, type_flags=0x{npc.type_flags:04X}",
             f"Inventory: {len(npc.inventory)} parsed items (including nested contents)",
+            f"Saved actor IREG specials: {json.dumps([special.as_row() for special in npc.ireg_specials])}",
+            f"Actor extensions: {json.dumps(npc.metadata.as_row()) if npc.metadata is not None else 'unavailable'}",
+            f"Resolved actor context: {json.dumps(actor_context(session, npc))}",
         ]
     )
+
+
+def actor_context(session: Session, npc: U7NPC) -> dict[str, object]:
+    """Use the selected world's metadata and symbols; report only unresolved runtime dependencies."""
+    if npc.metadata is None:
+        return {"required_context": ["actor_metadata"]}
+    avatar_shape = None
+    if session.npcs is not None and npc.npc_num != 0:
+        avatar = next(
+            (actor for actor in session.npcs.npcs if actor.npc_num == 0), None
+        )
+        if avatar is not None and avatar.metadata is not None:
+            result = avatar.metadata.appearance(
+                avatar.shape,
+                avatar_metadata=session.avatar_metadata,
+                have_si_shapes=session.have_si_shapes,
+                avatar_skin=session.avatar_skin,
+                avatar_female=session.avatar_female,
+                avatar_sex_known=avatar.is_female is not None,
+            )
+            skin_result = result.get("avatar_resolution")
+            candidate = (
+                skin_result.get("resolved_shape")
+                if isinstance(skin_result, dict)
+                else None
+            )
+            avatar_shape = candidate if isinstance(candidate, int) else None
+    appearance = npc.metadata.appearance(
+        npc.shape,
+        avatar_shape=avatar_shape,
+        avatar_metadata=session.avatar_metadata,
+        have_si_shapes=session.have_si_shapes,
+        avatar_skin=session.avatar_skin,
+        avatar_female=session.avatar_female,
+        avatar_sex_known=npc.is_female is not None,
+    )
+    named = not npc.metadata.original_new_game and bool(npc.metadata.iflag1 & 8)
+    usecode = npc.metadata.resolve_usecode(session.usecode_symbols)
+    return {
+        "appearance": appearance,
+        "resolved_usecode": usecode,
+        "usecode_status": "symbols_unavailable"
+        if named and session.usecode_symbols is None
+        else "symbol_not_found"
+        if named and usecode is None
+        else "resolved"
+        if usecode is not None
+        else "unassigned",
+        "usecode_sources": session.usecode_sources,
+    }
 
 
 def inventory_rows(session: Session, npc: U7NPC) -> list[dict]:
@@ -345,6 +476,17 @@ def inventory_rows(session: Session, npc: U7NPC) -> list[dict]:
             else "",
             location=f"inside {item.path}" if item.depth else "actor inventory",
         )
+        row.update(saved_slot_row(item.ireg_index_id))
+        if (
+            not item.depth
+            and item.ireg_index_id is not None
+            and item.ireg_index_id.slot_name
+        ):
+            row["location"] = f"saved_readied:{item.ireg_index_id.slot_name}"
+        if session.effective_ready is not None:
+            row["effective_ready"] = session.effective_ready.resolve(
+                item.shape, item.frame
+            ).as_row()
         rows.append(row)
     return rows
 
@@ -388,7 +530,10 @@ def schedules_text(session: Session, npc: U7NPC) -> str:
     if not entries:
         return f"No daily schedule entries for NPC {npc.npc_num}."
     schedules = U7Schedules(
-        {npc.npc_num: entries}, session.schedules.num_npcs, session.schedules.format
+        {npc.npc_num: entries},
+        session.schedules.num_npcs,
+        session.schedules.format,
+        script_names=session.schedules.script_names,
     )
     return schedules.dump_detail({npc.npc_num: clean(npc.name)})
 
@@ -520,6 +665,21 @@ def _inventory(session: Session, npc: U7NPC, *, actor_label: str = "NPC") -> Non
                 f"  Depth {item.depth}; path {clean(item.path)}; flags: {item.object_flags.name or 'none'}"
             )
             print(f"  Preferred slot: {row['preferred_slot'] or '(not specified)'}")
+            print(f"  Saved slot: {row['saved_slot_name'] or row['saved_slot_state']}")
+            for special in item.ireg_specials:
+                print(
+                    f"  IREG {special.kind} at {special.offset}: {json.dumps(special.decoded)}"
+                )
+            if "effective_ready" in row:
+                resolved = row["effective_ready"]
+                print(
+                    f"  Exult preference: {resolved['effective_slot_name']}; alternatives: {', '.join(resolved['alternate_slot_names'])}"
+                )
+            print(
+                f"  IREG payload: {item.ireg_kind or 'unknown'}; {json.dumps(item.ireg_data)}"
+            )
+            for warning in item.ireg_warnings:
+                print(f"  NOTE: {warning}")
             options = {"B": "Back to inventory", "Q": f"Back to {actor_label}"}
             if index + 1 < len(rows) and rows[index + 1]["depth"] > item.depth:
                 options = {"C": "Browse contents", **options}
@@ -599,6 +759,7 @@ def _export(session: Session, matches: list[U7NPC], npc: U7NPC | None = None) ->
             {npc.npc_num: session.schedules.entries.get(npc.npc_num, [])},
             session.schedules.num_npcs,
             session.schedules.format,
+            script_names=session.schedules.script_names,
         )
         content, suffix = subset_sched.dump_csv({npc.npc_num: npc.name}), ".csv"
     elif npc is not None and action == "I":
@@ -627,6 +788,11 @@ def _export(session: Session, matches: list[U7NPC], npc: U7NPC | None = None) ->
             "source": str(session.source.path),
             "warnings": session.warnings,
             "npc": asdict(npc),
+            "appearance": actor_context(session, npc).get("appearance"),
+            "actor_context": actor_context(session, npc),
+            "script_names": session.schedules.script_names
+            if session.schedules is not None
+            else (),
             "inventory": inventory_rows(session, npc),
             "schedules": [
                 asdict(e) for e in session.schedules.entries.get(npc.npc_num, [])
@@ -789,6 +955,9 @@ def run_browser(
     source: str | None = None,
     npc: int | None = None,
     saves: bool = False,
+    have_si_shapes: bool | None = None,
+    avatar_skin: int | None = None,
+    avatar_female: bool | None = None,
 ) -> int:
     print("\nTitan U7 NPC / Save Browser")
     try:
@@ -818,6 +987,12 @@ def run_browser(
                     if selected is None:
                         break
                     session = load_session(target, selected, game)
+                    if have_si_shapes is not None:
+                        session.have_si_shapes = have_si_shapes
+                    session.avatar_skin, session.avatar_female = (
+                        avatar_skin,
+                        avatar_female,
+                    )
                 except READ_ERRORS as error:
                     print(f"  ERROR: {error}")
                     continue

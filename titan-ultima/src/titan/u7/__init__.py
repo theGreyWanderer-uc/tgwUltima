@@ -25,7 +25,16 @@ from titan.u7.ireg import (
     object_flag_names,
     read_lift,
 )
-from titan.u7.map import U7MapRenderer, U7MapSampler
+from titan.u7.map import U7IregMapStream, U7MapRenderer, U7MapSampler
+from titan.u7.ireg_specials import (
+    U7IregExtras,
+    U7IregIndexId,
+    U7IregSpecial,
+    read_ireg_index,
+    read_ireg_special,
+)
+from titan.u7.ireg_metadata import U7IregContext
+from titan.u7.ready_metadata import U7ReadyMetadata, U7ReadyResolution
 from titan.u7.music import convert_xmidi_file, extract_music
 from titan.u7.monster import (
     U7MonsterDefinition,
@@ -45,6 +54,8 @@ from titan.u7.save import (
     U7UsecodeData,
     U7UsecodeTimer,
     U7UsecodeVars,
+    U7UsecodeValue,
+    U7FunctionStatics,
     U7Keyring,
     U7FrameFlags,
     U7Schedules,
@@ -53,6 +64,7 @@ from titan.u7.save import (
     U7NPC,
     U7NPCInventoryItem,
     U7ReadyTypes,
+    U7ReadyRecord,
 )
 from titan.u7.shape import U7Shape
 from titan.u7.shape_frame_report import (
@@ -113,6 +125,8 @@ __all__ = [
     "U7UsecodeData",
     "U7UsecodeTimer",
     "U7UsecodeVars",
+    "U7UsecodeValue",
+    "U7FunctionStatics",
     "U7Keyring",
     "U7FrameFlags",
     "U7Schedules",
@@ -121,6 +135,7 @@ __all__ = [
     "U7NPC",
     "U7NPCInventoryItem",
     "U7ReadyTypes",
+    "U7ReadyRecord",
     "U7WeaponInHandOffsets",
     "U7WeaponAttachmentFrame",
     "U7Weapons",
@@ -137,6 +152,15 @@ __all__ = [
     "load_u7_intrinsic_names",
     "U7ObjectFlags",
     "IregDecodedEntry",
+    "U7IregMapStream",
+    "U7IregExtras",
+    "U7IregIndexId",
+    "U7IregSpecial",
+    "read_ireg_index",
+    "read_ireg_special",
+    "U7IregContext",
+    "U7ReadyMetadata",
+    "U7ReadyResolution",
     "decode_ireg_payload",
     "get_quality_flags",
     "object_flag_names",

@@ -15,6 +15,10 @@ import io
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from titan.u7.usecode_analysis import U7UsecodeSymbol, U7UsecodeDiagnostic
 
 
 _OPCODE_INFO: dict[int, tuple[str, tuple[str, ...]]] = {
@@ -70,7 +74,7 @@ _OPCODE_INFO: dict[int, tuple[str, tuple[str, ...]]] = {
     0x4A: ("arra", ()),
     0x4B: ("pop eventid", ()),
     0x4C: ("dbgline", ("short",)),
-    0x4D: ("dbgfunc", ("short", "data")),
+    0x4D: ("dbgfunc", ("data", "data")),
     0x50: ("push static", ("var",)),
     0x51: ("pop static", ("var",)),
     0x52: ("callo", ("short",)),
@@ -105,7 +109,7 @@ _OPCODE_INFO: dict[int, tuple[str, tuple[str, ...]]] = {
     0xC2: ("pushfvar", ()),
     0xC3: ("popfvar", ()),
     0xC7: ("calle32", ("long",)),
-    0xCD: ("dbgfunc32", ("short", "data32")),
+    0xCD: ("dbgfunc32", ("data32", "data32")),
     0xD3: ("callindex_old", ()),
     0xD4: ("callindex", ("byte",)),
     0xDC: ("staticloop32", ("short", "short", "short", "var", "offset32")),
@@ -130,6 +134,7 @@ _OPERAND_WIDTH = {
 _UCSYMTBL_MAGIC = b"\xff\xff\xff\xffYSCU"
 _SYMBOL_KIND_CLASS_SCOPE = 4
 _SYMBOL_KIND_SHAPE_FUNCTION = 6
+_MAX_SYMBOL_SCOPE_DEPTH = 64
 
 
 def _u16(data: bytes, pos: int) -> int:
@@ -145,36 +150,11 @@ def _require_bytes(data: bytes, pos: int, size: int, context: str) -> None:
         raise ValueError(f"Truncated U7 USECODE {context} at file offset 0x{pos:X}")
 
 
-def _skip_symbol_scope(data: bytes, pos: int) -> int:
-    """Return the byte following one Exult USECODE symbol-table scope."""
-    _require_bytes(data, pos, 8, "symbol-table scope header")
-    symbol_count = _u32(data, pos)
-    pos += 8  # Count followed by the symbol-table format version.
+def _skip_symbol_scope(data: bytes, pos: int, depth: int = 0) -> int:
+    """Compatibility boundary lookup using the shared rich symbol parser."""
+    from titan.u7.usecode_analysis import read_usecode_symbol_scope
 
-    for _ in range(symbol_count):
-        name_end = data.find(b"\0", pos)
-        if name_end < 0:
-            raise ValueError(
-                f"Unterminated U7 USECODE symbol name at file offset 0x{pos:X}"
-            )
-        pos = name_end + 1
-
-        _require_bytes(data, pos, 6, "symbol record")
-        kind = _u16(data, pos)
-        pos += 6  # Kind followed by the symbol value/function number.
-
-        if kind == _SYMBOL_KIND_CLASS_SCOPE:
-            pos = _skip_symbol_scope(data, pos)
-            _require_bytes(data, pos, 2, "class method count")
-            method_count = _u16(data, pos)
-            pos += 2
-            _require_bytes(data, pos, method_count * 2 + 2, "class metadata")
-            pos += method_count * 2 + 2  # Method ids followed by variable count.
-        elif kind == _SYMBOL_KIND_SHAPE_FUNCTION:
-            _require_bytes(data, pos, 4, "shape-function metadata")
-            pos += 4
-
-    return pos
+    return read_usecode_symbol_scope(data, pos, depth)[1]
 
 
 def _function_stream_offset(data: bytes) -> int:
@@ -280,6 +260,8 @@ class U7UsecodeCallSite:
 
 @dataclass
 class U7UsecodeFunctionRecord:
+    """A raw function record; file offsets are absolute and extern entries stay u16."""
+
     offset: int
     func_id: int
     func_size: int
@@ -293,6 +275,11 @@ class U7UsecodeFunctionRecord:
     code_size: int
     end_offset: int
 
+    @property
+    def data_offset(self) -> int:
+        """Absolute start of this function's data bytes, after its data-length field."""
+        return self.end_offset - self.func_size + (4 if self.ext32 else 2)
+
     def iter_instructions(self, data: bytes) -> list[U7UsecodeInstruction]:
         instructions: list[U7UsecodeInstruction] = []
         pos = self.code_offset
@@ -304,88 +291,137 @@ class U7UsecodeFunctionRecord:
         return instructions
 
 
-class U7UsecodeFile:
-    """Parsed U7 USECODE file with function and bytecode helpers."""
+def _read_usecode_function(data: bytes, start: int) -> U7UsecodeFunctionRecord:
+    """Read one complete header/body/extern table without crossing its declared end."""
+    _require_bytes(data, start, 2, "function header")
+    marker = _u16(data, start)
+    extended = marker in (0xFFFE, 0xFFFF)
+    prefix_size = 10 if marker == 0xFFFE else 8 if marker == 0xFFFF else 4
+    _require_bytes(data, start, prefix_size, "function header")
+    if marker == 0xFFFE:
+        func_id = _u32(data, start + 2)
+        if func_id > 0x7FFFFFFF:
+            raise ValueError(
+                f"U7 USECODE negative wide function ID at file offset 0x{start:X}"
+            )
+        func_size = _u32(data, start + 6)
+    elif marker == 0xFFFF:
+        func_id = _u16(data, start + 2)
+        func_size = _u32(data, start + 4)
+    else:
+        func_id = marker
+        func_size = _u16(data, start + 2)
+    body = start + prefix_size
+    end = body + func_size
+    _require_bytes(data, body, func_size, "function body")
+    data_width = 4 if extended else 2
+    if func_size < data_width + 6:
+        raise ValueError(
+            f"U7 USECODE incomplete function body at file offset 0x{start:X}"
+        )
+    data_size = _u32(data, body) if extended else _u16(data, body)
+    code_header = body + data_width + data_size
+    if code_header + 6 > end:
+        raise ValueError(
+            f"U7 USECODE data/count header exceeds function at file offset 0x{start:X}"
+        )
+    num_args = _u16(data, code_header)
+    num_locals = _u16(data, code_header + 2)
+    num_externs = _u16(data, code_header + 4)
+    externs_pos = code_header + 6
+    code_offset = externs_pos + 2 * num_externs
+    if code_offset > end:
+        raise ValueError(
+            f"Truncated U7 USECODE extern table at file offset 0x{externs_pos:X}: declared {num_externs} entries"
+        )
+    externs = [_u16(data, externs_pos + 2 * index) for index in range(num_externs)]
+    return U7UsecodeFunctionRecord(
+        offset=start,
+        func_id=func_id,
+        func_size=func_size,
+        data_size=data_size,
+        num_args=num_args,
+        num_locals=num_locals,
+        num_externs=num_externs,
+        externs=externs,
+        ext32=extended,
+        code_offset=code_offset,
+        code_size=end - code_offset,
+        end_offset=end,
+    )
 
-    def __init__(self, data: bytes, functions: list[U7UsecodeFunctionRecord]) -> None:
+
+class U7UsecodeFile:
+    """Raw function records with last-definition lookup and explicit structural diagnostics."""
+
+    def __init__(
+        self,
+        data: bytes,
+        functions: list[U7UsecodeFunctionRecord],
+        *,
+        warnings: list[str] | None = None,
+        parsed_bytes: int | None = None,
+    ) -> None:
         self.data = data
         self.functions = functions
+        self.warnings = list(warnings or ())
+        self.parsed_bytes = (
+            (functions[-1].end_offset if functions else 0)
+            if parsed_bytes is None
+            else parsed_bytes
+        )
+
+    @property
+    def complete(self) -> bool:
+        """Whether every byte belongs to a structurally complete symbol/function stream."""
+        return self.parsed_bytes == len(self.data) and not self.warnings
+
+    @property
+    def symbols(self) -> tuple[U7UsecodeSymbol, ...]:
+        """Expose bounded symbol/class metadata independently of raw function iteration."""
+        from titan.u7.usecode_analysis import read_usecode_symbols
+
+        return read_usecode_symbols(self.data)
+
+    def validate_references(self) -> list[U7UsecodeDiagnostic]:
+        """Report instruction/branch/data/extern issues separately from structural completeness."""
+        from titan.u7.usecode_analysis import validate_usecode_function
+
+        return [
+            issue
+            for function in self.functions
+            for issue in validate_usecode_function(self, function)
+        ]
 
     @classmethod
-    def from_file(cls, filepath: str) -> "U7UsecodeFile":
-        return cls.from_bytes(Path(filepath).read_bytes())
+    def from_file(cls, filepath: str, *, strict: bool = False) -> "U7UsecodeFile":
+        return cls.from_bytes(Path(filepath).read_bytes(), strict=strict)
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "U7UsecodeFile":
+    def from_bytes(cls, data: bytes, *, strict: bool = False) -> "U7UsecodeFile":
+        """Parse complete records; strict raises on bad structure, permissive retains a diagnosed prefix.
+
+        Symbol-table framing errors always raise because no function boundary can
+        be established. Strict checks structure, not VM/reference validity.
+        """
         pos = _function_stream_offset(data)
         functions: list[U7UsecodeFunctionRecord] = []
-        while pos + 6 <= len(data):
-            start = pos
-            func_id = _u16(data, pos)
-            pos += 2
-            ext32 = func_id in (0xFFFE, 0xFFFF)
-            if func_id == 0xFFFE:
-                if pos + 12 > len(data):
-                    break
-                func_id = _u32(data, pos)
-                func_size = _u32(data, pos + 4)
-                data_size = _u32(data, pos + 8)
-                pos += 12
-                end_offset = start + func_size + 10
-            elif func_id == 0xFFFF:
-                if pos + 10 > len(data):
-                    break
-                func_id = _u16(data, pos)
-                func_size = _u32(data, pos + 2)
-                data_size = _u32(data, pos + 6)
-                pos += 10
-                end_offset = start + func_size + 8
-            else:
-                if pos + 4 > len(data):
-                    break
-                func_size = _u16(data, pos)
-                data_size = _u16(data, pos + 2)
-                pos += 4
-                end_offset = start + func_size + 4
-            if func_size <= 0 or end_offset > len(data):
+        warnings: list[str] = []
+        while pos < len(data):
+            try:
+                function = _read_usecode_function(data, pos)
+            except ValueError as error:
+                if strict:
+                    raise
+                warnings.append(str(error))
                 break
-
-            code_header = pos + data_size
-            if code_header + 6 > end_offset:
-                break
-            num_args = _u16(data, code_header)
-            num_locals = _u16(data, code_header + 2)
-            num_externs = _u16(data, code_header + 4)
-            externs_pos = code_header + 6
-            externs: list[int] = []
-            for _ in range(num_externs):
-                if externs_pos + 2 > end_offset:
-                    break
-                externs.append(_u16(data, externs_pos))
-                externs_pos += 2
-            code_offset = externs_pos
-            code_size = max(0, end_offset - code_offset)
-            functions.append(
-                U7UsecodeFunctionRecord(
-                    offset=start,
-                    func_id=func_id,
-                    func_size=func_size,
-                    data_size=data_size,
-                    num_args=num_args,
-                    num_locals=num_locals,
-                    num_externs=num_externs,
-                    externs=externs,
-                    ext32=ext32,
-                    code_offset=code_offset,
-                    code_size=code_size,
-                    end_offset=end_offset,
-                )
-            )
-            pos = end_offset
-        return cls(data, functions)
+            functions.append(function)
+            pos = function.end_offset
+        return cls(data, functions, warnings=warnings, parsed_bytes=pos)
 
     def get_function(self, func_id: int) -> U7UsecodeFunctionRecord | None:
-        for fn in self.functions:
+        """Select the last definition of an ID in this stream, matching engine loading."""
+        for fn in reversed(self.functions):
             if fn.func_id == func_id:
                 return fn
         return None
@@ -473,6 +509,14 @@ class U7UsecodeFile:
         fn = self.get_function(func_id)
         if fn is None:
             raise KeyError(f"Function 0x{func_id:04X} not found")
+        return self.disassemble_record(fn, intrinsic_names)
+
+    def disassemble_record(
+        self,
+        fn: U7UsecodeFunctionRecord,
+        intrinsic_names: dict[int, str] | None = None,
+    ) -> str:
+        """Disassemble this raw record, preserving duplicate IDs and their distinct bodies."""
         lines = [
             f"Function 0x{fn.func_id:04X}",
             f"  file_offset: 0x{fn.offset:08X}",
@@ -492,7 +536,7 @@ class U7UsecodeFile:
     def disassemble_all(self, intrinsic_names: dict[int, str] | None = None) -> str:
         """Raw-disassemble every parsed function."""
         return "\n\n".join(
-            self.disassemble(fn.func_id, intrinsic_names) for fn in self.functions
+            self.disassemble_record(fn, intrinsic_names) for fn in self.functions
         )
 
 
@@ -534,8 +578,11 @@ def _decode_instruction(
 
 def load_u7_intrinsic_names(filepath: str) -> dict[int, str]:
     """Load UCXT-style U7 intrinsic name data if available."""
-    text = Path(filepath).read_text(encoding="utf-8", errors="replace")
+    text = Path(filepath).read_text(encoding="utf-8-sig")
     result: dict[int, str] = {}
     for match in re.finditer(r"<0x([0-9A-Fa-f]+)>\s*([^<\r\n]+?)\s*</>", text):
-        result[int(match.group(1), 16)] = match.group(2).strip()
+        index = int(match.group(1), 16)
+        if index > 0xFFFF:
+            raise ValueError(f"U7 intrinsic table ID exceeds u16: 0x{index:X}")
+        result[index] = match.group(2).strip()
     return result

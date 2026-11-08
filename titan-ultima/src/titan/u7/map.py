@@ -46,7 +46,13 @@ Example::
 
 from __future__ import annotations
 
-__all__ = ["U7MapObject", "U7TileRectOverlay", "U7MapRenderer", "U7MapSampler"]
+__all__ = [
+    "U7MapObject",
+    "U7IregMapStream",
+    "U7TileRectOverlay",
+    "U7MapRenderer",
+    "U7MapSampler",
+]
 
 import os
 import struct
@@ -63,6 +69,14 @@ from titan.u7.palette import U7Palette
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.translucency import U7Translucency
 from titan.u7.ireg import U7ObjectFlags, decode_ireg_payload
+from titan.u7.ireg_metadata import U7IregContext
+from titan.u7.ireg_specials import (
+    U7IregExtras,
+    U7IregIndexId,
+    U7IregSpecial,
+    read_ireg_index,
+    read_ireg_special,
+)
 
 # ---------------------------------------------------------------------------
 # Constants (from exult_constants.h)
@@ -98,6 +112,14 @@ def _find_case_insensitive_file(directory: str, filename: str) -> str:
     return direct_path
 
 
+def _load_map_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load Arial for map labels, falling back to Pillow's bundled default font."""
+    try:
+        return ImageFont.truetype("arial.ttf", size)
+    except OSError:
+        return ImageFont.load_default()
+
+
 def _frame_to_rgba(
     fr: U7Shape.Frame,
     flat_rgb: bytes | list[int],
@@ -119,6 +141,8 @@ def _frame_to_rgba(
     convention.  Map placement needs the opposite xleft/yabove extents, so
     this boundary returns ``hotspot_x_from_left/hotspot_y_from_top``.
     """
+    if fr.pixels is None:
+        raise ValueError("U7 frame has no pixel data")
     indexed = Image.fromarray(fr.pixels, mode="P")
     indexed.putpalette(flat_rgb)
     rgba = indexed.convert("RGBA")
@@ -287,6 +311,13 @@ class U7MapObject:
     raw_flag_byte: int | None = None
     record_length: int = 0
     is_extended: bool = False
+    ireg_kind: str = ""
+    ireg_data: dict[str, object] = field(default_factory=dict)
+    ireg_warnings: list[str] = field(default_factory=list)
+    ireg_raw_hex: str = ""
+    ireg_offset: int = 0
+    ireg_index_id: U7IregIndexId | None = None
+    ireg_specials: list[U7IregSpecial] = field(default_factory=list)
 
     @property
     def is_invisible(self) -> bool:
@@ -299,6 +330,18 @@ class U7MapObject:
     @property
     def is_temporary(self) -> bool:
         return bool(self.object_flags & U7ObjectFlags.TEMPORARY)
+
+
+@dataclass
+class U7IregMapStream:
+    """Objects plus stream evidence, including orphan specials and original wire bytes."""
+
+    objects: list[U7MapObject]
+    extras: U7IregExtras
+
+    @property
+    def raw(self) -> bytes:
+        return bytes.fromhex(self.extras.raw_hex)
 
 
 @dataclass(frozen=True)
@@ -780,6 +823,8 @@ class U7MapRenderer:
         ireg_path: str,
         schunk_num: int,
         tfa: "U7TypeFlags | None" = None,
+        *,
+        context: "U7IregContext | None" = None,
     ) -> list[U7MapObject]:
         """
         Parse a u7iregNN file into top-level absolute-tile MapObjects.
@@ -793,7 +838,9 @@ class U7MapRenderer:
         quality bytes -- now shares the same decoder as every other IREG
         consumer, so quality/flags are correct for every entry it returns.
         """
-        return U7MapRenderer.parse_ireg_deep(ireg_path, schunk_num, tfa)
+        return U7MapRenderer.parse_ireg_deep(
+            ireg_path, schunk_num, tfa, context=context
+        )
 
     # ------------------------------------------------------------------
     # Deep IREG parser — full recursive container traversal
@@ -806,6 +853,8 @@ class U7MapRenderer:
         tfa: "U7TypeFlags | None" = None,
         *,
         data: bytes | None = None,
+        context: "U7IregContext | None" = None,
+        extras: U7IregExtras | None = None,
     ) -> "list[U7MapObject]":
         """
         Parse a u7iregNN file with full recursive container nesting.
@@ -817,9 +866,9 @@ class U7MapRenderer:
         ``data`` supplies the file's bytes directly (for example an entry
         of ``INITGAME.DAT``); ``ireg_path`` is then only a label.
 
-        ``tfa`` is optional but improves accuracy — without it, containers
-        are still detected by entry-length (testlen == 12) as Exult writes
-        them, and bodies/barges with children are also handled.
+        ``context`` supplies TFA plus supplemental body/jawbone flags and
+        game identity. With missing context, each object's ireg_warnings
+        describes the limitations of inferred length-based dispatch.
         """
         if data is None:
             if not os.path.isfile(ireg_path):
@@ -830,25 +879,22 @@ class U7MapRenderer:
         scx = C_CHUNKS_PER_SCHUNK * (schunk_num % C_NUM_SCHUNKS)
         scy = C_CHUNKS_PER_SCHUNK * (schunk_num // C_NUM_SCHUNKS)
         dlen = len(data)
+        extras = extras if extras is not None else U7IregExtras()
+        extras.raw_hex = data.hex()
 
         pos: list[int] = [0]
-
-        def _skip_special() -> None:
-            """Skip one 0xFF special entry: type(1) + len(2) + data."""
-            if pos[0] + 3 > dlen:
-                pos[0] = dlen
-                return
-            pos[0] += 1  # type byte
-            slen = data[pos[0]] + data[pos[0] + 1] * 256
-            pos[0] += 2 + slen
 
         def _parse_entries(
             in_container: bool,
             inherited_flags: U7ObjectFlags = U7ObjectFlags.NONE,
         ) -> "list[U7MapObject]":
             objects: list[U7MapObject] = []
+            last_obj: U7MapObject | None = None
+            index_id: U7IregIndexId | None = None
+            scope_offset = pos[0]
 
             while pos[0] < dlen:
+                entry_offset = pos[0]
                 entlen = data[pos[0]]
                 pos[0] += 1
 
@@ -858,11 +904,23 @@ class U7MapRenderer:
                     continue  # 0x00 = padding at top level
 
                 if entlen == 2:  # 2-byte index ID
-                    pos[0] += 2
+                    index_id, pos[0] = read_ireg_index(data, entry_offset, scope_offset)
+                    extras.indices.append(index_id)
+                    if not index_id.complete:
+                        extras.warnings.append(
+                            f"IREG offset {entry_offset}: index ID is truncated"
+                        )
+                        break
                     continue
 
                 if entlen == 0xFF:  # special entry (usecode/attribs/string)
-                    _skip_special()
+                    special, pos[0] = read_ireg_special(data, entry_offset)
+                    extras.add_special(
+                        special, last_obj.ireg_offset if last_obj is not None else None
+                    )
+                    if last_obj is not None:
+                        last_obj.ireg_specials.append(special)
+                        last_obj.ireg_warnings.extend(special.warnings)
                     continue
 
                 extended = False
@@ -876,6 +934,9 @@ class U7MapRenderer:
                     pos[0] += 1
 
                 if pos[0] + entlen > dlen:
+                    extras.warnings.append(
+                        f"IREG offset {entry_offset}: object payload is truncated"
+                    )
                     break
 
                 payload = data[pos[0] : pos[0] + entlen]
@@ -913,64 +974,48 @@ class U7MapRenderer:
                     abs_tx = (scx + chunk_cx) * C_TILES_PER_CHUNK + tile_x
                     abs_ty = (scy + chunk_cy) * C_TILES_PER_CHUNK + tile_y
 
-                # Eggs (shape 275) share testlen==12/14 with containers/bodies
-                # but bytes 4+ hold egg-specific fields, not a quality/flag
-                # byte -- decoding them as a container would both corrupt
-                # their fields and wrongly consume following IREG entries as
-                # "children". Keep the pre-existing simple byte4/5 read for
-                # eggs; route every other shape through the shared decoder.
-                is_egg = shnum == _EGG_SHAPE
-                has_children_field = False
+                entry = tfa.get(shnum) if tfa else None
+                shape_class = entry.shape_class if entry is not None else None
+                decoded = decode_ireg_payload(
+                    payload,
+                    entlen=entlen,
+                    extended=extended,
+                    extended_lift=extended_lift,
+                    inherited_flags=inherited_flags,
+                    shape_class=shape_class,
+                    context=context,
+                )
+                if decoded is None:
+                    continue
+                obj = U7MapObject(
+                    tx=abs_tx,
+                    ty=abs_ty,
+                    tz=decoded.lift,
+                    shape=shnum,
+                    frame=frnum,
+                    quality=decoded.quality,
+                    source="ireg",
+                    raw_quality=decoded.raw_quality,
+                    object_flags=decoded.object_flags,
+                    raw_flag_byte=decoded.raw_flag_byte,
+                    record_length=decoded.record_length,
+                    is_extended=decoded.is_extended,
+                    ireg_kind=decoded.kind,
+                    ireg_data=decoded.class_data,
+                    ireg_warnings=decoded.context_warnings,
+                    ireg_raw_hex=decoded.raw_hex,
+                    ireg_offset=entry_offset,
+                    ireg_index_id=index_id,
+                )
+                last_obj = obj
 
-                if is_egg:
-                    lift = (
-                        (payload[4 + adj] >> 4) & 0x0F if len(payload) > 4 + adj else 0
-                    )
-                    quality = payload[5 + adj] if len(payload) > 5 + adj else 0
-                    obj = U7MapObject(
-                        tx=abs_tx,
-                        ty=abs_ty,
-                        tz=lift,
-                        shape=shnum,
-                        frame=frnum,
-                        quality=quality,
-                        source="ireg",
-                    )
-                else:
-                    shape_class = tfa.get(shnum).shape_class if tfa else None
-                    decoded = decode_ireg_payload(
-                        payload,
-                        entlen=entlen,
-                        extended=extended,
-                        extended_lift=extended_lift,
-                        inherited_flags=inherited_flags,
-                        shape_class=shape_class,
-                    )
-                    if decoded is None:
-                        continue
-                    has_children_field = decoded.has_children_marker
-                    obj = U7MapObject(
-                        tx=abs_tx,
-                        ty=abs_ty,
-                        tz=decoded.lift,
-                        shape=shnum,
-                        frame=frnum,
-                        quality=decoded.quality,
-                        source="ireg",
-                        raw_quality=decoded.raw_quality,
-                        object_flags=decoded.object_flags,
-                        raw_flag_byte=decoded.raw_flag_byte,
-                        record_length=decoded.record_length,
-                        is_extended=decoded.is_extended,
-                    )
-
-                if has_children_field:
+                if decoded.has_children_marker:
                     obj.children = _parse_entries(
                         in_container=True, inherited_flags=decoded.child_inherit_flags
                     )
 
                 # ── Egg-specific metadata (shape 275 at root level) ──────────
-                if shnum == _EGG_SHAPE and not in_container and testlen in (12, 14):
+                if decoded.kind == "egg" and not in_container and testlen in (12, 14):
                     tword = (
                         payload[4 + adj] + payload[5 + adj] * 256
                         if len(payload) > 5 + adj
@@ -1010,6 +1055,26 @@ class U7MapRenderer:
             return objects
 
         return _parse_entries(in_container=False)
+
+    @staticmethod
+    def parse_ireg_stream(
+        data: bytes,
+        schunk_num: int = 0,
+        tfa: U7TypeFlags | None = None,
+        *,
+        context: U7IregContext | None = None,
+    ) -> U7IregMapStream:
+        """Preserve a complete IREG input and all specials/index events alongside objects."""
+        extras = U7IregExtras()
+        objects = U7MapRenderer.parse_ireg_deep(
+            "<bytes>",
+            schunk_num,
+            tfa,
+            data=data,
+            context=context,
+            extras=extras,
+        )
+        return U7IregMapStream(objects, extras)
 
     # ------------------------------------------------------------------
     # Load all objects for a superchunk
@@ -1174,10 +1239,7 @@ class U7MapRenderer:
         max_tile = C_NUM_TILES - 1
         line_w = max(1, width)
         clamped_fill_alpha = max(0, min(255, fill_alpha))
-        try:
-            font = ImageFont.truetype("arial.ttf", 108)
-        except OSError:
-            font = ImageFont.load_default()
+        font = _load_map_font(108)
 
         for raw in overlays:
             rect = raw.normalized()
@@ -1668,10 +1730,7 @@ class U7MapRenderer:
             draw = ImageDraw.Draw(canvas)
             chunk_rgba = (0, 120, 255, 100)
             sc_rgba = (255, 40, 40, 180)
-            try:
-                font = ImageFont.truetype("arial.ttf", 11)
-            except OSError:
-                font = ImageFont.load_default()
+            font = _load_map_font(11)
 
             chunk_px = C_TILES_PER_CHUNK * C_TILE_SIZE  # 128
             for i in range(C_CHUNKS_PER_SCHUNK + 1):
@@ -1711,10 +1770,7 @@ class U7MapRenderer:
                 [(sx1, sy0), (sx1, sy1)],
             ]:
                 draw.line(edge, fill=sc_rgba, width=max(grid_size, 2))
-            try:
-                sc_font = ImageFont.truetype("arial.ttf", 18)
-            except OSError:
-                sc_font = ImageFont.load_default()
+            sc_font = _load_map_font(18)
             draw.text((sx0 + 4, sy0 + 14), f"SC {schunk}", fill=sc_rgba, font=sc_font)
 
         if highlight_rects:
@@ -2089,10 +2145,7 @@ class U7MapRenderer:
             draw = ImageDraw.Draw(canvas)
             chunk_rgba = (0, 120, 255, 100)
             sc_rgba = (255, 40, 40, 180)
-            try:
-                font = ImageFont.truetype("arial.ttf", 11)
-            except OSError:
-                font = ImageFont.load_default()
+            font = _load_map_font(11)
 
             chunk_px = C_TILES_PER_CHUNK * C_TILE_SIZE * resolution
 
@@ -2126,10 +2179,7 @@ class U7MapRenderer:
                         )
 
             # Superchunk grid lines (red) with labels
-            try:
-                sc_font = ImageFont.truetype("arial.ttf", 18)
-            except OSError:
-                sc_font = ImageFont.load_default()
+            sc_font = _load_map_font(18)
 
             # Determine superchunk boundaries that fall within the region
             sc_x0 = chunk_x0 // C_CHUNKS_PER_SCHUNK
@@ -2405,11 +2455,8 @@ class U7MapSampler:
 
             # --- Chunk grid (blue) — only when spacing >= 8 px ---
             if chunk_px >= 8:
-                try:
-                    font_size = max(7, min(chunk_px // 3, 11))
-                    chunk_font = ImageFont.truetype("arial.ttf", font_size)
-                except OSError:
-                    chunk_font = ImageFont.load_default()
+                font_size = max(7, min(chunk_px // 3, 11))
+                chunk_font = _load_map_font(font_size)
 
                 for i in range(C_NUM_CHUNKS + 1):
                     pos = i * chunk_px
@@ -2441,11 +2488,8 @@ class U7MapSampler:
                                 )
 
             # --- Superchunk grid (red) ---
-            try:
-                sc_font_size = max(8, min(schunk_px // 4, 18))
-                sc_font = ImageFont.truetype("arial.ttf", sc_font_size)
-            except OSError:
-                sc_font = ImageFont.load_default()
+            sc_font_size = max(8, min(schunk_px // 4, 18))
+            sc_font = _load_map_font(sc_font_size)
 
             sc_line_w = max(grid_size, 2)
             for i in range(C_NUM_SCHUNKS + 1):

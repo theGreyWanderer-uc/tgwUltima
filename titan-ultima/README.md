@@ -50,7 +50,7 @@ Optional:
 
 ## Quick Start
 
-Run setup once. It detects common Ultima 8, Ultima 7, Ultima 9, and UO install locations,
+Run setup once. It detects common Ultima 6, Ultima 7, Ultima 8, Ultima 9, Martian Dreams, and UO install locations,
 detects Exult runtime folders and the Exult install directory (for
 `exult_bg.flx` / `exult_si.flx`), writes `titan.toml`, and can extract the
 U8 shape/glob data used by map rendering.
@@ -130,9 +130,14 @@ is checked first, followed by `GOG Games/Ultima 9` and `Ultima 9` at the drive
 root, across drives C through G. Paths with spaces are supported; quote them
 when passing a path on the command line.
 
-`titan setup` doesn't detect Ultima 6 installs yet — add `[u6.game]
-base = "<Ultima 6 install>"` to `titan.toml` yourself, or pass
-`-g`/`--gamedir` explicitly on every U6 command:
+`titan setup` detects Ultima 6 installs in GOG Galaxy, GOG offline, Heroic
+and common manual locations. It saves `[u6.game] base` and inventories
+available map, VGA tile, palette, dialogue, book, font, portrait, schedule
+and DOS save resources under `[u6.paths]`. `titan config` displays these
+paths and checks they exist. The `[u6.paths]` entries are an inventory;
+commands use standard filenames below `[u6.game] base`.
+You can also configure the base manually or pass `-g`/`--gamedir` directly,
+which overrides the configured base and works without setup:
 
 ```bash
 titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
@@ -269,7 +274,12 @@ verified format semantics, renderer behavior and native validation.
 with an explicit MD resource profile. It reads MD's size-prefixed libraries
 and `MDPAL` directly; no extraction or renaming of game files is required.
 Use the `MARTIAN` directory or its installation parent with `--gamedir`,
-or add `[md.game] base = "<install>/MARTIAN"` to `titan.toml` manually.
+or run `titan setup` to detect GOG Galaxy, GOG offline, Heroic and manual installs.
+Setup saves `[md.game] base` and inventories available map, tile, palette,
+dialogue, text, font, portrait, music and DOS save resources under `[md.paths]`.
+`titan config` displays these paths and checks they exist. MD commands use
+`[md.game] base` by default; `--gamedir` overrides it. The `[md.paths]` entries
+are an inventory; individual commands retain their standard MD filenames.
 
 ```powershell
 titan md map-render -g "<install>/MARTIAN" --region 385,596,64,64 --objects --actors -o md_start.png
@@ -516,6 +526,79 @@ titan u7 container-browse STATIC/ --gamedat gamedat/ -f csv -o containers.csv \
 # Configured paths with per-frame names from titan.toml [exult.paths].
 titan u7 container-browse --game bg --container-name desk
 ```
+
+Container previews use matching BG/SI bundle defaults followed by mod patches.
+Use `container-browse --custom-game` for a custom game's STATIC metadata.
+Container mappings retain signed gump IDs, raw words/records and framing
+diagnostics.
+
+U7 inspection also exposes Exult's effective READY alternatives, defaults and
+fallback attempt order, separately from stored slots and runtime fit checks.
+Context-aware IREG decoding covers bodies, spellbooks, virtue stones, barges,
+jawbones and hatchable shapes, retaining raw payloads and missing-context
+diagnostics. See the [coverage reference](reference/u7/ireg/u7_coverage_reference.md).
+
+IREG specials and saved readied-slot IDs are also preserved and decoded.
+`titan u7 ireg-dump <file> --superchunk N --game bg --static STATIC/ -o report.json`
+exports objects, scheduled Usecode state, attributes, strings, slot IDs,
+orphan records and full raw-stream evidence. `--static` is optional; output
+files must be new. See the [specials/index reference](reference/u7/ireg/u7_ireg_specials_reference.md).
+
+Layout/checkmark/debug fields can also be inspected as CSV:
+
+```bash
+titan u7 static-data-dump container STATIC/ --game si --patch-dir mod/patch
+titan u7 static-data-dump gumps STATIC/ --game si --patch-dir mod/patch
+titan u7 static-data-dump container --file mod/patch/container.dat
+```
+
+The same patch/file inspection options cover weapon, ammo and armor tables.
+Use `--data-format retail` for DOS game tables; the default is `exult`.
+Retail mode keeps the one-byte count at 255, preserves padding that Exult uses
+for removals, and selects retail weapon/ammo fields:
+
+```bash
+titan u7 static-data-dump weapons STATIC/ --game bg --data-format retail
+titan u7 static-data-dump ammo --file AMMO.DAT --data-format retail
+```
+
+Scripted schedule names, saved actor extensions and effective dead status are
+included in their readers/reports. Additional inspection commands expose
+dynamic/paperdoll definitions and Usecode analysis:
+
+```bash
+titan u7 static-data-dump paperdoll STATIC/ --game si --patch-dir mod/patch
+titan u7 usecode-disasm STATIC/USECODE 0x400 --annotate --validate
+titan u7 usecode-disasm STATIC/USECODE --symbols
+titan u7 usecode-disasm STATIC/USECODE 0x400 --patch-file mod/patch/usecode --original
+```
+
+Combat-layer authoring APIs edit copies and preserve raw bytes. Usecode and
+gump inspection do not execute VM callbacks or controls.
+
+Paperdoll skin references resolve from matching `shape_files.txt` defaults and
+patches. NPC browsing loads the world's Avatar metadata and Usecode symbols;
+runtime overrides can be supplied with `--avatar-skin`, `--avatar-sex` and
+`--si-shapes` / `--no-si-shapes`. Reports identify any remaining context needed.
+AMMO exports retain signed fields and expose unsigned words/Exult loader values,
+with warnings when high bits make those interpretations disagree. Retail BG/SI
+executables verify the signed selectors; `retail_sprite_meaning` and
+`retail_damage` expose retail interpretation separately from Exult.
+
+Save inspection retains ordered duplicate members and named empty payloads.
+`U7Save.members` provides occurrence metadata; `get_all_data(name)` returns all
+matching payloads. `save-list` reports partial-container diagnostics, while
+extraction validates strictly by default and writes duplicates separately with
+a name manifest. Use a fresh output directory:
+
+```bash
+titan u7 save-list exult00bg.sav --strict
+titan u7 save-extract exult00bg.sav -o inspected-save/
+```
+
+`--permissive` allows available partial payloads with warnings and a manifest.
+NPC decoding also applies Exult's Avatar-triggered legacy unused compatibility;
+raw used-in-game words remain separate from effective unused status.
 
 ### U7 Egg Query
 
