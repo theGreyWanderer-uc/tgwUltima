@@ -250,15 +250,13 @@ flags, dialogue, and text/reference data.
 | Text and reference data | Fonts (English + runic/gargoyle); object names; books/signs; NPC daily schedules | `titan u6 book-dump BOOK.DAT --book 0` |
 
 See the [U6 commands reference](cli_reference.md#ultima-6-commands-titan-u6)
-for the full command list. The [U6 reference status index](reference/u6/u6_format_status.md)
-links the confirmed rendering contracts and their scope.
+for the full command list.
 
 Map crops retain visible cells of multi-tile objects whose anchors lie just
-outside the region. The [U6 crop audit](reference/u6/render/u6_map_crop_reference.md) documents the
-before/after boundary checks.
+outside the region.
 Invisible world objects are hidden by default; add `--show-invisible` alongside
 `--objects` to reveal them. The z-order audit accepts the same visibility option.
-Rendering and auditing share the [original U6 cell-stack rules](reference/u6/render/u6_object_layering_reference.md),
+Rendering and auditing share the original U6 cell-stack rules,
 verified against bounded runs of the original executable. Object, tile and
 coordinate-specific layering exceptions have been removed. The audit describes
 ordered pixel overlaps for inspection; its candidate count is not an error count.
@@ -266,9 +264,6 @@ Invalid crop coordinates, dimensions or
 map bounds produce a clear error before the output file is written.
 
 ### Martian Dreams (initial)
-
-The [MD reference status index](reference/md/md_format_status.md) links the
-verified format semantics, renderer behavior and native validation.
 
 `titan md map-render` reuses the U6 tile, map, animation and object decoders
 with an explicit MD resource profile. It reads MD's size-prefixed libraries
@@ -293,7 +288,7 @@ The surface is 1024x1024 tiles (16384x16384 pixels); underground levels
 foreground flags and MD's hidden markers (`--show-markers` reveals them).
 Add `--show-invisible` with `--objects` to include invisible world-object sprites.
 Background cells draw beneath ordinary objects using the original MD flag and
-per-cell precedence; see the [background-layering checks](reference/md/render/md_object_layering_reference.md).
+per-cell precedence.
 `--actors` adds party members, NPCs and creatures between ordinary objects
 and foreground cells. MD cold, appearance and flag fields use explicit MD
 layouts. Invisible NPCs are hidden; invisible party members retain outlines.
@@ -302,19 +297,16 @@ plus saved actor/object placements when their overlays are enabled. Initial
 placements are the default. Saved cistern pressure and canal-valve flags select
 fixed dry/wet art; changing `--tick` cannot switch the water state. Power flags
 control machinery and restore saved lamp/furnace/steam-leak art; watches follow the game hour.
-The [power-system trace](reference/md/animation/md_power_animation_reference.md) verifies stopped/forward modes and frame timing.
 `--lighting` adds DOS light falloff, blockers, windows, readied party lights,
 brown-berry vision and original darkness masks to crops up to 11x11 tiles,
 viewed from their center. It also selects visible brick/interior/iron wall faces
 and clips object footprint cells at unseen wall corners, following the
-[viewport compositor trace](reference/md/render/md_viewport_reference.md).
-The [scene audit](reference/md/render/md_scene_validation_reference.md) checks real-map crops across all levels
-and includes object/actor footprints wrapping across the surface world seam.
+original viewport compositor. Scene validation includes object/actor footprints
+wrapping across the surface world seam.
 Atlas exports stay full bright by default.
 `--palette-tick N` selects VGA color cycling separately from tile animation ticks;
-zero keeps the original colors. See the [lighting/palette trace](reference/md/palette/md_lighting_palette_reference.md).
-Cistern filling/release cutscenes and transient effects are not simulated. The original executable trace
-and reproducible water-state probe are documented in [water-state reference](reference/md/animation/md_water_animation_reference.md).
+zero keeps the original colors.
+Cistern filling/release cutscenes and transient effects are not simulated.
 
 MD inspections are read-only:
 
@@ -332,7 +324,6 @@ when output is omitted. Retail `TALK.LZC` contains 99 NPC scripts. Dr. Blood's
 two `0xdf` instructions decode as MD `SET_YSTRING`: select an actor's name
 for `$Y`, with `"you"` for resolved actor 1. This was verified against the
 original executable and bounded emulation; the U6 opcode table is unchanged.
-See the [opcode investigation](reference/md/converse/md_converse_opcode_df_reference.md) for reproducible evidence.
 
 ### Ultima 9 (early)
 
@@ -340,10 +331,6 @@ U9 support is newer than U8/U7 and includes FLX archives, `TYPENAME.FLX`,
 `sound/*.flx` (`Speech.flx`, `sfx.flx`, `music.flx`) decoding and metadata,
 PCM/native-record replacement, `anim.flx` skeletal clips, and 3D model +
 texture export from `static/sappear.flx`.
-
-The [U9 format completeness index](reference/u9/u9_format_status.md) separates
-complete format support from structurally complete readers whose remaining
-questions concern field or gameplay semantics.
 
 | Area | Coverage | Quick example |
 |---|---|---|
@@ -536,13 +523,13 @@ U7 inspection also exposes Exult's effective READY alternatives, defaults and
 fallback attempt order, separately from stored slots and runtime fit checks.
 Context-aware IREG decoding covers bodies, spellbooks, virtue stones, barges,
 jawbones and hatchable shapes, retaining raw payloads and missing-context
-diagnostics. See the [coverage reference](reference/u7/ireg/u7_coverage_reference.md).
+diagnostics.
 
 IREG specials and saved readied-slot IDs are also preserved and decoded.
 `titan u7 ireg-dump <file> --superchunk N --game bg --static STATIC/ -o report.json`
 exports objects, scheduled Usecode state, attributes, strings, slot IDs,
 orphan records and full raw-stream evidence. `--static` is optional; output
-files must be new. See the [specials/index reference](reference/u7/ireg/u7_ireg_specials_reference.md).
+files must be new.
 
 Layout/checkmark/debug fields can also be inspected as CSV:
 

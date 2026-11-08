@@ -23,6 +23,10 @@ from titan import _wizard_ui as ui
 from titan._config import get_config, resolve_config_path
 from titan.u7.shape_archive import U7ShapeArchive
 from titan.u7.install import resolve_u7_path
+from titan.u7.ireg_rewrite_cli import ireg_rewrite_cmd
+from titan.u7.save_repack_cli import save_repack_cmd
+from titan.u7.ireg_tree_cli import ireg_tree_cmd, ireg_tree_edit_cmd
+from titan.u7.actor_rewrite_cli import actor_headers_cmd, actor_rewrite_cmd
 
 u7_app = typer.Typer(
     name="u7",
@@ -30,6 +34,13 @@ u7_app = typer.Typer(
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
+
+u7_app.command("ireg-rewrite")(ireg_rewrite_cmd)
+u7_app.command("save-repack")(save_repack_cmd)
+u7_app.command("ireg-tree")(ireg_tree_cmd)
+u7_app.command("ireg-tree-edit")(ireg_tree_edit_cmd)
+u7_app.command("actor-headers")(actor_headers_cmd)
+u7_app.command("actor-rewrite")(actor_rewrite_cmd)
 
 
 def _resolve_u7_paths(game: str) -> tuple[Optional[str], Optional[str]]:
@@ -4485,6 +4496,30 @@ def cmd_save_list(args: SimpleNamespace) -> int:
         return 1
     for warning in save.warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
+    if getattr(args, "json_output", False):
+        import hashlib
+
+        report = {
+            "file": filepath,
+            "source_sha256": hashlib.sha256(save.raw).hexdigest(),
+            "format": save.container_format,
+            "complete": save.complete,
+            "warnings": save.warnings,
+            "members": [
+                {
+                    "member_path": [member.index],
+                    "name": member.name,
+                    "source": member.source,
+                    "size": len(member.data),
+                    "sha256": hashlib.sha256(member.data).hexdigest(),
+                    "complete": member.complete,
+                    "is_directory": member.is_directory,
+                }
+                for member in save.members
+            ],
+        }
+        print(json.dumps(report, indent=2))
+        return 0
     entries = save.list_entries()
 
     print(f"U7 Save: {filepath}")
@@ -6140,9 +6175,19 @@ def save_list_cmd(
             "--strict/--permissive", help="Reject structural container errors"
         ),
     ] = False,
+    json_output: Annotated[
+        bool,
+        typer.Option(
+            "--json", help="JSON occurrence paths and member hashes for repack plans"
+        ),
+    ] = False,
 ) -> None:
     """List contents of an Exult U7 savegame file (ZIP or FLEX)."""
-    raise SystemExit(cmd_save_list(SimpleNamespace(file=file, strict=strict)))
+    raise SystemExit(
+        cmd_save_list(
+            SimpleNamespace(file=file, strict=strict, json_output=json_output)
+        )
+    )
 
 
 @u7_app.command("save-extract")

@@ -3506,6 +3506,242 @@ shown with their full contents tree.
 
 ---
 
+#### `u7 ireg-rewrite`
+
+Apply a guarded JSON edit plan to a standalone IREG stream. The source stays
+unchanged; the output must be a new file. `--format` is required and selects
+the source grammar, without converting between retail and Exult.
+
+```powershell
+titan u7 ireg-rewrite u7ireg55 --format exult --edits edits.json -o repaired/u7ireg55
+# Quality/flag edits require matching class metadata:
+titan u7 ireg-rewrite u7ireg55 --format exult --edits edits.json --static STATIC --game si -o repaired/u7ireg55
+```
+
+An edit plan contains `source_sha256` (the complete source's SHA-256) and an
+`edits` array. Each edit requires its original record `offset`, the **entire
+record's** `expected_hex` including prefix/length, and exactly one operation:
+
+- `fields`: `frame`, `lift`, `x_byte`, `y_byte`, `quality_byte`, `invisible`,
+  `okay_to_take` or `temporary`, within the supported existing class/layout.
+- `special_payload_hex`: replace a special record's payload; its stored
+  length is recalculated and known types receive structural validation.
+- `index_word`: replace an Exult saved inventory index's raw unsigned word.
+
+For example, generate a plan for a deliberately selected record in Python:
+
+```python
+import hashlib
+import json
+from pathlib import Path
+from titan.u7.ireg_rewrite import read_ireg_wire_records
+
+raw = Path("u7ireg55").read_bytes()
+records = read_ireg_wire_records(raw)
+record = next(r for r in records if r.kind == "object")  # inspect before choosing
+plan = {
+    "source_sha256": hashlib.sha256(raw).hexdigest(),
+    "edits": [{"offset": record.offset, "expected_hex": record.raw.hex(),
+               "fields": {"frame": 0}}],
+}
+Path("edits.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+```
+
+All offsets refer to the original input, even when a special grows or shrinks.
+Unedited records, unknown bytes, padding, localized text and controls are
+preserved verbatim. The JSON report on stdout includes source/output hashes,
+original/output offsets and before/after record bytes. Stale plans, duplicate
+offsets, truncation and unsupported field/layout combinations fail before an
+output file is created. No edits produces a byte-identical copy.
+
+Coordinates are stored bytes, not world-coordinate conversion. Retail edits
+must preserve their high nibble because chunk regrouping is not implemented.
+Semantic flag edits are Exult-only; a flag without a stored representation
+is rejected. Ordinary records cannot silently promote to wider formats.
+`quality_byte` is the raw stored byte, including any class-specific flag bits.
+This command does not add/delete/reparent objects, rewrite NPC headers, repack
+saves or validate runtime fit, script execution or the existence of a frame
+in the graphic archive. Work on extracted streams and review the changes.
+
+---
+
+#### `u7 ireg-tree` and `u7 ireg-tree-edit`
+
+Inspect and edit **Exult standalone world IREG** with matching shape metadata.
+The tree retains original object bytes, nested lists, terminators, scoped index
+controls, padding, opaque records and owned/orphan specials. Actor streams and
+retail structural editing are outside this command's scope.
+
+```powershell
+titan u7 ireg-tree u7ireg55 --static STATIC --game bg --superchunk 85 -o tree.json
+titan u7 ireg-tree-edit u7ireg55 --static STATIC --game bg --plan tree-plan.json --dry-run
+titan u7 ireg-tree-edit u7ireg55 --static STATIC --game bg --plan tree-plan.json -o edited/u7ireg55
+# Inspect a world member in a save by occurrence path, including nested saves:
+titan u7 ireg-tree original.sav --static STATIC --superchunk 85 --member-path 7,2 -o saved-tree.json
+```
+
+Both commands accept `--patch-dir DIR`, `--game bg|si` (default BG) and
+`--custom-game`. Select the same metadata during inspection and editing.
+`--superchunk` is decimal 0..143; the filename suffix `55` is hexadecimal 85.
+
+Inspection JSON includes source/context hashes, `objects` with original
+offsets and `record_sha256`/`owned_sha256`, scoped `lists`, `wire_records` and
+`special_owners`. Build a separate plan from these inspected identities:
+
+```json
+{
+  "source_sha256": "<source_sha256 from inspection>",
+  "context_sha256": "<context_sha256 from inspection>",
+  "superchunk": 85,
+  "operations": [
+    {
+      "action": "reparent",
+      "offset": 123,
+      "expected_sha256": "<owned_sha256 of object 123>",
+      "parent_offset": 456,
+      "parent_sha256": "<record_sha256 of destination 456>",
+      "x": 8, "y": 9, "lift": 0,
+      "index_word": 255,
+      "flag_policy": "preserve"
+    }
+  ]
+}
+```
+
+Replace the illustrative offsets and hash placeholders with inspected values.
+Every operation uses original input offsets. Supported operations:
+
+- `delete`: requires `offset`, `expected_sha256` (owned hash) and boolean
+  `cascade`. Nonempty lists, including opaque/control events, require `true`.
+- `reparent`: requires all placement/policy fields shown above. Destination
+  is an ordinary container/body, or `parent_offset: null` with
+  `parent_sha256: null` for the world. Contained x/y are gump bytes 0..255;
+  world x/y are absolute tiles within the same superchunk. Lift must fit the
+  existing record. Egg/barge moves and class-specific receivers are rejected.
+
+`index_word` is an explicit saved-slot request: low byte 0..17 or 255 for no
+slot; the high byte is preserved. It does not certify runtime fit. Moves append
+to the destination list with an explicit index control, leaving original
+persistent controls in place for siblings. Specials move/delete with their
+owner; unrelated opaque bytes remain verbatim. `flag_policy: "preserve"`
+retains decoded invisible/take/temporary flags where their existing layout
+can encode them, otherwise fails. `"inherit"` permits and reports resulting
+flag changes. Subtree cycles, overlapping source subtrees, stale hashes and
+unresolved class dispatch fail before output creation.
+
+To edit a saved member directly, add the inspection's `save` object to the
+plan, containing the archive `source_sha256` and `member_path` array. The
+plan's top-level source hash continues to identify the IREG member. Run
+`ireg-tree-edit original.sav ... -o edited.sav`; it validates the edited tree
+before embedding the exact member occurrence with the save repacker.
+Duplicate/empty members and unrelated payloads retain their identities.
+
+`--dry-run` validates in memory and reports changes without writing. Otherwise
+`-o` must name a new file. The report includes old/new object offsets, raw
+record changes, effective flag changes and hashes. Empty operations produce
+byte-identical output. Creation, class conversion and promotion use the
+additional operations below. Actor headers use `actor-rewrite`; engine-load
+validation remains separate.
+
+Creation adds an `object_id` (unique nonempty string), `record_hex` containing
+exactly one empty object record, and all the explicit placement/policy fields
+shown for reparenting. For `parent_offset`, use an original container/body
+offset, another creation's string ID, or null for the world. New-parent IDs
+can refer forward in the plan and require `parent_sha256: null`. Existing
+parents require their original record hash. Results include `created_offsets`.
+For example, a new empty container of shape 200 at superchunk 85:
+
+```json
+{"action":"create", "object_id":"new_box", "record_hex":"0c0000c8000000000000000000",
+ "parent_offset":null, "parent_sha256":null, "x":300, "y":1800, "lift":0,
+ "index_word":255, "flag_policy":"inherit"}
+```
+
+That record assumes matching metadata identifies shape 200 as an ordinary
+container. Use `create_ireg_record(shape, context=..., frame=0, lift=0)` from
+`titan.u7.ireg_authoring` to generate a record for the actual target metadata.
+It initializes class state to zero; explicit record bytes can supply body,
+egg, spellbook or other class-specific state. Child lists are built through
+creation IDs, rather than packed into `record_hex`.
+
+`convert` and `promote` require `offset` and `expected_sha256` (owned hash).
+Their optional fields are `shape`, `frame`, `lift`, `record_format`
+(`auto`, `ordinary`, `fd`, `fe`), `simple_length` (6 or 10), `body_npc`,
+`replacement_hex`, `allow_data_loss` (default false), and `flag_policy`
+(default preserve). Both action names use the same validated operation.
+
+```json
+{"action":"promote", "offset":123, "expected_sha256":"<owned hash>",
+ "frame":200, "lift":80, "record_format":"auto"}
+```
+
+Auto selects FE when the shape exceeds 1023 or the frame exceeds 63, and FD
+when only lift exceeds 15. Existing extended width is retained. Simple 6-byte
+records can grow to 10 bytes with zero-initialized extension bytes; `body_npc`
+can promote a 12-byte body to the 13-byte word-NPC form. Demotion is rejected.
+Compatible shape changes retain class payload/reserved bytes. Different
+class-layout families require an explicit `replacement_hex` record and
+`allow_data_loss: true`; before/after record hex remains in the report.
+Converting a nonempty container to a non-container requires moving/deleting
+its contents in a preceding guarded transaction. Lists, specials and opaque
+events stay intact. Promotion from an ordinary record with nonzero ignored
+lift bits also requires explicit loss consent, since those bits become
+meaningful in extended lift encoding.
+
+#### `u7 actor-headers` and `u7 actor-rewrite`
+
+Inspect and write complete NPC/monster headers while retaining inventories,
+actor specials, unknown bytes, count groups and trailing data. Source game
+and flavor are explicit; original-new-game bytes are not converted to Exult.
+
+```powershell
+titan u7 actor-headers npc.dat --static STATIC --game si --flavor runtime -o actors.json
+titan u7 actor-headers original.sav --static STATIC --game si --flavor runtime --member-path 7 -o saved-actors.json
+titan u7 actor-headers monsnpcs.dat --static STATIC --game si --flavor runtime --kind monsters
+titan u7 actor-rewrite npc.dat --static STATIC --plan actor-plan.json --dry-run
+titan u7 actor-rewrite npc.dat --static STATIC --plan actor-plan.json -o edited/npc.dat
+```
+
+Both commands accept `--patch-dir` and `--custom-game`. `actor-headers`
+requires `--game bg|si` and `--flavor runtime|original-new-game`; monster
+streams require runtime. The edit plan copies source/context hashes, game,
+kind and flavor from inspection. Each edit selects an actor ordinal and its
+complete-record hash, then either named `fields` or a complete `header_hex`:
+
+```json
+{
+  "source_sha256":"<inspected actor-stream hash>",
+  "context_sha256":"<inspected metadata hash>",
+  "game":"si", "kind":"npc", "flavor":"runtime",
+  "edits":[{"index":0, "expected_sha256":"<actors[0].sha256>",
+            "fields":{"health":20, "strength":25, "usecode_name_hex":"6d795f6e7063"}}]
+}
+```
+
+Named fields cover packed position/shape/frame/lift/usecode, stats, status
+words, schedule fields, 16-bit shape/polymorph extensions, flags, food,
+names and raw documented header fields. `shape` edits the low ten packed
+bits; `shape16` is the separate runtime override. `extended_skin` writes the
+saved byte; iflag1 bit 4 controls whether the engine uses it. Strength preserves BG's
+two high bits and SI's three high bits. Other masked stats preserve their
+status bits. Overlapping raw/masked edits are rejected.
+`name` encodes Latin-1 with a 16-byte limit; `name_hex` supplies exactly 16
+bytes for localized/raw names. `usecode_name_hex` inserts/resizes/removes the
+runtime named-function area and updates its flag; empty hex removes it.
+`header_hex` can replace every header byte, including reserved regions.
+The replacement must have the exact prefix length implied by its flags.
+
+Header edits cannot add/remove inventory or actor-special framing. All tails
+are preserved and independently reparsed. Runtime extension field edits are
+rejected with original-new-game flavor. For direct save embedding, copy the
+inspection's `save` block into the plan; the leaf must be `NPC.DAT` or
+`MONSNPCS.DAT` matching `kind`. Output is a new file, with archive/member/actor
+hash guards. `--dry-run` validates the entire edit and repack in memory.
+This does not add/remove actors, move objects between actors, simulate load
+corrections or certify engine behavior.
+
+---
+
 #### `u7 egg-query`
 
 Query egg trigger objects from IREG. Surfaces each egg's type, usecode function number, trigger probability, distance, criteria, and flags. With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
@@ -4570,6 +4806,64 @@ Serpent Isle saves also include `keyring.dat`.
 titan u7 save-extract exult00bg.sav -o save_bg/
 titan u7 save-extract exult00bg.sav -e flaginit -o flags/
 ```
+
+---
+
+#### `u7 save-repack`
+
+Replace selected member occurrences in a U7 named Flex or ZIP save/INITGAME
+archive. Unedited payloads, duplicates, named empty members, sparse Flex slots,
+raw names and container metadata are preserved. ZIP level-2 groups and
+embedded map Flex archives are supported without flattening their storage.
+
+```powershell
+# Obtain occurrence paths and source/member SHA-256 guards.
+titan u7 save-list original.sav --strict --json > members.json
+# Validate the entire replacement plan and resulting archive without writing.
+titan u7 save-repack original.sav --plan repack.json --dry-run
+# Write a new archive; existing output paths are rejected.
+titan u7 save-repack original.sav --plan repack.json -o edited.sav
+```
+
+`repack.json` has this shape; replace the example path/hash values with those
+from the member listing:
+
+```json
+{
+  "source_sha256": "<64-digit source SHA-256>",
+  "replacements": [
+    {
+      "member_path": [7],
+      "expected_sha256": "<64-digit original member SHA-256>",
+      "file": "edited/u7ireg55"
+    }
+  ]
+}
+```
+
+Replacement file paths are relative to the plan file, unless absolute.
+`member_path` uses zero-based **occurrence indices**, not names or sparse Flex
+slot numbers. Duplicate names remain distinct. ZIP level-2 members use the
+flattened indices from `save-list --json`. For a member inside an embedded
+Flex map, use a path such as `[7, 2]`: outer occurrence 7, then inner
+occurrence 2. List an extracted inner archive separately to obtain its indices
+and original payload hashes. Ancestor/descendant or duplicate path edits in one
+plan are rejected.
+
+Both source and member hashes are required by the CLI. All replacements and
+the resulting container are validated before output creation. A report on
+stdout records source/output hashes and each leaf member's before/after hash
+and size. An empty replacement list, or byte-identical replacement content,
+produces a byte-identical archive. Original archives are never overwritten.
+
+Changed ZIP members retain their compression method (stored/deflated); other
+compressed records are copied verbatim. Editing ZIP64, multidisk, aliased or
+unsupported signed/container layouts is rejected rather than converted.
+This command replaces existing payloads; it does not add/delete/rename
+members, guess repairs for damaged archives, or certify that replacement game
+state is semantically valid. Use `ireg-tree-edit` for guarded Exult world
+deletion/reparenting with direct save embedding, or `ireg-rewrite` for field edits,
+then embed its output through this plan.
 
 ---
 
