@@ -77,3 +77,6 @@ local.settings.json
 .aws/
 .azure/
 .ssh/
+
+# Other
+moongate/
