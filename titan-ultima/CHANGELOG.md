@@ -6,7 +6,7 @@ work for the next release.
 
 ---
 
-## [0.7.9] — Unreleased
+## [0.7.9]
 
 ### Added
 
