@@ -108,7 +108,11 @@ def owner(tmp_path, monkeypatch):
         "SI mod", static, patch, root=tmp_path, gamedat=gamedat, save_root=saves
     )
     monkeypatch.setattr(browser, "game_targets", lambda game: (target, []))
+    # Keep the tests independent of any Exult bundle installed on this machine.
+    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
+    # Keep sessions independent of any Exult data bundle installed on this machine.
+    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
     return target
 
 
@@ -146,7 +150,7 @@ def test_saved_npcs_use_runtime_flavour_in_all_archive_formats(owner, format):
     assert session.npcs.npcs[0].face_num == 17
     assert session.schedules.entries[1][0].tx == 301
     assert session.identity == "MYCUSTOMGAME"
-    assert not session.warnings
+    assert not [w for w in session.warnings if "default bundle unavailable" not in w]
     assert path.read_bytes() == original
 
 

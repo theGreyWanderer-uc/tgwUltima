@@ -81,9 +81,9 @@ def test_all_commands_accept_config_inputs_without_changing_user_inputs(
             value = "custom.flx"
         elif role in {"fixed", "terrain", "nonfixed"}:
             value = f"{role}.{8 if parameter.name == 'right' else 7}"
-        elif "integer" in parameter.type.name:
+        elif type(parameter.type).__name__.startswith("Int"):
             value = "1"
-        elif "float" in parameter.type.name:
+        elif type(parameter.type).__name__.startswith("Float"):
             value = "0.5"
         elif hasattr(parameter.type, "choices"):
             value = str(parameter.type.choices[0])
