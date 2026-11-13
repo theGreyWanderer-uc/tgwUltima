@@ -10,182 +10,217 @@ work for the next release.
 
 ### Added
 
-- **Martian Dreams map rendering:** added `md map-render` for surface and
-  underground maps, with object/actor overlays and DOS save support. Saved
-  water and power states select the correct art; optional viewport lighting
-  and VGA palette cycling reproduce the verified original-engine rules.
-- **Martian Dreams inspection:** added read-only actor, game-state, dialogue,
-  object-name and book reports, including MD-specific dialogue opcode decoding.
-- **U9 texture batch export:** `texture-export-all` uses configured paths to
-  export every frame from the highest-quality available tier at base resolution.
-  `--all-mips` includes smaller stored mip levels; `--all-tiers` requests other
-  quality tiers. Numeric PNG names, matched palettes/format tables, per-archive
-  manifests and a standard-library progress bar are included.
-- **U9 configured CLI inputs:** commands resolve game resources from U9 settings,
-  accept bare installed filenames, and allow known archive paths to be omitted
-  before IDs/search terms. Explicit paths and user-created inputs stay explicit;
-  external sources use their own companion files and texture tiers stay paired
-  with their matching format tables.
-- **U9 installation setup:** `titan setup` discovers common and nested installs,
-  validates bitmap archives, format tables and palette, and records their paths.
-  `titan config` inspects U9 settings; `u9 save-browse` uses the configured game
-  when no source or `--game-dir` is supplied.
-- **UO map inventory:** added `uo map-inventory`, the UO counterpart of
-  `u7 map-inventory`. It counts every land and static tile a facet uses,
-  ranked by placements, with the tiledata name, a derived category (wall,
-  floor, roof, door…), altitude, spread and a sample cell. It also rolls
-  statics up by name, since one name such as `plaster wall` covers dozens of
-  tile IDs. It writes CSV, JSON and a filterable page with art previews.
-- **U7 map inventory:** added `u7 map-inventory`, which counts every ground
-  tile and object a U7 map uses: chunk templates, fixed objects, starting
-  movable objects and optionally container contents. Shapes and frames are
-  ranked by placements with coverage, footprint, lift and spread, and
-  written to CSV, JSON and a filterable page with sprite previews.
-  `--sc`, `--tile-rect` and `--cx0/--cy0/--cx1/--cy1` audit part of the
-  map and list every placement in it.
-- **U9 unreachable trigger marks:** `U9Trigger.unreachable_marks()` lists
-  `0x16` marks no branch in the trigger targets (28 in 1.19F, 25 in 1.19H).
-- **UO facet maps:** added `uo map-export`, which renders each facet as a
-  one-pixel-per-tile radar map from `mapN` (UOP or MUL) and its statics,
-  with optional difference-file patches, terrain-only output and heightmaps.
-- **UO isometric map views:** added `uo map-render`, which draws any facet
-  location like the client: land art, stretched and shaded terrain, statics
-  in client draw order, hues and see-through water. Roofs, statics, hues
-  and shading can be turned off.
-- **UO named installs:** several client installs can be configured as
-  `[uo.installs.<name>]` with their own output folder and source
-  preferences, and any `uo` command's CLIENT can be an install name
-  (`titan uo map-export uof`). `titan config` lists them.
-- **UO server profiles:** house placement's server-side rules (regions,
-  region rules and the house menu) can come from one JSON server profile
-  (`--server-profile` or `server_profile` in `titan.toml`). Without one,
-  houses come from the client's multis and regions are skipped with a
-  warning.
-- **UO house footprints:** added `uo house-footprints`, which joins a
-  RunUO/ServUO house placement table to the client's multis and exports
-  each house's occupied, foundation, border and yard cells, plus a
-  contact sheet drawing every footprint.
-- **UO house capacity:** added `uo house-capacity`, which applies RunUO's
-  map-based house placement rules and regions to every location on a facet,
-  reports how much ground is legal for a house, and greedily packs as many
-  houses as fit, with an overlay map.
-  Region rules follow the emulator's own `Region.Find` (priority, nesting,
-  z ranges) and its scripts' `AllowHousing` overrides; checked against a
-  running ServUO shard, map rules agree on all 725,971 sampled centres.
-  An offline viewer shows legal ground, why each spot fails, regions and
-  the packed houses, with hover details. A second, mixed packing places a
-  seeded mix of house sizes: small near towns, larger further out, and
-  workshops near mountains.
-- **UO whole-facet maps:** added `uo map-tiles`, which renders an entire
-  facet at full client resolution into a zoomable tile pyramid with an
-  offline HTML viewer (pan, zoom, cell coordinates, go-to). Rendering runs
-  in parallel and resumes after interruption.
-- **U8 shape browser:** added `u8 shape-browse` for world, gump and font
-  archives and standalone shapes, with search, property filters, animation
-  playback and weapon/glow overlays. Export PNGs, GIFs, JSON reports and
-  contact sheets grouped by animation or frame range.
-- **U8 NPC browser:** added `u8 npc-browse` for save archives, GAMEDAT and
-  loose files, with character names, search, filters, sprite previews,
-  equipment inspection and animation browsing. Export HTML, CSV and JSON.
-- **U8 NPC animation reports:** added `u8 npc-animation-report` for one NPC
-  or all allocated NPCs, with named actions, contact sheets and offline
-  HTML/CSV reports. Optional name CSVs can override character labels.
-- **U8 save browser:** added `u8 save-browse` with searchable archive entries,
-  hex inspection, extraction, NPCs, equipment, animations and saved-state
-  views. Compare snapshots and export offline reports; state inspection
-  works without graphics assets.
-- **U8 map browser:** added `u8 map-browse` with object/container inspection,
-  NPC and shape browsing, map filters, colour overviews and isometric
-  previews. Export HTML, PNG, CSV and JSON.
-- **U8 container browser:** added `u8 container-browse` for nested inventories
-  and NPC owners across loaded and stored maps. Filter containers and their
-  contents separately, inspect quantities and equipment, and preview item
-  sprites and composed container artwork. Previews support saved or random
-  layouts and containers without an open-gump record; exports include
-  HTML, CSV, JSON and images.
-- **U8 inventory access:** NPC details now open container previews and nested
-  inventories directly, including empty inventories.
-- **U8 world and egg search:** added `u8 world-query` and `u8 egg-query` paged
-  browsers with all-map filters, nested searches, teleport links and monster
-  spawn details. Open related shapes, NPCs and inventories, and export
-  HTML, CSV, JSON and PNG previews.
-- **U8 palette browser:** added `u8 palette-browse` with numbered swatches,
-  RGB matching, gradients, palette effects and PNG previews. Export
-  searchable HTML, CSV, JSON, effect sheets and original palette bytes.
-- **U8 saved-state inspection:** added `u8 flags-dump`, `u8 avatar-dump`,
-  `u8 gumps-dump`, `u8 kernel-dump`, `u8 itemcach-dump` and `u8 npcdata-dump`
-  with text, JSON and CSV views, including `kernel-dump --view decoded`.
-  `u8 save-info` shows state and game-clock overviews; `u8 save-diff` compares
-  flags, items, NPCs, avatar, UI and process state. Detailed kernel decoding
-  is limited to supported native builds; other records remain identified.
-- **U8 map data:** added `u8 fixed-dump` and `u8 nonfixed-dump` with summary
-  and item views, nested inventories, filters and text/JSON/CSV exports.
-- **U8 animation data:** added `u8 anim-dump` and `u8 wpnovlay-dump` to inspect
-  actor actions, directions, movement and weapon/glow overlays, with filters
-  and text/JSON/CSV exports.
-- **U7 container previews:** added composed inventory artwork with saved or
-  random layouts, BG/SI and mod support, locked-container labels, and
-  HTML/PNG/JSON exports.
-- **U7 imported shape animation:** shape creation and import now let users
-  choose whether multi-frame artwork animates. Scripted workflows accept
-  `--animate`, `--no-animate` and recipe `conversion.animated`; standalone
-  imports retain the choice in metadata sidecars.
-- **U9 save browser:** added `u9 save-browse` with selection, paging, filters,
-  hex inspection, extraction, maps, NPCs, saved activities, integrity
-  findings and offline reports. Backups include the selected archive,
-  loose files and selector.
+#### Setup
+
+- **Ultima 6 and Martian Dreams setup:** `titan setup` now finds U6 and
+  Martian Dreams installs from GOG Galaxy, GOG offline, Heroic and common
+  manual folders. `titan config` shows what was found and checks it is still
+  there. U6 and MD commands use the configured game automatically;
+  `--gamedir` still overrides it.
+- **Ultima 9 setup:** `titan setup` finds common and nested U9 installs and
+  checks the texture archives and palette before saving their paths.
+  `titan config` shows the U9 settings.
+
+#### Martian Dreams
+
+- **Map rendering:** `md map-render` draws the surface and underground maps,
+  with objects and characters, from a new game or a DOS save. Saved water and
+  power states show the right artwork, and optional lighting and palette
+  cycling match the original game.
+- **Game data reports:** `md actor-list`, `md gamestate-dump`,
+  `md converse-dump`, `md converse-report`, `md look-dump` and `md book-dump`
+  show characters, game state, conversations, object names and books. They
+  only read the game files and never change them.
+
+#### Ultima 7
+
+- **Save editing:** new tools edit U7 saves and world files without touching
+  the originals:
+  - `u7 ireg-tree-edit` moves, deletes and creates objects in the world and
+    in containers, and can change an object's shape or frame.
+  - `u7 ireg-rewrite` changes individual object details such as frame,
+    height, position within a chunk, quality and flags.
+  - `u7 actor-rewrite` edits NPC and monster stats, names, schedules, flags
+    and other character details. Inventories are kept as they are.
+  - `u7 save-repack` puts edited files back into a save archive (Flex or ZIP).
+    The edit tools can also write directly into a save.
+
+  You write the changes as a JSON plan, based on what `u7 ireg-tree` and
+  `u7 actor-headers` report. Each plan is checked against the exact file it
+  was made for, so an out-of-date plan is refused. `--dry-run` shows the
+  changes without writing anything, and output always goes to a new file.
+  These tools check the file structure, not whether the game will accept the
+  result, so test edited saves in the game.
+- **World object reports:** `u7 ireg-dump` exports one superchunk's objects
+  with their scheduled scripts, attributes, text and readied slots, including
+  bodies, spellbooks, virtue stones, barges and other special objects.
+- **Game data inspection:** `u7 static-data-dump` covers container, gump,
+  weapon, ammo, armour and paperdoll tables, with mod patches and original
+  DOS tables (`--data-format retail`). `u7 usecode-disasm` can annotate and
+  check scripts, export symbols and show the original version of a function
+  a mod has replaced.
+- **Map inventory:** `u7 map-inventory` counts every ground tile and object a
+  map uses, including fixed objects, starting items and, optionally, container
+  contents. Results are ranked by how often each shape and frame is used, and
+  written to CSV, JSON and a filterable page with sprite previews. `--sc`,
+  `--tile-rect` and `--cx0/--cy0/--cx1/--cy1` limit it to part of the map and
+  list every placement there.
+- **Container previews:** containers can be shown as their in-game inventory
+  artwork, with saved or random item layouts and labels for locked
+  containers. Works with BG, SI and mods, and exports HTML, PNG and JSON.
+- **Animated imports:** when creating or importing shapes you can choose
+  whether multi-frame artwork animates. Scripts use `--animate` /
+  `--no-animate` or `conversion.animated` in recipes.
+
+#### Ultima 8
+
+- **Shape browser:** `u8 shape-browse` covers world, gump and font shapes and
+  standalone shape files, with search, property filters, animation playback
+  and weapon/glow overlays. Exports PNG, GIF, JSON and contact sheets.
+- **NPC browser:** `u8 npc-browse` lists characters from saves, GAMEDAT or
+  loose files, with names, search, filters, sprite previews, equipment and
+  animations. Exports HTML, CSV and JSON.
+- **NPC animation reports:** `u8 npc-animation-report` shows one NPC or all
+  NPCs with named actions, contact sheets and offline HTML/CSV reports. You
+  can supply your own character names in a CSV.
+- **Save browser:** `u8 save-browse` lets you search, view and extract save
+  contents, including NPCs, equipment, animations and saved game state.
+  Compare two saves and export offline reports. Game graphics are not needed
+  to inspect saved state.
+- **Map browser:** `u8 map-browse` inspects maps, objects and containers,
+  with filters, colour overviews and isometric previews. Exports HTML, PNG,
+  CSV and JSON.
+- **Container browser:** `u8 container-browse` shows nested inventories and
+  who owns them on every map. Filter containers and their contents
+  separately, check quantities and equipment, and preview items and
+  container artwork with saved or random layouts. Exports HTML, CSV, JSON
+  and images.
+- **Inventory access:** NPC details open their inventories and container
+  previews directly, including empty inventories.
+- **World and egg search:** `u8 world-query` and `u8 egg-query` search all
+  maps, including inside containers, with teleport links and monster spawn
+  details. Jump to related shapes, NPCs and inventories, and export HTML,
+  CSV, JSON and PNG previews.
+- **Palette browser:** `u8 palette-browse` shows numbered colour swatches,
+  RGB matching, gradients and palette effects. Exports HTML, CSV, JSON,
+  effect sheets and the original palette data.
+- **Saved-state reports:** `u8 flags-dump`, `u8 avatar-dump`, `u8 gumps-dump`,
+  `u8 kernel-dump`, `u8 itemcach-dump` and `u8 npcdata-dump` show saved game
+  state as text, JSON or CSV. `u8 save-info` gives an overview including the
+  game clock, and `u8 save-diff` compares flags, items, NPCs, the Avatar, the
+  interface and running processes between two saves. Some process details
+  are only decoded for supported game versions.
+- **Map data reports:** `u8 fixed-dump` and `u8 nonfixed-dump` list map
+  objects, including nested inventories, with filters and text/JSON/CSV
+  output.
+- **Animation data reports:** `u8 anim-dump` and `u8 wpnovlay-dump` show
+  character actions, directions, movement and weapon/glow overlays, with
+  filters and text/JSON/CSV output.
+
+#### Ultima 9
+
+- **Save browser:** `u9 save-browse` lets you page through and filter save
+  contents, view and extract files, and check maps, NPCs, saved activities
+  and save problems. Exports offline reports. Backups include the save, its
+  loose files and the save selector. Uses the configured game when no source
+  is given.
+- **Export all textures:** `u9 texture-export-all` exports every texture at
+  full size from the best quality available, with numbered PNGs, a manifest
+  per archive and a progress bar. `--all-mips` adds the smaller versions and
+  `--all-tiers` adds the other quality levels.
+- **Shorter commands:** U9 commands find game files from your settings, so
+  you can type just a filename or leave out a known archive and give only the
+  ID or search term. Files you name yourself are used exactly as given.
+
+#### Ultima Online
+
+- **Facet maps:** `uo map-export` draws each facet as an overview map, one
+  pixel per tile, with optional map patches, terrain-only output and
+  heightmaps.
+- **Map views:** `uo map-render` draws any location the way the client
+  does, with terrain, buildings, hues and see-through water. Roofs, statics,
+  hues and shading can each be turned off.
+- **Zoomable whole-facet maps:** `uo map-tiles` renders a whole facet at full
+  client detail into a zoomable map with an offline viewer (pan, zoom, cell
+  coordinates, go-to). Rendering uses several processor cores and can resume
+  after an interruption.
+- **Map inventory:** `uo map-inventory` counts every terrain and static tile a
+  facet uses, ranked by how often each appears, with its name, a category
+  (wall, floor, roof, door…), height, spread and an example location. Statics
+  are also grouped by name, since one name such as `plaster wall` covers many
+  tiles. Writes CSV, JSON and a filterable page with art previews.
+- **House footprints:** `uo house-footprints` combines a RunUO/ServUO house
+  list with the client's house designs and exports each house's footprint,
+  foundation, border and yard, plus a sheet showing every footprint.
+- **House capacity:** `uo house-capacity` applies RunUO/ServUO house placement
+  rules and regions to a whole facet. It reports how much land allows a
+  house, fills it with as many houses as fit, and draws an overlay map.
+  Results match a live ServUO shard. An offline viewer shows legal ground,
+  why each spot is refused, regions and placed houses. A second, mixed layout
+  puts small houses near towns, larger ones further out and workshops near
+  mountains.
+- **Server profiles:** house tools can read a server's regions and house list
+  from one JSON server profile (`--server-profile`, or `server_profile` in
+  `titan.toml`). Without one, houses come from the client's designs and
+  regions are skipped with a warning.
+- **Several installs:** you can configure more than one client install as
+  `[uo.installs.<name>]`, each with its own output folder and settings, and
+  use the name in any `uo` command (`titan uo map-export uof`).
+  `titan config` lists them.
 
 ### Changed
 
-- **U6/MD object visibility:** map renders hide invisible world objects by
-  default. `--show-invisible` includes them with `--objects`; U6's overlap
-  audit accepts the same visibility option.
-- **U6 overlap audit:** `map-audit-zorder` now describes actual engine-ordered
-  pixel overlaps, including the drawing rule and overlap count, rather than
-  treating them as unresolved layer ties.
-- **U7/U8 container navigation:** added persistent result lists, nested
-  navigation, separate container/contents filters and clearer item identities.
-  Existing U7 batch tree and CSV queries remain available.
-- **U8 previews:** static shape, NPC and equipment previews retain native
-  detail when space permits and show rendered dimensions. Playback fits the
-  terminal window and updates on resize; solid colour cells reduce font seams.
-- **U8 state labels:** browsers and exports now show character names and
-  additional NPC and animation flag meanings, while retaining unknown values.
-- **U9 save-check advice:** terminal and JSON reports provide advice specific
-  to each finding and severity. JSON adds keyed `recommendations`; integrity
-  verdicts are unchanged. Unavailable map comparisons are reported as notes.
-- **Browser exports:** new U7/U8 reports use new output paths rather than
-  replacing earlier reports or changing game data.
+- **U6 and MD hidden objects:** map renders now leave out invisible objects by
+  default. Add `--show-invisible` with `--objects` to include them; U6's
+  overlap check accepts the same option.
+- **U6 overlap check:** `map-audit-zorder` now reports which objects overlap,
+  which drawing rule decides it and how many overlaps there are, matching the
+  original game's drawing order.
+- **U7 and U8 container browsing:** result lists stay in place while you open
+  nested containers, containers and their contents can be filtered separately,
+  and items are easier to tell apart. The existing U7 tree and CSV options
+  still work.
+- **U8 previews:** shape, NPC and equipment previews keep full detail when
+  there is room and show their size. Animation playback fits the terminal and
+  adjusts when it is resized, with fewer visible gaps between colours.
+- **U8 labels:** browsers and exports show character names and explain more
+  NPC and animation flags. Unknown values are still shown.
+- **U9 save-check advice:** `save-check` now gives advice for each problem it
+  finds, including in `--json` output. Its verdicts are unchanged. Map
+  comparisons that can't run are shown as notes.
+- **Exports never overwrite:** U7 and U8 browser reports are saved under new
+  names instead of replacing earlier reports, and never change game files.
 
 ### Fixed
 
-- **U6 map rendering:** replaced object, tile and coordinate layering
-  exceptions with the original engine's cell-stack rules. Multi-tile sprites
-  retain visible cells at crop edges, and invalid regions are rejected before
-  writing output.
-- **U9 music:** the saved music node's first field is now `key` (the link of
-  the trigger object that started the music), not `track`; `track` remains
-  as an alias. The trigger references correct the music opcodes' call
-  targets and decode the 1.19H music fix (Minoc's branch to label 0).
-- **UO multis:** `multi.mul` record size (12 or 16 bytes) is now detected
-  once per file and ambiguous files are reported, instead of guessing per
-  entry, which could misread 12-byte files. `multi-export` gains
-  `--container auto|uop|mul` and reports the source and layout it read.
-- **U8 shape import:** opaque pixels no longer become transparent when their
-  nearest palette colour is index 255. Also applies to U8-to-U7 conversion.
-- **U8 Flex writing:** building, repacking and replacing records now update
-  the native checksum, including manifest rebuilds. U7/Exult reserved header
-  bytes remain intact.
-- **U8 maps and inventories:** the active map's live state takes precedence
-  over stored records. Maps populated only by NONFIXED are included, nested
-  inventory items are excluded from world renders, and reflected sprites
-  have corrected placement and depth sorting.
-- **Container selection and exports:** desktop menus retain complete item
-  IDs and filter text; U7 IDs accept either case. U8 result exports honour
-  all active filters and record the exported selection.
-- **Windows image previews:** restore minimized viewers and bring requested
-  previews forward, including reused Photos windows. Viewer launch/focus
-  failures now provide clearer feedback and generated image paths.
+- **U6 map rendering:** objects, tiles and terrain now stack in the same order
+  as the original game, replacing earlier special cases. Large sprites at the
+  edge of a cropped map are no longer cut off, and invalid map areas are
+  refused before anything is written.
+- **U7 and U8 container menus:** menus show complete item IDs and keep your
+  filter text, and U7 IDs work in upper or lower case. U8 exports include
+  every active filter and record what was exported.
+- **U8 shape import:** solid pixels no longer turn transparent when their
+  closest palette colour is the last entry (index 255). Also fixes U8-to-U7
+  conversion.
+- **U8 archives built or edited by Titan:** archives Titan builds, repacks or
+  edits now keep their internal checksum correct. U7/Exult archives keep
+  their header information.
+- **U8 maps and inventories:** the current map's live state takes priority
+  over stored copies. Maps that only have movable objects are now included,
+  items inside inventories no longer appear on world maps, and mirrored
+  sprites are positioned and layered correctly.
+- **U9 music in saves:** save reports label the saved music field as `key`
+  (the trigger that started the music) instead of `track`; `track` still
+  works as an alias. Trigger reports now show the 1.19H patch's Minoc music
+  fix.
+- **UO house designs:** Titan now works out the record layout of `multi.mul`
+  once per file and warns when it can't tell, instead of guessing for each
+  house, which could misread some files. `multi-export` adds
+  `--container auto|uop|mul` and reports which file and layout it used.
+- **Windows image previews:** minimised viewers are restored and previews
+  come to the front, including reused Photos windows. If a viewer can't
+  open, Titan says so and shows where the image was saved.
 
 ---
 
