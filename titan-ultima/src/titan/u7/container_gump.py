@@ -15,22 +15,14 @@ from pathlib import Path
 from PIL import Image
 
 from titan.u7.archive_targets import ArchiveTarget
-from titan.u7.shape_browser import owner_file
-from titan.u7.shape_archive import find_archive
-from titan.u7.shape_extra import _extract_section, _parse_single_value_section
-from titan.u7.shape_properties import container_records
-from titan.u7.shapeinfo import _exult_container_record_index, _exult_record
-
-
-@dataclass(frozen=True)
-class U7GumpArea:
-    """Storage rectangle in native pixels relative to the gump's draw anchor."""
-
-    x: int
-    y: int
-    width: int
-    height: int
-    source: str = "Exult Container_gump::initialize"
+from titan.u7.shape_extra import _parse_single_value_section
+from titan.u7.shapeinfo import U7Containers
+from titan.u7.gump_metadata import (
+    U7GumpArea,
+    U7GumpMetadata,
+    load_u7_gump_sources,
+    read_u7_gump_metadata,
+)
 
 
 @dataclass
@@ -43,6 +35,9 @@ class U7ContainerGumps:
     locked: dict[int, bool] = field(default_factory=dict)
     disabled: set[int] = field(default_factory=set)
     source_files: list[Path] = field(default_factory=list)
+    metadata: U7GumpMetadata = field(default_factory=U7GumpMetadata)
+    bindings: U7Containers = field(default_factory=lambda: U7Containers(0, []))
+    warnings: list[str] = field(default_factory=list)
 
     def resolve(self, shape: int) -> tuple[int, U7GumpArea, str]:
         """Resolve a container's gump without substituting unrelated artwork."""
@@ -81,14 +76,29 @@ class U7ContainerGumps:
 
 
 def load_u7_container_gumps(
-    target: ArchiveTarget, game: str, *, exult_flx: str | None = None
+    target: ArchiveTarget,
+    game: str,
+    *,
+    exult_flx: str | None = None,
+    custom_game: bool | None = None,
+    discover_defaults: bool = True,
 ) -> U7ContainerGumps:
-    """Merge base/Exult mapping records and patch overrides without crossing owners."""
+    """Select engine defaults and patch records; standalone/custom games use STATIC explicitly."""
+    is_custom = target.standalone if custom_game is None else custom_game
+    sources = load_u7_gump_sources(
+        target.static,
+        patch_dir=target.patch,
+        game=game,
+        exult_flx=exult_flx,
+        custom_game=is_custom,
+        discover_defaults=discover_defaults,
+    )
     result = U7ContainerGumps()
     # Current Exult data/bg|si/shape_info.txt locked_containers defaults.
     # Older installed bundles omit this section (notably SI); text overlays
     # below may clear these flags or supply mod-specific locked shapes.
-    result.locked = {522: True, (798 if game == "bg" else 914): True}
+    if not is_custom:
+        result.locked = {522: True, (798 if game == "bg" else 914): True}
     areas = {
         0: (46, 28, 74, 32),
         1: (50, 20, 80, 24),
@@ -104,97 +114,36 @@ def load_u7_container_gumps(
     if game != "bg":
         areas[64] = (62, 22, 36, 44)
     result.areas = {number: U7GumpArea(*bounds) for number, bounds in areas.items()}
-    base = find_archive(target.static, "CONTAINER.DAT") if target.static else None
-    layers: list[tuple[bytes, str, bool]] = []
-    if base:
-        layers.append((base.read_bytes(), str(base), True))
-        result.source_files.append(base)
-    elif exult_flx:
-        layers.append(
-            (
-                _exult_record(exult_flx, _exult_container_record_index(game)),
-                exult_flx,
-                False,
-            )
-        )
-    patch = owner_file(target, "CONTAINER.DAT")
-    if patch and patch != base:
-        layers.append((patch.read_bytes(), str(patch), True))
-        result.source_files.append(patch)
-    for data, source, owner_override in layers:
-        for row in container_records(data).records:
+    bindings = []
+    for layer in sources.layers:
+        if layer.name != "CONTAINER.DAT":
+            continue
+        table = U7Containers.from_bytes(layer.data, source=layer.source, strict=True)
+        bindings.append(table)
+        for row in table.records:
             number = row.gump_shape
-            result.mappings[row.shape] = (
-                number if number < 0x8000 else number - 0x10000,
-                source,
-            )
+            result.mappings[row.shape] = (number, layer.source)
             # Bundled SI's -1 locked-chest entry means usecode opens it.
             # Explicit owner/mod -1 records must still disable this preview.
-            if owner_override and number >= 0x8000:
+            if (layer.patch or is_custom) and number < 0:
                 result.disabled.add(row.shape)
             else:
                 result.disabled.discard(row.shape)
 
-    text_layers: list[tuple[str, str]] = []
-    if exult_flx:
-        result.source_files.append(Path(exult_flx))
-        # Older Exult bundles end before these records; defaults remain valid.
-        bundled_text = _exult_record(exult_flx, 16 if game == "bg" else 20)
-        if bundled_text:
-            text_layers.append((bundled_text.decode("latin-1"), exult_flx))
-    seen: set[Path] = set()
-    for directory in (target.static, target.patch):
-        if directory is None:
+    result.bindings = U7Containers.merge(*bindings)
+    result.metadata = read_u7_gump_metadata(sources)
+    result.areas.update(result.metadata.areas)
+    result.special.update(result.metadata.special)
+    result.warnings = [*result.metadata.warnings, *result.bindings.warnings]
+    result.source_files = list(dict.fromkeys(layer.path for layer in sources.layers))
+    for layer in sources.layers:
+        if layer.name != "SHAPE_INFO.TXT":
             continue
-        path = find_archive(directory, "GUMP_INFO.TXT")
-        if path and path.resolve() not in seen:
-            seen.add(path.resolve())
-            result.source_files.append(path)
-            text_layers.append((path.read_text(encoding="latin-1"), str(path)))
-    for text, source in text_layers:
-        for raw in _extract_section(text, "container_area").splitlines():
-            line = raw.split("#", 1)[0].strip()
-            if not line.startswith(":"):
-                continue
-            try:
-                parts = [
-                    int(value.strip(), 0)
-                    if value.strip().lower().startswith("0x")
-                    else int(value)
-                    for value in line[1:].split("/")[:5]
-                ]
-                number, x, y, width, height = parts
-            except ValueError as error:
-                raise ValueError(
-                    f"U7 container gump: malformed container_area in {source}: {line}"
-                ) from error
-            result.areas[number] = U7GumpArea(x, y, width, height, source)
-        for raw in _extract_section(text, "special").splitlines():
-            line = raw.split("#", 1)[0].strip()
-            if line.startswith(":"):
-                try:
-                    result.special.add(int(line[1:].split("/")[0]))
-                except ValueError as error:
-                    raise ValueError(
-                        f"U7 container gump: malformed special entry in {source}"
-                    ) from error
-    shape_texts = []
-    if exult_flx:
-        bundled = _exult_record(exult_flx, 7 if game == "bg" else 4)
-        if bundled:
-            shape_texts.append(bundled.decode("latin-1"))
-    for directory in dict.fromkeys((target.static, target.patch)):
-        if directory:
-            path = find_archive(directory, "SHAPE_INFO.TXT")
-            if path:
-                result.source_files.append(path)
-                shape_texts.append(path.read_text(encoding="latin-1"))
-    for text in shape_texts:
         result.locked.update(
             {
                 number: bool(value)
                 for number, value in _parse_single_value_section(
-                    text, "locked_containers"
+                    layer.data.decode("latin-1"), "locked_containers"
                 ).items()
             }
         )

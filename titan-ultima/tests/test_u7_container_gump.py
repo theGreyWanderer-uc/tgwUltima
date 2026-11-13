@@ -3,6 +3,7 @@
 import hashlib
 import json
 import struct
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -62,13 +63,15 @@ def native_session(world):
     shapes[801] = shape_record(7, 4, 30, (3, 2))
     flex(static / "SHAPES.VGA", shapes)
     flex(static / "PALETTES.FLX", [bytes([i // 3 % 64 for i in range(768)])])
-    return browser.load_u7_container_session(world)
+    return browser.load_u7_container_session(world, custom_game=True)
 
 
 @pytest.mark.parametrize("game,chest,drawer", [("bg", 22, 27), ("si", 18, 22)])
 def test_bg_si_bounds_are_keyed_by_gump_not_world_shape(tmp_path, game, chest, drawer):
     (tmp_path / "CONTAINER.DAT").write_bytes(table((522, chest), (777, drawer)))
-    catalog = load_u7_container_gumps(ArchiveTarget("Game", tmp_path, tmp_path), game)
+    catalog = load_u7_container_gumps(
+        ArchiveTarget("Game", tmp_path, tmp_path, standalone=True), game
+    )
     assert catalog.resolve(522)[1] == U7GumpArea(40, 18, 60, 37)
     assert catalog.resolve(777)[1] == U7GumpArea(36, 12, 70, 26)
 
@@ -82,10 +85,14 @@ def test_sparse_patch_mapping_disable_and_custom_area_preserve_base(tmp_path):
     (patch / "gump_info.txt").write_text(
         "%%section container_area\n:100/-4/5/20/15/0\n%%endsection"
     )
-    catalog = load_u7_container_gumps(ArchiveTarget("Mod", static, patch), "bg")
+    catalog = load_u7_container_gumps(
+        ArchiveTarget("Mod", static, patch, standalone=True), "bg"
+    )
     gump, area, source = catalog.resolve(522)
     assert (gump, area.x, area.y, area.width, area.height) == (100, -4, 5, 20, 15)
-    assert source.endswith("container.dat") and area.source.endswith("gump_info.txt")
+    assert (
+        source.endswith("container.dat") and str(patch / "gump_info.txt") in area.source
+    )
     assert catalog.resolve(801)[0] == 9
     with pytest.raises(ValueError, match="no artwork mapping"):
         catalog.resolve(802)
@@ -114,31 +121,45 @@ def test_locked_chest_counterpart_honours_owner_mapping_and_explicit_disable(tmp
     (tmp_path / "SHAPE_INFO.TXT").write_text(
         "%%section locked_containers\n:522/1\n%%endsection"
     )
-    catalog = load_u7_container_gumps(ArchiveTarget("BG", tmp_path, tmp_path), "bg")
+    catalog = load_u7_container_gumps(
+        ArchiveTarget("BG", tmp_path, tmp_path, standalone=True), "bg"
+    )
     assert catalog.resolve(522)[0] == 22
     assert catalog.resolve(522)[2].startswith("Preview locked chest")
     (tmp_path / "CONTAINER.DAT").write_bytes(table((800, 22), (522, -1)))
-    catalog = load_u7_container_gumps(ArchiveTarget("BG", tmp_path, tmp_path), "bg")
+    catalog = load_u7_container_gumps(
+        ArchiveTarget("BG", tmp_path, tmp_path, standalone=True), "bg"
+    )
     with pytest.raises(ValueError, match="no artwork mapping"):
         catalog.resolve(522)
     (tmp_path / "CONTAINER.DAT").write_bytes(table((800, 22)))
     (tmp_path / "SHAPE_INFO.TXT").write_text(
         "%%section locked_containers\n:522/0\n%%endsection"
     )
-    catalog = load_u7_container_gumps(ArchiveTarget("BG", tmp_path, tmp_path), "bg")
+    catalog = load_u7_container_gumps(
+        ArchiveTarget("BG", tmp_path, tmp_path, standalone=True), "bg"
+    )
     with pytest.raises(ValueError, match="no artwork mapping"):
         catalog.resolve(522)
 
 
 def test_old_si_bundle_uses_exult_locked_defaults_but_patch_can_clear_them(tmp_path):
-    (tmp_path / "CONTAINER.DAT").write_bytes(table((800, 18)))
-    target = ArchiveTarget("SI", tmp_path, tmp_path)
-    assert load_u7_container_gumps(target, "si").resolve(522)[0] == 18
-    (tmp_path / "SHAPE_INFO.TXT").write_text(
+    records = [b""] * 9
+    records[8] = table((800, 18))
+    bundle = tmp_path / "old_si.flx"
+    flex(bundle, records)
+    patch = tmp_path / "patch"
+    patch.mkdir()
+    target = ArchiveTarget("SI", tmp_path, patch)
+    assert (
+        load_u7_container_gumps(target, "si", exult_flx=str(bundle)).resolve(522)[0]
+        == 18
+    )
+    (patch / "SHAPE_INFO.TXT").write_text(
         "%%section locked_containers\n:522/0\n%%endsection"
     )
     with pytest.raises(ValueError, match="no artwork mapping"):
-        load_u7_container_gumps(target, "si").resolve(522)
+        load_u7_container_gumps(target, "si", exult_flx=str(bundle)).resolve(522)
 
 
 def test_si_bundled_negative_locked_mapping_can_preview_but_patch_disable_wins(
@@ -170,7 +191,9 @@ def test_si_bundled_negative_locked_mapping_can_preview_but_patch_disable_wins(
 def test_malformed_mod_area_does_not_silently_use_defaults(tmp_path, text):
     (tmp_path / "gump_info.txt").write_text(text)
     with pytest.raises(ValueError, match="malformed"):
-        load_u7_container_gumps(ArchiveTarget("Mod", tmp_path, tmp_path), "bg")
+        load_u7_container_gumps(
+            ArchiveTarget("Mod", tmp_path, tmp_path, standalone=True), "bg"
+        )
 
 
 def test_special_and_nonpositive_area_are_rejected(tmp_path):
@@ -178,7 +201,9 @@ def test_special_and_nonpositive_area_are_rejected(tmp_path):
     (tmp_path / "gump_info.txt").write_text(
         "%%section container_area\n:9/0/0/0/1\n%%endsection\n%%section special\n:22\n%%endsection"
     )
-    catalog = load_u7_container_gumps(ArchiveTarget("Mod", tmp_path, tmp_path), "bg")
+    catalog = load_u7_container_gumps(
+        ArchiveTarget("Mod", tmp_path, tmp_path, standalone=True), "bg"
+    )
     with pytest.raises(ValueError, match="not a container"):
         catalog.resolve(522)
     with pytest.raises(ValueError, match="invalid storage"):
@@ -334,3 +359,33 @@ def test_browser_g_h_l_and_fresh_reports_keep_game_inputs_and_old_reports(
         hashlib.sha256(p.read_bytes()).digest() == digest
         for p, digest in before.items()
     )
+
+
+def test_browser_report_exposes_checkmark_and_debug_metadata(native_session, tmp_path):
+    native_session.gumps.metadata.apply_text(
+        b"%%section checkmark_pos\n:22/24/34/2\n%%endsection\n"
+        b"%%section container_area\n:22/40/18/60/37/0\n%%endsection",
+        "explicit-patch",
+    )
+    root = native_session.containers[0]
+    report = browser.export_u7_container_bundle(
+        native_session, tmp_path / "report", numbers=[root], selection={}
+    )
+    detail = json.loads((report.parent / "inventory.json").read_text())[
+        "gump_previews"
+    ][root]["metadata"]
+    assert detail["checkmark"]["shape"] == 2 and detail["debug_flags"] == 0
+    assert detail["checkmark"]["source"].startswith("explicit-patch#checkmark_pos")
+
+
+def test_world_explicit_bundle_precedes_installed_defaults(world, tmp_path):
+    records = [b""] * 17
+    records[7] = b"%%section framenames\n%%endsection\n"
+    records[11] = table((522, 10))
+    path = tmp_path / "selected.flx"
+    flex(path, records)
+    session = browser.load_u7_container_session(
+        replace(world, exult_flx_path=str(path))
+    )
+    assert session.gumps.mappings[522][0] == 10
+    assert str(path) in session.gumps.mappings[522][1]

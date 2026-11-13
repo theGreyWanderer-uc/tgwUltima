@@ -59,7 +59,7 @@ app = typer.Typer(
     name="titan",
     help=(
         "TITAN \u2013 Tool for Interpreting and Transforming Archival Nodes.\n"
-        "Work with Ultima file formats (UW1, UW2, U8, U7, U6, U3 NES, U9, UO)."
+        "Work with Ultima file formats (UW1, UW2, U8, U7, U6, MD, U3 NES, U9, UO)."
     ),
     no_args_is_help=True,
     rich_markup_mode=None,
@@ -622,11 +622,27 @@ def cmd_config(args: SimpleNamespace) -> int:
     u7si = config.get("u7si", {})
     uo = config.get("uo", {})
     u9 = config.get("u9", {})
+    md = config.get("md", {})
+    u6 = config.get("u6", {})
     exult = config.get("exult", {})
-    if any((u8, uw2, u7bg, u7si, uo, u9, exult)):
+    if any((u8, uw2, u7bg, u7si, uo, u9, md, u6, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
         _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
+        _print_kv_section("[u6.game]", u6.get("game", {}), check_exists=True)
+        _print_kv_section(
+            "[u6.paths]",
+            u6.get("paths", {}),
+            check_exists=True,
+            base=u6.get("game", {}).get("base"),
+        )
+        _print_kv_section("[md.game]", md.get("game", {}), check_exists=True)
+        _print_kv_section(
+            "[md.paths]",
+            md.get("paths", {}),
+            check_exists=True,
+            base=md.get("game", {}).get("base"),
+        )
         _print_kv_section("[u9.game]", u9.get("game", {}), check_exists=True)
         _print_kv_section(
             "[u9.paths]",
@@ -706,6 +722,16 @@ def cmd_setup(args: SimpleNamespace) -> int:
         install_game,
     )
     from titan.u9.install import discover_u9_installs, u9_install_candidates
+    from titan.u6.install import (
+        inspect_u6_install,
+        u6_install_candidates,
+        u6_resource_paths,
+    )
+    from titan.md.install import (
+        inspect_martian_install,
+        martian_install_candidates,
+        martian_resource_paths,
+    )
 
     explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
     toml_path = Path(explicit).expanduser() if explicit else Path.cwd() / "titan.toml"
@@ -714,7 +740,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print("TITAN Setup Wizard")
     print("=" * 55)
     print(
-        "This will create titan.toml for Ultima 8, Ultima 7, Ultima 9, and UO installs.\n"
+        "This will create titan.toml for Ultima 6, Ultima 7, Ultima 8, Ultima 9, Martian Dreams, and UO installs.\n"
     )
     if toml_path.exists():
         print(f"Existing config: {toml_path}")
@@ -1087,6 +1113,64 @@ def cmd_setup(args: SimpleNamespace) -> int:
             )
             setup_updates["u9"] = {"game": {"base": selected_u9.root.as_posix()}}
 
+    # -- Ultima VI install detection ------------------------------
+    print("\nSearching for Ultima 6 installations...")
+    found_u6 = list(
+        dict.fromkeys(
+            u6_root
+            for candidate in u6_install_candidates(existing_config)
+            if (u6_root := inspect_u6_install(candidate)) is not None
+        )
+    )
+    for u6_root in found_u6:
+        print(f"  Found Ultima 6: {u6_root}")
+    previous_u6_base = existing_config.get("u6", {}).get("game", {}).get("base")
+    u6_default = str(previous_u6_base or (found_u6[0] if found_u6 else ""))
+    u6_value = (
+        ui.path(f"Ultima VI base [{u6_default or 'optional'}]: ", u6_default)
+        .strip()
+        .strip('"')
+    ) or u6_default
+    selected_u6 = inspect_u6_install(Path(u6_value)) if u6_value else None
+    if u6_value and selected_u6 is None:
+        print("  No Ultima VI map data at that path; existing settings kept.")
+    elif (
+        previous_u6_base
+        and selected_u6 is not None
+        and selected_u6 != Path(previous_u6_base).expanduser().absolute()
+    ):
+        setup_updates["u6"] = {"game": {"base": selected_u6.as_posix()}}
+
+    # -- Martian Dreams install detection -------------------------
+    print("\nSearching for Martian Dreams installations...")
+    found_md = list(
+        dict.fromkeys(
+            md_root
+            for candidate in martian_install_candidates(existing_config)
+            if (md_root := inspect_martian_install(candidate)) is not None
+        )
+    )
+    for root in found_md:
+        print(f"  Found Martian Dreams: {root}")
+    previous_md_base = existing_config.get("md", {}).get("game", {}).get("base")
+    md_default = str(previous_md_base or (found_md[0] if found_md else ""))
+    md_value = (
+        ui.path(f"Martian Dreams base [{md_default or 'optional'}]: ", md_default)
+        .strip()
+        .strip('"')
+    ) or md_default
+    selected_md = inspect_martian_install(Path(md_value)) if md_value else None
+    # Retain an existing parent base so custom relative paths keep their meaning.
+    md_base = Path(md_value).expanduser().absolute() if selected_md else None
+    if md_value and selected_md is None:
+        print("  No Martian Dreams map data at that path; existing settings kept.")
+    elif (
+        previous_md_base
+        and md_base is not None
+        and md_base != Path(previous_md_base).expanduser().absolute()
+    ):
+        setup_updates["md"] = {"game": {"base": md_base.as_posix()}}
+
     # -- UO install detection -------------------------------------
     detected_uo: Optional[Path] = None
     print("\nSearching for Ultima Online Classic Client installation...")
@@ -1280,6 +1364,14 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U7 SI GAMEDAT:{u7si_gamedat or '(empty)'}")
     print(f"  UO base:      {uo_base or '(empty)'}")
     print(f"  U9 base:      {selected_u9.root if selected_u9 else '(empty)'}")
+    print(f"  MD base:      {md_base or '(empty)'}")
+    print(f"  U6 base:      {selected_u6 or '(empty)'}")
+    if selected_u6:
+        for key, resource in u6_resource_paths(selected_u6).items():
+            print(f"  U6 {key}: {resource} [OK]")
+    if selected_md:
+        for key, resource in martian_resource_paths(selected_md).items():
+            print(f"  MD {key}: {resource} [OK]")
     if selected_u9:
         for key, status in selected_u9.checks.items():
             print(f"  U9 {key}: {selected_u9.paths[key]} [{status}]")
@@ -1350,6 +1442,9 @@ def cmd_setup(args: SimpleNamespace) -> int:
         u7si_mod_sources = []
         setup_updates = {}
         selected_u9 = None
+        selected_md = None
+        md_base = None
+        selected_u6 = None
 
         manual_u8_static = (
             ui.path("U8 STATIC path [optional]: ").strip().replace("\\", "/")
@@ -1375,6 +1470,28 @@ def cmd_setup(args: SimpleNamespace) -> int:
                 )
             elif previous_u9_base:
                 setup_updates["u9"] = {"game": {"base": selected_u9.root.as_posix()}}
+        manual_u6 = ui.path("U6 game directory [optional]: ").strip().strip('"')
+        if manual_u6:
+            selected_u6 = inspect_u6_install(Path(manual_u6))
+            if selected_u6 is None:
+                print("  No Ultima VI map data at that path; existing settings kept.")
+            elif previous_u6_base:
+                setup_updates["u6"] = {"game": {"base": selected_u6.as_posix()}}
+        manual_md = (
+            ui.path("MD MARTIAN directory or installation parent [optional]: ")
+            .strip()
+            .strip('"')
+        )
+        if manual_md:
+            selected_md = inspect_martian_install(Path(manual_md))
+            if selected_md:
+                md_base = Path(manual_md).expanduser().absolute()
+                if previous_md_base:
+                    setup_updates["md"] = {"game": {"base": md_base.as_posix()}}
+            else:
+                print(
+                    "  No Martian Dreams map data at that path; existing settings kept."
+                )
         uo_base = (
             ui.path("UO Classic Client base [optional]: ").strip().replace("\\", "/")
         )
@@ -1583,6 +1700,36 @@ def cmd_setup(args: SimpleNamespace) -> int:
                 f"{key} = {json.dumps(resource.relative_to(selected_u9.root).as_posix())}"
             )
 
+    if selected_u6:
+        import json
+
+        lines += [
+            "",
+            "[u6.game]",
+            f"base = {json.dumps(selected_u6.as_posix())}",
+            "",
+            "[u6.paths]",
+        ]
+        for key, resource in u6_resource_paths(selected_u6).items():
+            lines.append(
+                f"{key} = {json.dumps(resource.relative_to(selected_u6).as_posix())}"
+            )
+
+    if selected_md and md_base:
+        import json
+
+        lines += [
+            "",
+            "[md.game]",
+            f"base = {json.dumps(md_base.as_posix())}",
+            "",
+            "[md.paths]",
+        ]
+        for key, resource in martian_resource_paths(selected_md).items():
+            lines.append(
+                f"{key} = {json.dumps(resource.relative_to(md_base).as_posix())}"
+            )
+
     if uo_base:
         lines += [
             "",
@@ -1767,7 +1914,7 @@ def music_batch_cmd(
 
 @app.command("setup")
 def setup_cmd() -> None:
-    """Interactive first-time setup wizard \u2014 creates titan.toml."""
+    """Create titan.toml by detecting Ultima, Martian Dreams and UO installs."""
     try:
         raise SystemExit(cmd_setup(SimpleNamespace(config=None)))
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
@@ -1803,6 +1950,7 @@ from titan.u8.cli import u8_app  # noqa: E402
 from titan.u7.cli import u7_app  # noqa: E402
 from titan.u3.cli import u3_app  # noqa: E402
 from titan.u6.cli import u6_app  # noqa: E402
+from titan.md.cli import md_app  # noqa: E402
 from titan.u9.cli import u9_app  # noqa: E402
 from titan.uo.cli import uo_app  # noqa: E402
 from titan.uw1.cli import uw1_app  # noqa: E402
@@ -1813,6 +1961,7 @@ app.add_typer(u8_app)
 app.add_typer(u7_app)
 app.add_typer(u3_app)
 app.add_typer(u6_app)
+app.add_typer(md_app)
 app.add_typer(u9_app)
 app.add_typer(uo_app)
 app.add_typer(uw1_app)

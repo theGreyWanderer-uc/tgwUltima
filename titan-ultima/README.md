@@ -6,6 +6,7 @@ TITAN is a Python CLI and library for working with proprietary data formats
 from *Ultima 8: Pagan*, *Ultima Underworld: The Stygian Abyss*,
 *Ultima Underworld II: Labyrinth of Worlds*,
 *Ultima 7: The Black Gate / Serpent Isle*, *Ultima 6: The False Prophet*,
+*Martian Dreams*,
 and the *Ultima Online Classic Client*.
 It reads, extracts, converts, inspects, and
 reconstructs archives, shapes/tiles, palettes, music, speech, maps, world
@@ -16,7 +17,7 @@ Deterministic *Ultima III: Exodus* NES Sosaria-to-U7 map conversion is
 available under `titan u3`.
 
 Run `titan --help`, `titan uw1 --help`, `titan uw2 --help`, `titan u8 --help`, `titan u7 --help`,
-`titan u6 --help`, `titan u3 --help`, `titan u9 --help`, `titan uo --help`, or see the full
+`titan u6 --help`, `titan md --help`, `titan u3 --help`, `titan u9 --help`, `titan uo --help`, or see the full
 [CLI reference](cli_reference.md).
 
 ---
@@ -49,7 +50,7 @@ Optional:
 
 ## Quick Start
 
-Run setup once. It detects common Ultima 8, Ultima 7, Ultima 9, and UO install locations,
+Run setup once. It detects common Ultima 6, Ultima 7, Ultima 8, Ultima 9, Martian Dreams, and UO install locations,
 detects Exult runtime folders and the Exult install directory (for
 `exult_bg.flx` / `exult_si.flx`), writes `titan.toml`, and can extract the
 U8 shape/glob data used by map rendering.
@@ -129,9 +130,14 @@ is checked first, followed by `GOG Games/Ultima 9` and `Ultima 9` at the drive
 root, across drives C through G. Paths with spaces are supported; quote them
 when passing a path on the command line.
 
-`titan setup` doesn't detect Ultima 6 installs yet — add `[u6.game]
-base = "<Ultima 6 install>"` to `titan.toml` yourself, or pass
-`-g`/`--gamedir` explicitly on every U6 command:
+`titan setup` detects Ultima 6 installs in GOG Galaxy, GOG offline, Heroic
+and common manual locations. It saves `[u6.game] base` and inventories
+available map, VGA tile, palette, dialogue, book, font, portrait, schedule
+and DOS save resources under `[u6.paths]`. `titan config` displays these
+paths and checks they exist. The `[u6.paths]` entries are an inventory;
+commands use standard filenames below `[u6.game] base`.
+You can also configure the base manually or pass `-g`/`--gamedir` directly,
+which overrides the configured base and works without setup:
 
 ```bash
 titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
@@ -246,16 +252,85 @@ flags, dialogue, and text/reference data.
 See the [U6 commands reference](cli_reference.md#ultima-6-commands-titan-u6)
 for the full command list.
 
+Map crops retain visible cells of multi-tile objects whose anchors lie just
+outside the region.
+Invisible world objects are hidden by default; add `--show-invisible` alongside
+`--objects` to reveal them. The z-order audit accepts the same visibility option.
+Rendering and auditing share the original U6 cell-stack rules,
+verified against bounded runs of the original executable. Object, tile and
+coordinate-specific layering exceptions have been removed. The audit describes
+ordered pixel overlaps for inspection; its candidate count is not an error count.
+Invalid crop coordinates, dimensions or
+map bounds produce a clear error before the output file is written.
+
+### Martian Dreams (initial)
+
+`titan md map-render` reuses the U6 tile, map, animation and object decoders
+with an explicit MD resource profile. It reads MD's size-prefixed libraries
+and `MDPAL` directly; no extraction or renaming of game files is required.
+Use the `MARTIAN` directory or its installation parent with `--gamedir`,
+or run `titan setup` to detect GOG Galaxy, GOG offline, Heroic and manual installs.
+Setup saves `[md.game] base` and inventories available map, tile, palette,
+dialogue, text, font, portrait, music and DOS save resources under `[md.paths]`.
+`titan config` displays these paths and checks they exist. MD commands use
+`[md.game] base` by default; `--gamedir` overrides it. The `[md.paths]` entries
+are an inventory; individual commands retain their standard MD filenames.
+
+```powershell
+titan md map-render -g "<install>/MARTIAN" --region 385,596,64,64 --objects --actors -o md_start.png
+titan md map-render -g "<install>/MARTIAN" --dungeon 0 --objects -o md_underground.png
+titan md map-render -g "<install>/MARTIAN" --full --objects -o md_world.png
+```
+
+The surface is 1024x1024 tiles (16384x16384 pixels); underground levels
+0-4 are 256x256 tiles. `--region x,y,width,height` crops either map.
+`--objects` includes multi-tile sprites and respects invisible objects,
+foreground flags and MD's hidden markers (`--show-markers` reveals them).
+Add `--show-invisible` with `--objects` to include invisible world-object sprites.
+Background cells draw beneath ordinary objects using the original MD flag and
+per-cell precedence.
+`--actors` adds party members, NPCs and creatures between ordinary objects
+and foreground cells. MD cold, appearance and flag fields use explicit MD
+layouts. Invisible NPCs are hidden; invisible party members retain outlines.
+`--savegame <DOS SAVEGAME directory>` selects the saved clock and world flags,
+plus saved actor/object placements when their overlays are enabled. Initial
+placements are the default. Saved cistern pressure and canal-valve flags select
+fixed dry/wet art; changing `--tick` cannot switch the water state. Power flags
+control machinery and restore saved lamp/furnace/steam-leak art; watches follow the game hour.
+`--lighting` adds DOS light falloff, blockers, windows, readied party lights,
+brown-berry vision and original darkness masks to crops up to 11x11 tiles,
+viewed from their center. It also selects visible brick/interior/iron wall faces
+and clips object footprint cells at unseen wall corners, following the
+original viewport compositor. Scene validation includes object/actor footprints
+wrapping across the surface world seam.
+Atlas exports stay full bright by default.
+`--palette-tick N` selects VGA color cycling separately from tile animation ticks;
+zero keeps the original colors.
+Cistern filling/release cutscenes and transient effects are not simulated.
+
+MD inspections are read-only:
+
+| Command | Reads |
+|---|---|
+| `actor-list [--actor N] [--savegame DIR]` | Active actor slots or one slot, names, stats, appearance and raw flags (JSON) |
+| `gamestate-dump [--savegame DIR]` | Party, Gregorian clock, gender, dream state, berry timers and world flags (JSON) |
+| `converse-dump [--item N]` | NPC scripts in `TALK.LZC`, excluding the non-NPC build-text record |
+| `converse-report` | Script counts and unresolved opcode offsets/operands (JSON) |
+| `look-dump [--tile N]` | Correctly unwrapped `LOOK.LZC` name records and range lookup (JSON) |
+| `book-dump [--book N]` | `MDTEXT.LZC` books/signs with page markers preserved |
+
+All accept `-g/--gamedir` and `-o/--output FILE`; inspections print to stdout
+when output is omitted. Retail `TALK.LZC` contains 99 NPC scripts. Dr. Blood's
+two `0xdf` instructions decode as MD `SET_YSTRING`: select an actor's name
+for `$Y`, with `"you"` for resolved actor 1. This was verified against the
+original executable and bounded emulation; the U6 opcode table is unchanged.
+
 ### Ultima 9 (early)
 
 U9 support is newer than U8/U7 and includes FLX archives, `TYPENAME.FLX`,
 `sound/*.flx` (`Speech.flx`, `sfx.flx`, `music.flx`) decoding and metadata,
 PCM/native-record replacement, `anim.flx` skeletal clips, and 3D model +
 texture export from `static/sappear.flx`.
-
-The [U9 format completeness index](reference/u9/u9_format_status.md) separates
-complete format support from structurally complete readers whose remaining
-questions concern field or gameplay semantics.
 
 | Area | Coverage | Quick example |
 |---|---|---|
@@ -438,6 +513,79 @@ titan u7 container-browse STATIC/ --gamedat gamedat/ -f csv -o containers.csv \
 # Configured paths with per-frame names from titan.toml [exult.paths].
 titan u7 container-browse --game bg --container-name desk
 ```
+
+Container previews use matching BG/SI bundle defaults followed by mod patches.
+Use `container-browse --custom-game` for a custom game's STATIC metadata.
+Container mappings retain signed gump IDs, raw words/records and framing
+diagnostics.
+
+U7 inspection also exposes Exult's effective READY alternatives, defaults and
+fallback attempt order, separately from stored slots and runtime fit checks.
+Context-aware IREG decoding covers bodies, spellbooks, virtue stones, barges,
+jawbones and hatchable shapes, retaining raw payloads and missing-context
+diagnostics.
+
+IREG specials and saved readied-slot IDs are also preserved and decoded.
+`titan u7 ireg-dump <file> --superchunk N --game bg --static STATIC/ -o report.json`
+exports objects, scheduled Usecode state, attributes, strings, slot IDs,
+orphan records and full raw-stream evidence. `--static` is optional; output
+files must be new.
+
+Layout/checkmark/debug fields can also be inspected as CSV:
+
+```bash
+titan u7 static-data-dump container STATIC/ --game si --patch-dir mod/patch
+titan u7 static-data-dump gumps STATIC/ --game si --patch-dir mod/patch
+titan u7 static-data-dump container --file mod/patch/container.dat
+```
+
+The same patch/file inspection options cover weapon, ammo and armor tables.
+Use `--data-format retail` for DOS game tables; the default is `exult`.
+Retail mode keeps the one-byte count at 255, preserves padding that Exult uses
+for removals, and selects retail weapon/ammo fields:
+
+```bash
+titan u7 static-data-dump weapons STATIC/ --game bg --data-format retail
+titan u7 static-data-dump ammo --file AMMO.DAT --data-format retail
+```
+
+Scripted schedule names, saved actor extensions and effective dead status are
+included in their readers/reports. Additional inspection commands expose
+dynamic/paperdoll definitions and Usecode analysis:
+
+```bash
+titan u7 static-data-dump paperdoll STATIC/ --game si --patch-dir mod/patch
+titan u7 usecode-disasm STATIC/USECODE 0x400 --annotate --validate
+titan u7 usecode-disasm STATIC/USECODE --symbols
+titan u7 usecode-disasm STATIC/USECODE 0x400 --patch-file mod/patch/usecode --original
+```
+
+Combat-layer authoring APIs edit copies and preserve raw bytes. Usecode and
+gump inspection do not execute VM callbacks or controls.
+
+Paperdoll skin references resolve from matching `shape_files.txt` defaults and
+patches. NPC browsing loads the world's Avatar metadata and Usecode symbols;
+runtime overrides can be supplied with `--avatar-skin`, `--avatar-sex` and
+`--si-shapes` / `--no-si-shapes`. Reports identify any remaining context needed.
+AMMO exports retain signed fields and expose unsigned words/Exult loader values,
+with warnings when high bits make those interpretations disagree. Retail BG/SI
+executables verify the signed selectors; `retail_sprite_meaning` and
+`retail_damage` expose retail interpretation separately from Exult.
+
+Save inspection retains ordered duplicate members and named empty payloads.
+`U7Save.members` provides occurrence metadata; `get_all_data(name)` returns all
+matching payloads. `save-list` reports partial-container diagnostics, while
+extraction validates strictly by default and writes duplicates separately with
+a name manifest. Use a fresh output directory:
+
+```bash
+titan u7 save-list exult00bg.sav --strict
+titan u7 save-extract exult00bg.sav -o inspected-save/
+```
+
+`--permissive` allows available partial payloads with warnings and a manifest.
+NPC decoding also applies Exult's Avatar-triggered legacy unused compatibility;
+raw used-in-game words remain separate from effective unused status.
 
 ### U7 Egg Query
 

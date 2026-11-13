@@ -37,6 +37,9 @@ __all__ = [
     "U7InventoryRow",
     "U7MapInventory",
     "U7Placement",
+    "U7ObjectUsageSummary",
+    "U7FlatUsageSummary",
+    "U7MapInventorySummary",
     "chunk_rect",
     "superchunk_rect",
     "build_u7_map_inventory",
@@ -49,7 +52,7 @@ import json
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 
 from titan.u7.map import (
     C_CHUNKS_PER_SCHUNK,
@@ -61,11 +64,13 @@ from titan.u7.map import (
     _frame_to_rgba,
 )
 from titan.u7.shape import FIRST_OBJ_SHAPE
+from titan.u7.names import U7FrameNames, U7ShapeNames
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.world import (
     WorldQueryParams,
     _world_file,
     load_query_metadata,
+    load_ireg_context,
     resolve_world_sources,
 )
 
@@ -79,8 +84,8 @@ class U7InventoryRow:
 
     shape: int
     frame: int
-    counts: Counter = field(default_factory=Counter)
-    lifts: Counter = field(default_factory=Counter)
+    counts: Counter[str] = field(default_factory=Counter)
+    lifts: Counter[int] = field(default_factory=Counter)
     superchunks: set[int] = field(default_factory=set)
     sample: Optional[tuple[int, int, int]] = None
 
@@ -95,7 +100,9 @@ class U7InventoryRow:
             return self.counts["terrain"]
         return sum(self.counts[s] for s in OBJECT_SOURCES)
 
-    def add(self, source: str, count: int, superchunk: int, where: tuple[int, int, int]) -> None:
+    def add(
+        self, source: str, count: int, superchunk: int, where: tuple[int, int, int]
+    ) -> None:
         self.counts[source] += count
         if source != "terrain":
             self.lifts[where[2]] += count
@@ -159,8 +166,8 @@ class U7MapInventory:
     static_dir: str
     rows: dict[tuple[int, int], U7InventoryRow]
     tfa: U7TypeFlags
-    shape_names: object
-    frame_names: object
+    shape_names: U7ShapeNames | None
+    frame_names: U7FrameNames | None
     sources: dict[str, str]
     warnings: list[str] = field(default_factory=list)
     area: list[Rect] = field(default_factory=list)
@@ -174,13 +181,51 @@ class U7MapInventory:
         return ""
 
     def shape_name(self, shape: int) -> str:
-        return (self.shape_names.get(shape) or "") if self.shape_names is not None else ""
+        return (
+            (self.shape_names.get(shape) or "") if self.shape_names is not None else ""
+        )
 
     def ranked(self, kind: str) -> list[U7InventoryRow]:
         """Rows of ``kind`` (``flat`` or ``object``), most placed first."""
         want_flat = kind == "flat"
-        rows = [r for r in self.rows.values() if r.is_flat == want_flat and r.placements]
+        rows = [
+            r for r in self.rows.values() if r.is_flat == want_flat and r.placements
+        ]
         return sorted(rows, key=lambda r: (-r.placements, r.shape, r.frame))
+
+
+class U7ObjectUsageSummary(TypedDict):
+    """Object placement totals and coverage, excluding terrain and container contents."""
+
+    placements: int
+    by_source: dict[str, int]
+    shape_frames: int
+    shapes: int
+    coverage_by_top_shapes_pct: dict[str, float]
+    coverage_by_top_shape_frames_pct: dict[str, float]
+
+
+class U7FlatUsageSummary(TypedDict):
+    """Ground-cell totals and coverage for flat shape/frame pairs."""
+
+    cells: int
+    shape_frames: int
+    shapes: int
+    coverage_by_top_shape_frames_pct: dict[str, float]
+
+
+class U7MapInventorySummary(TypedDict):
+    """The existing summary.json schema, shared by inventory writers and CLI output."""
+
+    game: str
+    map_num: int
+    static_dir: str
+    area: list[list[int]]
+    sources: dict[str, str]
+    warnings: list[str]
+    objects: U7ObjectUsageSummary
+    flats: U7FlatUsageSummary
+    contents: int
 
 
 def _superchunk_of(tx: int, ty: int) -> int:
@@ -221,13 +266,14 @@ def build_u7_map_inventory(
     )
     base, patch = resolve_world_sources(params)
     tfa, shape_names, frame_names, _count = load_query_metadata(params)
+    ireg_context = load_ireg_context(params, tfa) if include_ireg else None
     renderer = U7MapRenderer(
         str(base), map_num=map_num, patch_dir=str(patch) if patch else None, game=game
     )
     rows: dict[tuple[int, int], U7InventoryRow] = {}
     warnings: list[str] = []
     sources: dict[str, str] = {}
-    area = [tuple(r) for r in area] if area else []
+    area = [(x0, y0, x1, y1) for x0, y0, x1, y1 in area] if area else []
     placements: list[U7Placement] = []
 
     def dims(shape: int) -> tuple[int, int]:
@@ -241,7 +287,9 @@ def build_u7_map_inventory(
             return _overlaps(area, tx, ty)
         return _overlaps(area, tx, ty, *dims(shape))
 
-    def place(source: str, shape: int, frame: int, sc: int, where: tuple[int, int, int]) -> None:
+    def place(
+        source: str, shape: int, frame: int, sc: int, where: tuple[int, int, int]
+    ) -> None:
         row(shape, frame).add(source, 1, sc, where)
         placements.append(U7Placement(source, shape, frame, *where))
 
@@ -249,8 +297,14 @@ def build_u7_map_inventory(
     area_superchunks = {
         sy * C_NUM_SCHUNKS + sx
         for x0, y0, x1, y1 in area
-        for sx in range(x0 // span, min(x1 + _REACH, C_NUM_CHUNKS * C_TILES_PER_CHUNK - 1) // span + 1)
-        for sy in range(y0 // span, min(y1 + _REACH, C_NUM_CHUNKS * C_TILES_PER_CHUNK - 1) // span + 1)
+        for sx in range(
+            x0 // span,
+            min(x1 + _REACH, C_NUM_CHUNKS * C_TILES_PER_CHUNK - 1) // span + 1,
+        )
+        for sy in range(
+            y0 // span,
+            min(y1 + _REACH, C_NUM_CHUNKS * C_TILES_PER_CHUNK - 1) // span + 1,
+        )
     }
 
     def row(shape: int, frame: int) -> U7InventoryRow:
@@ -266,13 +320,21 @@ def build_u7_map_inventory(
     for cx in range(C_NUM_CHUNKS):
         for cy in range(C_NUM_CHUNKS):
             uses.setdefault(terrain_map[cx][cy], []).append((cx, cy))
-    sources["terrain"] = f"U7CHUNKS ({len(terrains)} templates, {len(uses)} used) via U7MAP"
+    sources["terrain"] = (
+        f"U7CHUNKS ({len(terrains)} templates, {len(uses)} used) via U7MAP"
+    )
     if area:
         chunks = {
             (cx, cy)
             for x0, y0, x1, y1 in area
-            for cx in range(x0 // C_TILES_PER_CHUNK, min((x1 + _REACH) // C_TILES_PER_CHUNK, C_NUM_CHUNKS - 1) + 1)
-            for cy in range(y0 // C_TILES_PER_CHUNK, min((y1 + _REACH) // C_TILES_PER_CHUNK, C_NUM_CHUNKS - 1) + 1)
+            for cx in range(
+                x0 // C_TILES_PER_CHUNK,
+                min((x1 + _REACH) // C_TILES_PER_CHUNK, C_NUM_CHUNKS - 1) + 1,
+            )
+            for cy in range(
+                y0 // C_TILES_PER_CHUNK,
+                min((y1 + _REACH) // C_TILES_PER_CHUNK, C_NUM_CHUNKS - 1) + 1,
+            )
         }
         uses = {}
         for cx, cy in sorted(chunks):
@@ -323,11 +385,15 @@ def build_u7_map_inventory(
 
     # Movable objects of the starting (or saved) world.
     if include_ireg:
-        ireg_data = _ireg_entries(base, map_num, gamedat_dir, initgame, sources, warnings)
+        ireg_data = _ireg_entries(
+            base, map_num, gamedat_dir, initgame, sources, warnings
+        )
         for sc, (label, data) in ireg_data.items():
             if area and sc not in area_superchunks:
                 continue
-            for obj in U7MapRenderer.parse_ireg_deep(label, sc, tfa, data=data):
+            for obj in U7MapRenderer.parse_ireg_deep(
+                label, sc, tfa, data=data, context=ireg_context
+            ):
                 if not wanted(obj.shape, obj.tx, obj.ty):
                     continue
                 place("ireg", obj.shape, obj.frame, sc, (obj.tx, obj.ty, obj.tz))
@@ -369,7 +435,11 @@ def _ireg_entries(base: Path, map_num, gamedat_dir, initgame, sources, warnings)
         for sc, name in names.items():
             path = _world_file(gamedat, name, map_num)
             if path is None and map_num == 0:
-                path = _world_file(gamedat / "map00", name, 0) if (gamedat / "map00").is_dir() else None
+                path = (
+                    _world_file(gamedat / "map00", name, 0)
+                    if (gamedat / "map00").is_dir()
+                    else None
+                )
             if path is not None:
                 found[sc] = (str(path), path.read_bytes())
         sources["ireg"] = f"GAMEDAT {gamedat} ({len(found)} u7ireg files)"
@@ -379,7 +449,9 @@ def _ireg_entries(base: Path, map_num, gamedat_dir, initgame, sources, warnings)
 
     archive_path = Path(initgame) if initgame else _world_file(base, "INITGAME.DAT", 0)
     if archive_path is None or not Path(archive_path).is_file():
-        warnings.append("No INITGAME.DAT or GAMEDAT given; movable objects (ireg) are not counted.")
+        warnings.append(
+            "No INITGAME.DAT or GAMEDAT given; movable objects (ireg) are not counted."
+        )
         return found
     archive = U7Save.from_file(str(archive_path))
     prefix = f"map{map_num:02x}/" if map_num else ""
@@ -401,7 +473,9 @@ def _ireg_entries(base: Path, map_num, gamedat_dir, initgame, sources, warnings)
 # ---------------------------------------------------------------------------
 
 
-def _row_record(inv: U7MapInventory, r: U7InventoryRow, rank: int, total: int, cumulative: int):
+def _row_record(
+    inv: U7MapInventory, r: U7InventoryRow, rank: int, total: int, cumulative: int
+):
     entry = inv.tfa.get(r.shape) if inv.tfa else None
     lifts = sorted(r.lifts)
     return {
@@ -411,7 +485,9 @@ def _row_record(inv: U7MapInventory, r: U7InventoryRow, rank: int, total: int, c
         "name": inv.name(r.shape, r.frame),
         "shape_name": inv.shape_name(r.shape),
         "kind": "flat" if r.is_flat else "object",
-        "class": U7TypeFlags.SHAPE_CLASS_NAMES.get(entry.shape_class, entry.shape_class) if entry else "",
+        "class": U7TypeFlags.SHAPE_CLASS_NAMES.get(entry.shape_class, entry.shape_class)
+        if entry
+        else "",
         "flags": "|".join(entry.flag_names()) if entry else "",
         "dims_x": entry.dims_x if entry else "",
         "dims_y": entry.dims_y if entry else "",
@@ -446,25 +522,42 @@ def _shape_records(inv: U7MapInventory) -> list[dict]:
         if r.placements or r.counts["contents"]:
             by_shape.setdefault(r.shape, []).append(r)
     records = []
-    for shape, rows in by_shape.items():
+    ordered_shapes = sorted(
+        by_shape.items(),
+        key=lambda item: (
+            item[0] >= FIRST_OBJ_SHAPE,
+            -sum(row.placements for row in item[1]),
+            item[0],
+        ),
+    )
+    for shape, rows in ordered_shapes:
         entry = inv.tfa.get(shape) if inv.tfa else None
-        counts = Counter()
+        counts: Counter[str] = Counter()
         for r in rows:
             counts.update(r.counts)
-        records.append({
-            "shape": shape,
-            "name": inv.shape_name(shape),
-            "kind": "flat" if shape < FIRST_OBJ_SHAPE else "object",
-            "class": U7TypeFlags.SHAPE_CLASS_NAMES.get(entry.shape_class, entry.shape_class) if entry else "",
-            "flags": "|".join(entry.flag_names()) if entry else "",
-            "dims": f"{entry.dims_x}x{entry.dims_y}x{entry.dims_z}" if entry else "",
-            "frames_used": len(rows),
-            "frames": " ".join(str(r.frame) for r in sorted(rows, key=lambda r: r.frame)),
-            "placements": sum(r.placements for r in rows),
-            **{f"{s}_count": counts[s] for s in SOURCES},
-            "superchunks": len(set().union(*(r.superchunks for r in rows))),
-        })
-    records.sort(key=lambda r: (r["kind"] != "flat", -r["placements"], r["shape"]))
+        records.append(
+            {
+                "shape": shape,
+                "name": inv.shape_name(shape),
+                "kind": "flat" if shape < FIRST_OBJ_SHAPE else "object",
+                "class": U7TypeFlags.SHAPE_CLASS_NAMES.get(
+                    entry.shape_class, entry.shape_class
+                )
+                if entry
+                else "",
+                "flags": "|".join(entry.flag_names()) if entry else "",
+                "dims": f"{entry.dims_x}x{entry.dims_y}x{entry.dims_z}"
+                if entry
+                else "",
+                "frames_used": len(rows),
+                "frames": " ".join(
+                    str(r.frame) for r in sorted(rows, key=lambda r: r.frame)
+                ),
+                "placements": sum(r.placements for r in rows),
+                **{f"{s}_count": counts[s] for s in SOURCES},
+                "superchunks": len(set().union(*(r.superchunks for r in rows))),
+            }
+        )
     return records
 
 
@@ -484,7 +577,7 @@ def write_u7_map_inventory(
     *,
     previews: bool = True,
     palette_index: int = 0,
-) -> dict[str, object]:
+) -> U7MapInventorySummary:
     """Write ``objects.csv``, ``flats.csv``, ``shapes.csv``, ``summary.json``
     and, with ``previews``, sprite PNGs plus ``index.html``."""
     outdir = Path(outdir)
@@ -495,17 +588,25 @@ def write_u7_map_inventory(
 
     preview_paths: dict[tuple[int, int], str] = {}
     if previews:
-        preview_paths = _write_previews(inv, objects + flats, outdir / "sprites", palette_index)
+        preview_paths = _write_previews(
+            inv, objects + flats, outdir / "sprites", palette_index
+        )
         for record in objects + flats:
-            record["preview"] = preview_paths.get((record["shape"], record["frame"]), "")
+            record["preview"] = preview_paths.get(
+                (record["shape"], record["frame"]), ""
+            )
 
-    for name, records in (("objects.csv", objects), ("flats.csv", flats), ("shapes.csv", shapes)):
+    for name, records in (
+        ("objects.csv", objects),
+        ("flats.csv", flats),
+        ("shapes.csv", shapes),
+    ):
         _write_csv(outdir / name, records)
     if inv.area:
         _write_csv(outdir / "placements.csv", _placement_records(inv, preview_paths))
 
     object_shapes = [s for s in shapes if s["kind"] == "object" and s["placements"]]
-    summary = {
+    summary: U7MapInventorySummary = {
         "game": inv.game,
         "map_num": inv.map_num,
         "static_dir": inv.static_dir,
@@ -514,7 +615,9 @@ def write_u7_map_inventory(
         "warnings": inv.warnings,
         "objects": {
             "placements": sum(r["placements"] for r in objects),
-            "by_source": {s: sum(r[f"{s}_count"] for r in objects) for s in OBJECT_SOURCES},
+            "by_source": {
+                s: sum(r[f"{s}_count"] for r in objects) for s in OBJECT_SOURCES
+            },
             "shape_frames": len(objects),
             "shapes": len(object_shapes),
             "coverage_by_top_shapes_pct": _coverage(object_shapes),
@@ -528,9 +631,13 @@ def write_u7_map_inventory(
         },
         "contents": sum(r["contents_count"] for r in shapes),
     }
-    (outdir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (outdir / "summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
     if previews:
-        (outdir / "index.html").write_text(_html(inv, summary, objects, flats), encoding="utf-8")
+        (outdir / "index.html").write_text(
+            _html(inv, summary, objects, flats), encoding="utf-8"
+        )
     return summary
 
 
@@ -538,7 +645,10 @@ def _placement_records(inv: U7MapInventory, previews: dict) -> list[dict]:
     """Every placement in the area, bottom lift first, then north to south."""
     order = {s: i for i, s in enumerate(SOURCES)}
     records = []
-    for p in sorted(inv.placements, key=lambda p: (p.tz, p.ty, p.tx, order[p.source], p.shape, p.frame)):
+    for p in sorted(
+        inv.placements,
+        key=lambda p: (p.tz, p.ty, p.tx, order[p.source], p.shape, p.frame),
+    ):
         entry = inv.tfa.get(p.shape) if inv.tfa else None
         records.append(
             {
@@ -547,7 +657,11 @@ def _placement_records(inv: U7MapInventory, previews: dict) -> list[dict]:
                 "frame": p.frame,
                 "name": inv.name(p.shape, p.frame),
                 "kind": "flat" if p.shape < FIRST_OBJ_SHAPE else "object",
-                "class": U7TypeFlags.SHAPE_CLASS_NAMES.get(entry.shape_class, entry.shape_class) if entry else "",
+                "class": U7TypeFlags.SHAPE_CLASS_NAMES.get(
+                    entry.shape_class, entry.shape_class
+                )
+                if entry
+                else "",
                 "tx": p.tx,
                 "ty": p.ty,
                 "tz": p.tz,
@@ -574,21 +688,35 @@ def _write_csv(path: Path, records: list[dict]) -> None:
         writer.writerows(records)
 
 
-def _write_previews(inv: U7MapInventory, records, folder: Path, palette_index: int):
+def _write_previews(
+    inv: U7MapInventory, records: list[dict], folder: Path, palette_index: int
+) -> dict[tuple[int, int], str]:
     from titan.u7.palette import U7Palette
     from titan.u7.shape import U7Shape
 
     folder.mkdir(parents=True, exist_ok=True)
     renderer = U7MapRenderer(inv.static_dir, map_num=inv.map_num, game=inv.game)
-    palettes = Path(inv.static_dir) / "PALETTES.FLX"
-    if not palettes.is_file():
-        palettes = next((p for p in Path(inv.static_dir).iterdir() if p.name.lower() == "palettes.flx"), None)
+    palette_path = Path(inv.static_dir) / "PALETTES.FLX"
+    palettes = (
+        palette_path
+        if palette_path.is_file()
+        else next(
+            (
+                p
+                for p in Path(inv.static_dir).iterdir()
+                if p.name.lower() == "palettes.flx"
+            ),
+            None,
+        )
+    )
     if palettes is None:
         inv.warnings.append("PALETTES.FLX not found; sprite previews skipped.")
         return {}
-    flat_rgb = U7Palette.from_file(str(palettes), palette_index=palette_index).to_flat_rgb()
+    flat_rgb = U7Palette.from_file(
+        str(palettes), palette_index=palette_index
+    ).to_flat_rgb()
     shapes_vga = renderer.shapes_vga.records
-    decoded: dict[int, object] = {}
+    decoded: dict[int, U7Shape | None] = {}
     paths: dict[tuple[int, int], str] = {}
     for record in records:
         shape, frame = record["shape"], record["frame"]
@@ -596,7 +724,9 @@ def _write_previews(inv: U7MapInventory, records, folder: Path, palette_index: i
             continue
         if shape not in decoded:
             try:
-                decoded[shape] = U7Shape.from_data(shapes_vga[shape], is_tile=shape < FIRST_OBJ_SHAPE)
+                decoded[shape] = U7Shape.from_data(
+                    shapes_vga[shape], is_tile=shape < FIRST_OBJ_SHAPE
+                )
             except (ValueError, IndexError):
                 decoded[shape] = None
         data = decoded[shape]
@@ -609,20 +739,41 @@ def _write_previews(inv: U7MapInventory, records, folder: Path, palette_index: i
     return paths
 
 
-def _html(inv: U7MapInventory, summary: dict, objects: list[dict], flats: list[dict]) -> str:
+def _html(
+    inv: U7MapInventory,
+    summary: U7MapInventorySummary,
+    objects: list[dict],
+    flats: list[dict],
+) -> str:
     def table(records: list[dict], kind: str) -> str:
         rows = []
         for r in records:
-            img = f'<img src="{html.escape(r["preview"])}" alt="" loading="lazy">' if r.get("preview") else ""
-            dims = f'{r["dims_x"]}×{r["dims_y"]}×{r["dims_z"]}' if r["dims_x"] != "" else ""
+            img = (
+                f'<img src="{html.escape(r["preview"])}" alt="" loading="lazy">'
+                if r.get("preview")
+                else ""
+            )
+            dims = (
+                f"{r['dims_x']}×{r['dims_y']}×{r['dims_z']}"
+                if r["dims_x"] != ""
+                else ""
+            )
             sources = ", ".join(
                 f"{s} {r[f'{s}_count']:,}" for s in SOURCES if r[f"{s}_count"]
             )
-            lift = (f'{r["lift_min"]}–{r["lift_max"]}' if r["lift_min"] != r["lift_max"] else str(r["lift_min"])) if r["lift_min"] != "" else ""
+            lift = (
+                (
+                    f"{r['lift_min']}–{r['lift_max']}"
+                    if r["lift_min"] != r["lift_max"]
+                    else str(r["lift_min"])
+                )
+                if r["lift_min"] != ""
+                else ""
+            )
             rows.append(
                 f'<tr data-text="{html.escape((r["name"] + " " + r["class"] + " " + r["flags"]).lower())}">'
                 f'<td class="n">{r["rank"]}</td><td class="pic">{img}</td>'
-                f'<td><b>{r["shape"]}</b>:{r["frame"]}</td><td>{html.escape(r["name"])}</td>'
+                f"<td><b>{r['shape']}</b>:{r['frame']}</td><td>{html.escape(r['name'])}</td>"
                 f'<td>{html.escape(str(r["class"]))}</td><td>{dims}</td><td class="n">{lift}</td>'
                 f'<td class="n">{r["placements"]:,}</td><td class="n">{r["cumulative_pct"]}%</td>'
                 f'<td>{sources}</td><td class="n">{r["superchunks"]}</td>'
@@ -632,14 +783,18 @@ def _html(inv: U7MapInventory, summary: dict, objects: list[dict], flats: list[d
             f'<table data-kind="{kind}"><thead><tr><th>#</th><th></th><th>Shape:frame</th><th>Name</th>'
             "<th>Class</th><th>Footprint</th><th>Lift</th><th>Placements</th><th>Cumulative</th>"
             "<th>Sources</th><th>Superchunks</th><th>Sample tile</th></tr></thead><tbody>"
-            + "".join(rows) + "</tbody></table>"
+            + "".join(rows)
+            + "</tbody></table>"
         )
 
     o, f = summary["objects"], summary["flats"]
     title = f"U7 map inventory: {inv.game.upper()} map {inv.map_num}"
     if inv.area:
         title += f" ({_area_label(inv.area)})"
-    cov = ", ".join(f"{k.replace('top_', 'top ')} shapes {v}%" for k, v in o["coverage_by_top_shapes_pct"].items())
+    cov = ", ".join(
+        f"{k.replace('top_', 'top ')} shapes {v}%"
+        for k, v in o["coverage_by_top_shapes_pct"].items()
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)}</title>

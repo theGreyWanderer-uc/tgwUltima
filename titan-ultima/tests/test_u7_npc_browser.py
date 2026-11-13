@@ -117,6 +117,14 @@ def answers(monkeypatch, values):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(pending))
 
 
+def test_browser_uses_si_strength_bits(owner):
+    record = bytearray(npc_bytes())
+    record[18] = 0x36  # SI strength 22 with skin bit 5; BG strength would be 54.
+    (owner.gamedat / "NPC.DAT").write_bytes(struct.pack("<HH", 1, 0) + record)
+    session = browser.load_session(owner, browser.Source(owner.gamedat, "live"), "si")
+    assert session.npcs.npcs[0].strength == 22
+
+
 @pytest.mark.parametrize("format", ["flex", "zip", "level2", "raw"])
 def test_saved_npcs_use_runtime_flavour_in_all_archive_formats(owner, format):
     path = owner.save_root / "test.sav"
@@ -381,12 +389,24 @@ def test_schedule_formats_validate_and_read(marker):
             raw += struct.pack("<H", 1)
         raw += offsets
         if marker == -2:
-            raw += struct.pack("<H", 4) + b"abc\x00"
+            raw += struct.pack("<HH", 6, 4) + b"abc\x00"
         raw += struct.pack("<HHBBBB", 301, 402, 3, 2, 6, 0x7F)
     browser._schedule_checks(raw)
     schedules = browser.U7Schedules.from_bytes(raw)
     assert schedules.entries[1][0].time == 2
     assert schedules.entries[1][0].type == 6
+
+
+def test_live_schedule_nonzero_avatar_sentinel_is_reported(owner):
+    raw = bytearray(schedules_bytes())
+    struct.pack_into("<H", raw, 8, 1)
+    (owner.gamedat / "SCHEDULE.DAT").write_bytes(raw)
+
+    session = browser.load_session(owner, browser.Source(owner.gamedat, "live"), "si")
+
+    assert session.npcs is not None
+    assert session.schedules is None
+    assert "Avatar schedule sentinel must be zero" in session.overview()
 
 
 def test_paged_search_can_have_no_results_and_return_to_all(owner, monkeypatch, capsys):

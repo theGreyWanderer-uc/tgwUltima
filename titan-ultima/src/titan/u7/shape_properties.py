@@ -10,9 +10,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from titan.u7.save import U7ReadyTypes
+from titan.u7.gameplay_metadata import U7GameplayFormat, read_gameplay_table
+from titan.u7.combat_metadata import U7CombatLayer, U7CombatMetadata
 from titan.u7.shape_extra import _parse_single_value_section, U7FieldType
-from titan.u7.shapeinfo import U7Ammos, U7Armors, U7Containers, U7Weapons, _read_count
+from titan.u7.shapeinfo import U7Ammos, U7Armors, U7Containers, U7Weapons
 from titan.u7.typeflag import U7TypeFlags
+from titan.u7.ready_metadata import U7ReadyMetadata
 
 if TYPE_CHECKING:
     from titan.u7.shape_browser import ShapeLibrary
@@ -29,69 +32,77 @@ class ShapeProperties:
     warnings: list[str] = field(default_factory=list)
     scoped: bool = True
     extended_tfa: bool = False
+    ready_metadata: U7ReadyMetadata | None = None
 
 
-def combat_rows(kind: str, data: bytes, game: str) -> dict[int, dict[str, object]]:
+def combat_rows(
+    kind: str, data: bytes, game: str, *, data_format: U7GameplayFormat = "exult"
+) -> dict[int, dict[str, object]]:
+    layer = U7CombatLayer.from_bytes(kind, data, strict=True, data_format=data_format)
+    data = U7CombatMetadata(kind, (layer,), data_format=data_format).resolved_bytes()
     if kind == "weapon":
-        text = U7Weapons.from_bytes(data, game).dump_csv()
+        text = U7Weapons.from_bytes(data, game, data_format=data_format).dump_csv()
     elif kind == "ammo":
-        text = U7Ammos.from_bytes(data).dump_csv()
+        text = U7Ammos.from_bytes(data, data_format=data_format).dump_csv()
     elif kind == "armor":
-        text = U7Armors.from_bytes(data).dump_csv()
+        text = U7Armors.from_bytes(data, data_format=data_format).dump_csv()
     else:
         raise ValueError("Unknown combat table")
     return {int(row["shape"]): dict(row) for row in csv.DictReader(io.StringIO(text))}
 
 
 def overlay_table(
-    properties: ShapeProperties, kind: str, data: bytes, source: str, game: str
+    properties: ShapeProperties,
+    kind: str,
+    data: bytes,
+    source: str,
+    game: str,
+    *,
+    data_format: U7GameplayFormat = "exult",
 ) -> None:
     """Sparse keyed records inherit; combat deletion markers remove base rows."""
     sizes = {"weapon": 21, "ammo": 13, "armor": 10, "ready": 9}
-    if not data:
-        return
-    if data[0] == 255 and len(data) < 3:
-        raise ValueError("Incomplete extended record count")
-    count, pos = _read_count(data)
     size = sizes[kind]
-    if pos + count * size > len(data):
-        raise ValueError(f"Incomplete {kind} table: declares {count} records")
+    table = read_gameplay_table(data, size, kind, data_format=data_format)
+    if table.declared_count is None or table.parsed_count < table.declared_count:
+        raise ValueError(f"Incomplete {kind} table: {'; '.join(table.warnings)}")
+    properties.warnings.extend(f"{source}: {warning}" for warning in table.warnings)
+    if kind == "ammo":
+        properties.warnings.extend(
+            f"{source}: {warning}"
+            for warning in U7Ammos.from_bytes(data, data_format=data_format).warnings
+            if "high-bit" in warning or "damage byte" in warning
+        )
     if kind == "ready":
-        ready = U7ReadyTypes.from_bytes(data, game)
+        ready = U7ReadyTypes.from_bytes(data, game, data_format=data_format)
         rows: dict[int, dict[str, object]] = {
-            shape: {"slot": slot, "slot_name": ready.slot_name_for_shape(shape)}
+            shape: {
+                "slot": slot,
+                "slot_name": ready.slot_name_for_shape(shape),
+                "spell_flag": ready.spell_flag_for_shape(shape),
+            }
             for shape, slot in ready.slots.items()
         }
     else:
-        rows = combat_rows(kind, data, game)
+        rows = combat_rows(kind, data, game, data_format=data_format)
     combined = properties.tables.setdefault(kind, {})
-    for start in range(pos, pos + count * size, size):
-        raw = data[start : start + size]
+    for raw in table.records:
         shape = int.from_bytes(raw[:2], "little")
-        if kind != "ready" and raw[-1] == 255:
+        if data_format == "exult" and kind != "ready" and raw[-1] == 255:
             combined.pop(shape, None)
         elif shape in rows:
             combined[shape] = {**rows[shape], "source": source}
-            if kind == "ready":
-                combined[shape]["spell_flag"] = bool(raw[2] & 1)
 
 
 def container_records(data: bytes) -> U7Containers:
-    if not data:
-        return U7Containers(0, [])
-    if len(data) < 2 or (data[1] == 255 and len(data) < 4):
-        raise ValueError("Incomplete container record count")
-    count, pos = _read_count(data, 1)
-    size = 6 if data[0] >= 2 else 4
-    if pos + count * size > len(data):
-        raise ValueError("Incomplete container table")
-    return U7Containers.from_bytes(data)
+    """Compatibility wrapper for strict versioned-table framing; trailing bytes are diagnosed."""
+    return U7Containers.from_bytes(data, strict=True)
 
 
 def load_properties(library: ShapeLibrary) -> ShapeProperties:
     from titan.u7 import shape_browser as browser
     from titan.u7.cli import _resolve_u7_exult_flx
-    from titan.u7.shapeinfo import _exult_record, _exult_container_record_index
+    from titan.u7.shapeinfo import _exult_record
 
     result = ShapeProperties()
     owner_dirs = [
@@ -156,30 +167,37 @@ def load_properties(library: ShapeLibrary) -> ShapeProperties:
                     )
     exult = _resolve_u7_exult_flx(library.game)
     try:
-        base_container = (
-            browser.find_archive(library.target.static, "CONTAINER.DAT")
-            if library.target.static
-            else None
+        ready = U7ReadyMetadata.from_dir(
+            library.target.static,
+            patch_dir=library.target.patch,
+            game=library.game,
+            custom_game=library.target.standalone,
+            exult_flx=exult,
         )
-        containers = container_records(
-            base_container.read_bytes()
-            if base_container
-            else _exult_record(exult, _exult_container_record_index(library.game))
+        result.warnings.extend(ready.warnings)
+        result.ready_metadata = ready
+        result.tables["ready_effective"] = {
+            number: ready.resolve(number).as_row() for number in library.ids
+        }
+    except (OSError, ValueError) as error:
+        result.warnings.append(f"Effective READY metadata unavailable: {error}")
+    try:
+        containers = U7Containers.from_dir(
+            str(library.target.static or ""),
+            game=library.game,
+            exult_flx_path=exult,
+            patch_dir=library.target.patch,
+            custom_game=library.target.standalone,
         )
+        result.warnings.extend(containers.warnings)
         for row in containers.records:
             result.tables.setdefault("container", {})[row.shape] = {
                 "gump_shape": row.gump_shape,
                 "gump_font": row.gump_font,
-                "source": str(base_container or exult or "not found"),
+                "gump_shape_raw": row.gump_shape_raw,
+                "raw_hex": row.raw.hex(),
+                "source": row.source,
             }
-        patch_container = browser.find_archive(library.target.patch, "CONTAINER.DAT")
-        if patch_container:
-            for row in container_records(patch_container.read_bytes()).records:
-                result.tables.setdefault("container", {})[row.shape] = {
-                    "gump_shape": row.gump_shape,
-                    "gump_font": row.gump_font,
-                    "source": str(patch_container),
-                }
     except (OSError, ValueError) as error:
         result.tables["container"] = {}
         result.warnings.append(f"Container properties unavailable: {error}")
@@ -387,6 +405,10 @@ def property_report(
         for kind, rows in props.tables.items():
             if number in rows:
                 report[kind] = rows[number]
+        if props.ready_metadata is not None:
+            report["ready_effective"] = props.ready_metadata.resolve(
+                number, frame
+            ).as_row()
         extra = {}
         for section, values in props.extra.items():
             if number in values:

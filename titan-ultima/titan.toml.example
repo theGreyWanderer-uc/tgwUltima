@@ -79,6 +79,42 @@ nonfixed  = "U8SAVE.000"
 # globs    = "globs/"
 # nonfixed = "U8SAVE.000"
 #
+# [u6.game]
+# # Detected by `titan setup`; the directory containing U6PAL and MAP.
+# base = "C:/Program Files (x86)/GOG Galaxy/Games/Ultima 6"
+#
+# [u6.paths]
+# # Resource inventory written by setup; relative to [u6.game].base.
+# palette    = "U6PAL"
+# map        = "MAP"
+# chunks     = "CHUNKS"
+# maptiles   = "MAPTILES.VGA"
+# objtiles   = "OBJTILES.VGA"
+# converse_a = "CONVERSE.A"
+# converse_b = "CONVERSE.B"
+# look       = "LOOK.LZD"
+# books      = "BOOK.DAT"
+# font       = "U6.CH"
+# savegame   = "SAVEGAME"
+# objlist    = "SAVEGAME/OBJLIST"
+#
+# [md.game]
+# # Detected by `titan setup`; accepts MARTIAN itself or its installation parent.
+# base = "C:/Path/To/Martian Dreams/MARTIAN"
+#
+# [md.paths]
+# # Resource inventory written by setup; relative to [md.game].base.
+# palette  = "MDPAL"
+# map      = "MAP"
+# chunks   = "CHUNKS"
+# maptiles = "MAPTILES.VGA"
+# objtiles = "OBJTILES.VGA"
+# talk     = "TALK.LZC"
+# look     = "LOOK.LZC"
+# text     = "MDTEXT.LZC"
+# savegame = "SAVEGAME"
+# objlist  = "SAVEGAME/OBJLIST"
+#
 # [uw2.game]
 # # Commands resolve bare data names below <base>/DATA.
 # base = "C:/Path/To/Ultima Underworld 2"

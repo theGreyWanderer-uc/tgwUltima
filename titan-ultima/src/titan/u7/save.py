@@ -31,8 +31,12 @@ Example::
 
 from __future__ import annotations
 
+from titan.u7.actor_metadata import U7ActorMetadata
+from titan.u7.saved_values import U7SavedValueReader, U7UsecodeValue
+
 __all__ = [
     "U7Save",
+    "U7SaveMember",
     "U7GlobalFlags",
     "U7Identity",
     "U7SaveInfo",
@@ -41,6 +45,8 @@ __all__ = [
     "U7UsecodeData",
     "U7UsecodeTimer",
     "U7UsecodeVars",
+    "U7UsecodeValue",
+    "U7FunctionStatics",
     "U7Keyring",
     "U7FrameFlags",
     "U7Schedules",
@@ -49,25 +55,39 @@ __all__ = [
     "U7NPC",
     "U7NPCInventoryItem",
     "U7ReadyTypes",
+    "U7ReadyRecord",
 ]
 
 import csv
 import io
+import json
 from pathlib import Path
 import struct
-import zipfile
 from dataclasses import dataclass, field
 from typing import Optional, Union
 
 from titan.u7.ireg import U7ObjectFlags, decode_ireg_payload
-
-
-# ---------------------------------------------------------------------------
-# FLEX magic constants (from Exult Flex.h)
-# ---------------------------------------------------------------------------
-_FLEX_MAGIC1 = 0xFFFF1A00
-_FLEX_TITLE_LEN = 80  # bytes
-_FLEX_HEADER_LEN = 128  # 0x80
+from titan.u7.ireg_metadata import U7IregContext
+from titan.u7.ireg_specials import (
+    U7IregExtras,
+    U7IregIndexId,
+    U7IregSpecial,
+    read_ireg_index,
+    read_ireg_special,
+    read_ireg_specials,
+)
+from titan.u7.ready_metadata import U7ReadyMetadata
+from titan.u7.gameplay_metadata import (
+    U7GameplayFormat,
+    U7GameplayMetadata,
+    U7GameplayTable,
+    read_gameplay_table,
+)
+from titan.u7.save_container import (
+    U7SaveMember,
+    U7SaveContainer,
+    read_u7_save_container,
+)
 
 
 # ============================================================================
@@ -97,154 +117,57 @@ class U7Save:
         title: str,
         entries: dict[str, bytes],
         container_format: str,
+        *,
+        layout: U7SaveContainer | None = None,
     ) -> None:
         self.title = title
-        self._entries = entries  # name -> raw data
+        self.members = (
+            tuple(layout.members)
+            if layout is not None
+            else tuple(
+                U7SaveMember(name, data, index, "constructed", len(data), 0)
+                for index, (name, data) in enumerate(entries.items())
+            )
+        )
+        self._entries = {member.name: member.data for member in self.members}
         self.container_format = container_format  # "zip" or "flex"
+        self.raw = layout.raw if layout is not None else b""
+        self.warnings = list(layout.warnings) if layout is not None else []
+        self.complete = layout.complete if layout is not None else True
+        self.declared_count = layout.declared_count if layout is not None else None
+        self.flex_directory = tuple(layout.flex_directory) if layout is not None else ()
+        self.zip_comment = layout.zip_comment if layout is not None else b""
+        self.group_trailing_data = (
+            dict(layout.group_trailing_data) if layout is not None else {}
+        )
 
     # ------------------------------------------------------------------
     # Construction
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_file(cls, filepath: str) -> U7Save:
+    def from_file(cls, filepath: str, *, strict: bool = False) -> U7Save:
         """Open a ``.sav`` file from disk."""
         with open(filepath, "rb") as f:
             data = f.read()
-        return cls.from_bytes(data)
+        return cls.from_bytes(data, strict=strict)
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> U7Save:
-        """Parse a savegame from raw bytes (auto-detects format)."""
-        if len(data) < _FLEX_HEADER_LEN:
-            raise ValueError("File too small for a U7 savegame")
-
-        # --- Detect format ---
-        # FLEX: magic1 at offset 0x50
-        magic1 = struct.unpack_from("<I", data, 0x50)[0]
-        if magic1 == _FLEX_MAGIC1:
-            return cls._parse_flex(data)
-
-        # ZIP: after 80-byte title, look for PK signature
-        if data[_FLEX_TITLE_LEN : _FLEX_TITLE_LEN + 2] == b"PK":
-            return cls._parse_zip(data)
-
-        # Exult mod patch INITGAME.DAT files can be plain ZIP archives
-        # without the 80-byte save title prefix.
-        if data[:2] == b"PK":
-            return cls._parse_raw_zip(data)
-
-        raise ValueError("Unrecognised U7 savegame format (not FLEX, not ZIP)")
-
-    # ------------------------------------------------------------------
-    # FLEX parser
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def _parse_flex(cls, data: bytes) -> U7Save:
-        title = (
-            data[:_FLEX_TITLE_LEN].split(b"\x00")[0].decode("latin-1", errors="replace")
-        )
-        count = struct.unpack_from("<I", data, 0x54)[0]
-
-        # Entry table starts at 0x80: N × (offset_u32, size_u32)
-        entries: dict[str, bytes] = {}
-        pos = _FLEX_HEADER_LEN
-        for _ in range(count):
-            if pos + 8 > len(data):
-                break
-            offset, size = struct.unpack_from("<II", data, pos)
-            pos += 8
-            if size <= 13 or offset + size > len(data):
-                continue  # empty / padding entry
-            # First 13 bytes of the blob are the DOS 8.3 filename
-            name_raw = data[offset : offset + 13]
-            name = name_raw.split(b"\x00")[0].decode("latin-1", errors="replace")
-            name = name.rstrip(".")  # Exult strips trailing dots
-            payload = data[offset + 13 : offset + size]
-            entries[name] = payload
-
-        return cls(title=title, entries=entries, container_format="flex")
-
-    # ------------------------------------------------------------------
-    # ZIP parser (level-1 and level-2)
-    # ------------------------------------------------------------------
-
-    @classmethod
-    def _parse_zip(cls, data: bytes) -> U7Save:
-        title = (
-            data[:_FLEX_TITLE_LEN].split(b"\x00")[0].decode("latin-1", errors="replace")
-        )
-        zip_data = data[_FLEX_TITLE_LEN:]
-        return cls._parse_zip_payload(zip_data, title)
-
-    @classmethod
-    def _parse_raw_zip(cls, data: bytes) -> U7Save:
-        return cls._parse_zip_payload(data, "")
-
-    @classmethod
-    def _parse_zip_payload(cls, zip_data: bytes, title: str) -> U7Save:
-        entries: dict[str, bytes] = {}
-
-        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
-            for info in zf.infolist():
-                raw = zf.read(info.filename)
-                name_lower = info.filename.lower()
-
-                # Level-2 grouped entries: "gamedat" or "mapXX"
-                if name_lower == "gamedat" or (
-                    name_lower.startswith("map")
-                    and len(name_lower) == 5
-                    and name_lower[3:].isdigit()
-                ):
-                    cls._unpack_level2(
-                        raw,
-                        entries,
-                        prefix="" if name_lower == "gamedat" else name_lower + "/",
-                    )
-                else:
-                    # Level-1: each ZIP entry is one file
-                    entries[info.filename] = raw
-
-        return cls(title=title, entries=entries, container_format="zip")
-
-    @staticmethod
-    def _unpack_level2(
-        blob: bytes,
-        entries: dict[str, bytes],
-        prefix: str,
-    ) -> None:
-        """Decode a Level-2 packed group (12-byte name + 4-byte size + data)."""
-        pos = 0
-        while pos + 16 <= len(blob):
-            name_raw = blob[pos : pos + 12]
-            size = struct.unpack_from("<I", blob, pos + 12)[0]
-            pos += 16
-            # Terminator: 12 zero-bytes for name + 0 size
-            if name_raw == b"\x00" * 12 and size == 0:
-                break
-            name = (
-                name_raw.split(b"\x00")[0]
-                .decode("latin-1", errors="replace")
-                .rstrip(".")
-            )
-            if not name:
-                pos += size
-                continue
-            payload = blob[pos : pos + size]
-            entries[prefix + name] = payload
-            pos += size
+    def from_bytes(cls, data: bytes, *, strict: bool = False) -> U7Save:
+        """Detect the container; strict rejects structural errors, otherwise raw/partial evidence is retained."""
+        layout = read_u7_save_container(data, strict=strict)
+        return cls(layout.title, {}, layout.container_format, layout=layout)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def list_entries(self) -> list[tuple[str, int]]:
-        """Return list of ``(name, size)`` tuples."""
-        return [(name, len(data)) for name, data in self._entries.items()]
+        """Return ordered ``(name, actual size)`` tuples, including duplicates and empty payloads."""
+        return [(member.name, len(member.data)) for member in self.members]
 
     def get_data(self, name: str) -> Optional[bytes]:
-        """Get raw bytes for a named entry (case-insensitive)."""
+        """Compatibility name lookup: last exact occurrence, then first matching spelling; use get_all_data for all."""
         # exact match first
         if name in self._entries:
             return self._entries[name]
@@ -255,13 +178,25 @@ class U7Save:
                 return val
         return None
 
+    def get_all_data(self, name: str, *, case_sensitive: bool = False) -> list[bytes]:
+        """Return all matching occurrences in archive order, including empty payloads."""
+        return [
+            member.data
+            for member in self.members
+            if (
+                member.name == name
+                if case_sensitive
+                else member.name.casefold() == name.casefold()
+            )
+        ]
+
     def has_entry(self, name: str) -> bool:
         """Check whether the save contains *name* (case-insensitive)."""
         return self.get_data(name) is not None
 
     def entry_names(self) -> list[str]:
-        """Return list of entry names."""
-        return list(self._entries.keys())
+        """Return archive-order member names without deduplicating them."""
+        return [member.name for member in self.members]
 
 
 # ============================================================================
@@ -519,7 +454,25 @@ class U7SaveInfo:
     save_count: int
     party_size: int
     real_second: int
-    party: list = field(default_factory=list)
+    party: list[U7PartyMember] = field(default_factory=list)
+    raw_size: int = 0
+    trailing_data: bytes = b""
+
+    @property
+    def warnings(self) -> list[str]:
+        """Report an incomplete save preview roster or bytes after its declared end."""
+        warnings = []
+        if len(self.party) != self.party_size:
+            warnings.append(
+                f"saveinfo.dat party roster is incomplete: {len(self.party)} of "
+                f"{self.party_size} records ({self.raw_size} bytes; "
+                f"expected {64 + 64 * self.party_size})."
+            )
+        if self.trailing_data:
+            warnings.append(
+                f"saveinfo.dat has {len(self.trailing_data)} trailing bytes."
+            )
+        return warnings
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7SaveInfo":
@@ -542,6 +495,8 @@ class U7SaveInfo:
             save_count=struct.unpack_from("<H", data, 10)[0],
             party_size=data[12],
             real_second=data[14],
+            raw_size=len(data),
+            trailing_data=data[64 + 64 * data[12] :],
         )
         # SaveGame_Party — 64 bytes each, after the header
         offset = 64
@@ -612,6 +567,7 @@ class U7SaveInfo:
                     f"{m.intelligence:>3}  {m.combat:>3}  {m.magic:>3}  "
                     f"{m.mana:>3}  {m.experience:>8}  {m.food:>4}"
                 )
+        lines.extend(f"Warning: {warning}" for warning in self.warnings)
         return "\n".join(lines)
 
 
@@ -622,14 +578,14 @@ class U7SaveInfo:
 
 @dataclass
 class U7GameState:
-    """World state from ``gamewin.dat`` — camera position, clock, flags.
+    """Exult world state from ``gamewin.dat``; old Exult extensions are optional.
 
     Layout (all little-endian)::
 
         0-1   scroll_tx  (uint16)     6-7   hour       (uint16)
         2-3   scroll_ty  (uint16)     8-9   minute     (uint16)
         4-5   day        (uint16)    10-13  special_light (uint32)
-       14-17  music_track (uint32)   18-21  music_repeat  (uint32)
+       14-17  music_track (int32)    18-21  music_repeat  (uint32)
        22     armageddon  (uint8)    23     ambient_light (uint8)
        24     combat      (uint8)    25     infravision   (uint8)
     """
@@ -646,19 +602,48 @@ class U7GameState:
     ambient_light: bool
     combat: bool
     infravision: bool
+    raw_size: int = 26
+    raw_flags: bytes = b""
+    trailing_data: bytes = b""
+
+    @property
+    def music_track_raw(self) -> int | None:
+        """Return the stored music bit pattern, or None for an absent extension."""
+        return self.music_track & 0xFFFFFFFF if self.raw_size >= 22 else None
+
+    @property
+    def music_egg_count(self) -> int:
+        """Return Exult's music egg count from the packed repeat word."""
+        return (self.music_repeat >> 16) & 0xFFFF
+
+    @property
+    def warnings(self) -> list[str]:
+        """Report unusual flag bytes and unconsumed window-state extensions."""
+        warnings = [
+            f"gamewin.dat flag at offset {22 + index} has noncanonical value {value}."
+            for index, value in enumerate(self.raw_flags)
+            if value not in (0, 1)
+        ]
+        if self.trailing_data:
+            warnings.append(
+                f"gamewin.dat has {len(self.trailing_data)} trailing bytes."
+            )
+        return warnings
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7GameState":
-        if len(data) < 22:
-            raise ValueError(f"gamewin.dat too short: {len(data)} bytes (need >= 22)")
+        if len(data) < 10:
+            raise ValueError(f"gamewin.dat too short: {len(data)} bytes (need >= 10)")
+        if 10 < len(data) < 14 or 14 < len(data) < 22:
+            raise ValueError("gamewin.dat has an incomplete light or music extension")
         stx, sty, day, hour, minute = struct.unpack_from("<HHHHH", data, 0)
         sp_light = struct.unpack_from("<I", data, 10)[0] if len(data) >= 14 else 0
-        music_trk = struct.unpack_from("<I", data, 14)[0] if len(data) >= 18 else 0
+        music_trk = struct.unpack_from("<i", data, 14)[0] if len(data) >= 22 else -1
         music_rep = struct.unpack_from("<I", data, 18)[0] if len(data) >= 22 else 0
-        arma = bool(data[22]) if len(data) > 22 else False
-        ambient = bool(data[23]) if len(data) > 23 else False
-        comb = bool(data[24]) if len(data) > 24 else False
-        infra = bool(data[25]) if len(data) > 25 else False
+        arma = data[22] == 1 if len(data) > 22 else False
+        ambient = data[23] == 1 if len(data) > 23 else False
+        comb = data[24] == 1 if len(data) > 24 else False
+        infra = data[25] == 1 if len(data) > 25 else False
         return cls(
             scroll_tx=stx,
             scroll_ty=sty,
@@ -672,6 +657,9 @@ class U7GameState:
             ambient_light=ambient,
             combat=comb,
             infravision=infra,
+            raw_size=len(data),
+            raw_flags=data[22:26],
+            trailing_data=data[26:],
         )
 
     @classmethod
@@ -682,17 +670,26 @@ class U7GameState:
         return cls.from_bytes(data)
 
     def dump(self) -> str:
+        music = (
+            "(not stored)"
+            if self.music_track_raw is None
+            else (
+                f"{'none' if self.music_track == -1 else f'track {self.music_track}'} "
+                f"(repeat={self.music_repeat & 1}, eggs={self.music_egg_count})"
+            )
+        )
         lines = [
             "--- Game State ---",
             f"Camera:      tile ({self.scroll_tx}, {self.scroll_ty})",
             f"Game time:   Day {self.clock_day}, "
             f"{self.clock_hour:02d}:{self.clock_minute:02d}",
-            f"Music:       track {self.music_track} (repeat={self.music_repeat & 1})",
+            f"Music:       {music}",
             f"Light:       special={self.special_light}, ambient={self.ambient_light}",
             f"Combat:      {self.combat}",
             f"Armageddon:  {self.armageddon}",
             f"Infravision: {self.infravision}",
         ]
+        lines.extend(f"Warning: {warning}" for warning in self.warnings)
         return "\n".join(lines)
 
 
@@ -711,7 +708,7 @@ class U7UsecodeTimer:
 
 @dataclass
 class U7UsecodeData:
-    """Runtime usecode state from loose ``usecode.dat``.
+    """Exult runtime usecode state with eight stored party slots in BG and SI.
 
     Exult writes party membership first, followed by either a legacy fixed
     timer block or the newer sparse timer marker, then the saved position/map.
@@ -725,59 +722,73 @@ class U7UsecodeData:
     saved_ty: int = -1
     saved_tz: int = -1
     saved_map: int = -1
+    saved_position_raw: tuple[int, int, int] | None = None
+    trailing_data: bytes = b""
+    warnings: list[str] = field(default_factory=list)
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7UsecodeData":
-        if len(data) < 2:
-            raise ValueError("usecode.dat too short")
-
         pos = 0
 
-        def read_u16(default: int = 0) -> int:
+        def read_word(size: int) -> int:
             nonlocal pos
-            if pos + 2 > len(data):
-                pos = len(data)
-                return default
-            value = struct.unpack_from("<H", data, pos)[0]
-            pos += 2
+            if pos + size > len(data):
+                raise ValueError(
+                    f"usecode.dat truncated at offset {pos}: need {size} bytes"
+                )
+            value = int.from_bytes(data[pos : pos + size], "little")
+            pos += size
             return value
 
-        def read_u32(default: int = 0) -> int:
-            nonlocal pos
-            if pos + 4 > len(data):
-                pos = len(data)
-                return default
-            value = struct.unpack_from("<I", data, pos)[0]
-            pos += 4
-            return value
-
-        party_count = read_u16()
-        party_slots = [read_u16() for _ in range(10)]
-        party_members = party_slots[: min(party_count, len(party_slots))]
+        party_count = read_word(2)
+        if party_count > 8:
+            raise ValueError(
+                f"usecode.dat party count {party_count} exceeds eight slots"
+            )
+        party_slots = [read_word(2) for _ in range(8)]
+        party_members = party_slots[:party_count]
 
         timers: list[U7UsecodeTimer] = []
         timer_format = "legacy"
-        marker = read_u32()
+        warnings: list[str] = []
+        marker = read_word(4)
         if marker == 0xFFFFFFFF:
             timer_format = "sparse"
-            while pos + 2 <= len(data):
-                timer_id = read_u16()
+            seen = set()
+            while True:
+                timer_id = read_word(2)
                 if timer_id == 0xFFFF:
                     break
-                timers.append(U7UsecodeTimer(timer_id, read_u32()))
+                if timer_id in seen:
+                    warnings.append(
+                        f"usecode.dat has duplicate sparse timer ID {timer_id}."
+                    )
+                seen.add(timer_id)
+                timers.append(U7UsecodeTimer(timer_id, read_word(4)))
         else:
             timers.append(U7UsecodeTimer(0, marker))
             for timer_id in range(1, 20):
-                if pos + 4 > len(data):
-                    break
-                timers.append(U7UsecodeTimer(timer_id, read_u32()))
+                timers.append(U7UsecodeTimer(timer_id, read_word(4)))
 
         saved_tx = saved_ty = saved_tz = saved_map = -1
-        if pos + 8 <= len(data):
-            saved_tx = read_u16()
-            saved_ty = read_u16()
-            saved_tz = read_u16()
-            saved_map = read_u16()
+        raw_position = None
+        remaining = len(data) - pos
+        if remaining:
+            if remaining < 6 or remaining == 7:
+                raise ValueError("usecode.dat has an incomplete saved position or map")
+            raw_position = struct.unpack_from("<hhh", data, pos)
+            pos += 6
+            if 0 <= raw_position[2] <= 13:
+                saved_tx, saved_ty, saved_tz = raw_position
+            elif raw_position != (-1, -1, -1):
+                warnings.append(
+                    "usecode.dat saved position has invalid lift; raw values retained."
+                )
+            if pos + 2 <= len(data):
+                saved_map = read_word(2)
+        trailing_data = data[pos:]
+        if trailing_data:
+            warnings.append(f"usecode.dat has {len(trailing_data)} trailing bytes.")
 
         return cls(
             party_count=party_count,
@@ -788,6 +799,9 @@ class U7UsecodeData:
             saved_ty=saved_ty,
             saved_tz=saved_tz,
             saved_map=saved_map,
+            saved_position_raw=raw_position,
+            trailing_data=trailing_data,
+            warnings=warnings,
         )
 
     @classmethod
@@ -809,38 +823,70 @@ class U7UsecodeData:
                 f"Saved pos:   ({self.saved_tx}, {self.saved_ty}, "
                 f"{self.saved_tz}) map={self.saved_map}"
             )
+        lines.extend(f"Warning: {warning}" for warning in self.warnings)
         return "\n".join(lines)
 
 
 @dataclass
+class U7FunctionStatics:
+    """Saved function static values identified by a numeric ID or raw name bytes."""
+
+    function_id: int | None
+    function_name: bytes | None
+    values: list[U7UsecodeValue]
+    offset: int
+    end_offset: int
+
+
+@dataclass
 class U7UsecodeVars:
-    """Lightweight summary of ``usecode.var`` static variable data."""
+    """Exult typed static values and complete numeric/named function block counts."""
 
     global_static_count: int
     local_static_blocks: int = 0
     raw_size: int = 0
+    global_values: list[U7UsecodeValue] = field(default_factory=list)
+    function_statics: list[U7FunctionStatics] = field(default_factory=list)
+    trailing_data: bytes = b""
+
+    @property
+    def warnings(self) -> list[str]:
+        """Report bytes beyond the saved function-list terminator."""
+        return (
+            [f"usecode.var has {len(self.trailing_data)} trailing bytes."]
+            if self.trailing_data
+            else []
+        )
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7UsecodeVars":
-        if len(data) < 4:
-            raise ValueError("usecode.var too short")
-        global_count = struct.unpack_from("<I", data, 0)[0]
-        pos = 4
-        # Full Usecode_value decoding needs symbol and class context.  For now
-        # count function-static block sentinels when the global section is empty,
-        # which covers the common empty file and keeps this parser conservative.
-        local_blocks = 0
-        if global_count == 0:
-            while pos + 4 <= len(data):
-                marker = struct.unpack_from("<I", data, pos)[0]
-                if marker == 0xFFFFFFFF:
-                    break
-                local_blocks += 1
+        reader = U7SavedValueReader(data)
+        global_count = reader.word(4)
+        globals_ = reader.values(global_count)
+        functions = []
+        while True:
+            start = reader.pos
+            marker = reader.word(4)
+            if marker == 0xFFFFFFFF:
                 break
+            name = reader.take(reader.word(2)) if marker == 0xFFFFFFFE else None
+            values = reader.values(reader.word(4))
+            functions.append(
+                U7FunctionStatics(
+                    None if marker == 0xFFFFFFFE else marker,
+                    name,
+                    values,
+                    start,
+                    reader.pos,
+                )
+            )
         return cls(
             global_static_count=global_count,
-            local_static_blocks=local_blocks,
+            local_static_blocks=len(functions),
             raw_size=len(data),
+            global_values=globals_,
+            function_statics=functions,
+            trailing_data=data[reader.pos :],
         )
 
     @classmethod
@@ -849,12 +895,13 @@ class U7UsecodeVars:
             return cls.from_bytes(f.read())
 
     def dump(self) -> str:
-        return (
+        summary = (
             "--- Usecode Statics ---\n"
             f"Global static values: {self.global_static_count}\n"
             f"Local static blocks:  {self.local_static_blocks}\n"
             f"Raw size:             {self.raw_size} bytes"
         )
+        return "\n".join([summary, *(f"Warning: {w}" for w in self.warnings)])
 
 
 @dataclass
@@ -862,13 +909,33 @@ class U7Keyring:
     """SI keyring data from ``keyring.dat``."""
 
     keys: list[int] = field(default_factory=list)
+    trailing_data: bytes = b""
+
+    @property
+    def unique_keys(self) -> list[int]:
+        """Return sorted key qualities matching Exult's set membership semantics."""
+        return sorted(set(self.keys))
+
+    @property
+    def warnings(self) -> list[str]:
+        """Report an incomplete quality word and duplicates without normalizing input."""
+        warnings = []
+        if self.trailing_data:
+            warnings.append(
+                "keyring.dat has an incomplete final quality word (1 byte)."
+            )
+        if len(self.unique_keys) != len(self.keys):
+            warnings.append(
+                "keyring.dat has duplicate key qualities; engine membership is unique."
+            )
+        return warnings
 
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7Keyring":
         keys = [
             struct.unpack_from("<H", data, pos)[0] for pos in range(0, len(data) - 1, 2)
         ]
-        return cls(keys=keys)
+        return cls(keys=keys, trailing_data=data[len(keys) * 2 :])
 
     @classmethod
     def from_file(cls, filepath: str) -> "U7Keyring":
@@ -876,9 +943,11 @@ class U7Keyring:
             return cls.from_bytes(f.read())
 
     def dump(self) -> str:
-        return f"--- Keyring ---\nKeys: {len(self.keys)}" + (
-            f" ({', '.join(str(k) for k in self.keys)})" if self.keys else ""
+        summary = (
+            f"--- Keyring ---\nKeys: {len(self.unique_keys)} unique, {len(self.keys)} stored"
+            + (f" ({', '.join(str(k) for k in self.keys)})" if self.keys else "")
         )
+        return "\n".join([summary, *(f"Warning: {w}" for w in self.warnings)])
 
 
 @dataclass
@@ -945,110 +1014,77 @@ class U7Schedules:
     * ``-1`` — Exult 8-byte entries
     * ``-2`` — Exult 8-byte entries + script names
     * positive — original U7 4-byte entries (value = num_npcs)
+
+    The first cumulative count is the Avatar sentinel and must be zero.
     """
 
     entries: dict = field(default_factory=dict)
     num_npcs: int = 0
     format: str = "u7"  # "u7", "exult", "exult2"
+    script_names: tuple[str, ...] = ()
+    script_names_raw: tuple[bytes, ...] = ()
+    raw: bytes = b""
+    warnings: list[str] = field(default_factory=list)
+    complete: bool = True
+    parsed_bytes: int = 0
+    trailing_data: bytes = b""
+
+    def name_for_type(self, schedule_type: int) -> str:
+        """Resolve a scripted schedule name only when its stored index is present."""
+        index = schedule_type - 0x80
+        if 0 <= index < len(self.script_names):
+            return self.script_names[index]
+        return SCHEDULE_TYPE_NAMES.get(schedule_type, f"unknown({schedule_type})")
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "U7Schedules":
+    def from_bytes(cls, data: bytes, *, strict: bool = False) -> "U7Schedules":
+        """Decode the shared bounded layout, retaining scripts and explicit partial diagnostics."""
+        from titan.u7.schedule_metadata import U7ScheduleLayout
+
         if len(data) < 4:
             raise ValueError("schedule.dat too short")
-
-        magic = struct.unpack_from("<i", data, 0)[0]
-        pos = 4
-
-        if magic == -1:
-            fmt = "exult"
-            num_npcs = struct.unpack_from("<I", data, pos)[0]
-            pos += 4
-        elif magic == -2:
-            fmt = "exult2"
-            num_npcs = struct.unpack_from("<I", data, pos)[0]
-            pos += 4
-            num_scripts = struct.unpack_from("<H", data, pos)[0]
-            pos += 2
-        else:
-            fmt = "u7"
-            num_npcs = magic
-
-        sched = cls(num_npcs=num_npcs, format=fmt)
-        if num_npcs == 0:
-            return sched
-
-        # Offset table — num_npcs × uint16 (cumulative entry counts)
-        table_start = pos
-        if table_start + num_npcs * 2 > len(data):
-            return sched
-        offsets: list[int] = []
-        for i in range(num_npcs):
-            offsets.append(struct.unpack_from("<H", data, table_start + i * 2)[0])
-        pos = table_start + num_npcs * 2
-
-        # Skip script names for -2 format
-        if fmt == "exult2" and num_scripts > 0:
-            if pos + 2 <= len(data):
-                total_sz = struct.unpack_from("<H", data, pos)[0]
-                pos += 2 + total_sz
-
-        # Parse entries
-        entry_size = 8 if fmt.startswith("exult") else 4
-        prev_count = 0
-        for npc_idx, cum_count in enumerate(offsets):
-            n_entries = cum_count - prev_count
-            prev_count = cum_count
-            if n_entries <= 0:
-                continue
-            npc_entries: list[U7ScheduleEntry] = []
-            for _ in range(n_entries):
-                if pos + entry_size > len(data):
-                    break
-                if entry_size == 8:
-                    tx = struct.unpack_from("<H", data, pos)[0]
-                    ty = struct.unpack_from("<H", data, pos + 2)[0]
-                    tz = data[pos + 4]
-                    time_val = data[pos + 5]
-                    type_val = data[pos + 6]
-                    days = data[pos + 7]
+        layout = U7ScheduleLayout.from_bytes(data, strict=strict)
+        sched = cls(num_npcs=layout.num_npcs, format=layout.format)
+        sched.raw = data
+        sched.script_names_raw = layout.script_names_raw
+        sched.script_names = tuple(
+            name.decode("latin-1") for name in layout.script_names_raw
+        )
+        sched.warnings = layout.warnings
+        sched.complete = layout.complete
+        sched.parsed_bytes = layout.parsed_bytes
+        sched.trailing_data = layout.trailing_data
+        for npc_idx, rows in layout.records.items():
+            entries = []
+            for raw in rows:
+                if layout.entry_width == 8:
+                    tx, ty, tz, time_val, type_val, days = struct.unpack("<HHBBBB", raw)
                 else:
-                    b0 = data[pos]
-                    time_val = b0 & 7
-                    type_val = (b0 >> 3) & 0x1F
-                    sx = data[pos + 1]
-                    sy = data[pos + 2]
-                    schunk = data[pos + 3]
+                    b0, sx, sy, schunk = raw
+                    time_val, type_val = b0 & 7, b0 >> 3
                     tx = (schunk % 12) * _TILES_PER_SCHUNK + sx
                     ty = (schunk // 12) * _TILES_PER_SCHUNK + sy
-                    tz = 0
-                    days = 0x7F
-                npc_entries.append(
+                    tz, days = 0, 0x7F
+                entries.append(
                     U7ScheduleEntry(
-                        time=time_val,
-                        type=type_val,
-                        tx=tx,
-                        ty=ty,
-                        tz=tz,
-                        days=days,
+                        time=time_val, type=type_val, tx=tx, ty=ty, tz=tz, days=days
                     )
                 )
-                pos += entry_size
-            if npc_entries:
-                sched.entries[npc_idx] = npc_entries
+            sched.entries[npc_idx] = entries
         return sched
 
     @classmethod
-    def from_file(cls, filepath: str) -> "U7Schedules":
+    def from_file(cls, filepath: str, *, strict: bool = False) -> "U7Schedules":
         """Read a loose ``schedule.dat`` file from disk."""
         with open(filepath, "rb") as f:
-            return cls.from_bytes(f.read())
+            return cls.from_bytes(f.read(), strict=strict)
 
     @classmethod
-    def from_save(cls, save: U7Save) -> "U7Schedules":
+    def from_save(cls, save: U7Save, *, strict: bool = False) -> "U7Schedules":
         data = save.get_data("schedule.dat")
         if data is None:
             raise ValueError("Save does not contain 'schedule.dat'")
-        return cls.from_bytes(data)
+        return cls.from_bytes(data, strict=strict)
 
     def dump_summary(self, npc_names: dict[int, str] | None = None) -> str:
         total = sum(len(v) for v in self.entries.values())
@@ -1056,7 +1092,7 @@ class U7Schedules:
             f"Schedules: {self.num_npcs} NPCs tracked, "
             f"{len(self.entries)} with entries, "
             f"{total} total entries ({self.format} format)"
-        )
+        ) + "".join(f"\nWarning: {warning}" for warning in self.warnings)
 
     def dump_detail(self, npc_names: dict[int, str] | None = None) -> str:
         lines = [
@@ -1075,12 +1111,13 @@ class U7Schedules:
                 lines.append(
                     f"  time={e.time} "
                     f"({e.time * 3:02d}:00-{e.time * 3 + 2:02d}:59)  "
-                    f"type={e.type:2d} ({e.type_name:<14s})  "
+                    f"type={e.type:2d} ({self.name_for_type(e.type):<14s})  "
                     f"at ({e.tx}, {e.ty}, {e.tz})  days=0x{e.days:02X}"
                 )
         lines.append("")
         total = sum(len(v) for v in self.entries.values())
         lines.append(f"Total: {len(self.entries)} NPCs with {total} entries")
+        lines.extend(f"Warning: {warning}" for warning in self.warnings)
         return "\n".join(lines)
 
     def dump_csv(self, npc_names: dict[int, str] | None = None) -> str:
@@ -1108,7 +1145,7 @@ class U7Schedules:
                         name,
                         e.time,
                         e.type,
-                        e.type_name,
+                        self.name_for_type(e.type),
                         e.tx,
                         e.ty,
                         e.tz,
@@ -1142,16 +1179,20 @@ class U7NPCInventoryItem:
     path: str = ""
 
     # Per-instance IREG object state (titan.u7.ireg), decoded the same way
-    # as titan.u7.map's U7MapObject. Simple (6/10-byte) entries always
-    # decode with shape_class=None here (no TFA lookup threaded through
-    # NPC inventory parsing), so their okay_to_take/invisible reinterpretation
-    # for quantity/quality_flags classes is not applied -- only the
-    # container(12)/body(13/14) quality+lift+flag-byte offsets benefit.
+    # as titan.u7.map's U7MapObject. Optional U7IregContext supplies TFA
+    # quality semantics and supplemental body/jawbone dispatch flags.
     raw_quality: int = 0
     object_flags: U7ObjectFlags = U7ObjectFlags.NONE
     raw_flag_byte: int | None = None
     record_length: int = 0
     is_extended: bool = False
+    ireg_kind: str = ""
+    ireg_data: dict[str, object] = field(default_factory=dict)
+    ireg_warnings: list[str] = field(default_factory=list)
+    ireg_raw_hex: str = ""
+    ireg_offset: int = 0
+    ireg_index_id: U7IregIndexId | None = None
+    ireg_specials: list[U7IregSpecial] = field(default_factory=list)
 
 
 _READY_SLOT_NAMES = {
@@ -1235,46 +1276,77 @@ _READY_SI_TO_EXULT = {
 }
 
 
-class U7ReadyTypes:
+@dataclass
+class U7ReadyRecord:
+    """One stored ready preference, retaining its spell flag and raw nine-byte record."""
+
+    shape: int
+    slot: int
+    spell_flag: bool
+    raw: bytes
+
+    @property
+    def ready_code(self) -> int:
+        """Return the game-specific five-bit ready code before BG/SI translation."""
+        return self.raw[2] >> 3
+
+
+class U7ReadyTypes(U7GameplayMetadata):
     """Decoded `ready.dat` ready-slot preferences."""
 
-    def __init__(self, slots: dict[int, int]) -> None:
+    def __init__(
+        self,
+        slots: dict[int, int],
+        records: list[U7ReadyRecord] | None = None,
+        table: U7GameplayTable | None = None,
+        *,
+        data_format: U7GameplayFormat = "exult",
+    ) -> None:
+        super().__init__(table, data_format=data_format)
         self.slots = slots
+        self.records = records or []
+        self.spell_flags = {record.shape: record.spell_flag for record in self.records}
 
     @classmethod
-    def from_dir(cls, static_dir: str, game: str = "bg") -> "U7ReadyTypes":
+    def from_dir(
+        cls,
+        static_dir: str,
+        game: str = "bg",
+        *,
+        data_format: U7GameplayFormat = "exult",
+    ) -> "U7ReadyTypes":
         for name in ("ready.dat", "READY.DAT"):
             path = Path(static_dir) / name
             if path.is_file():
-                return cls.from_file(str(path), game=game)
-        return cls({})
+                return cls.from_file(str(path), game=game, data_format=data_format)
+        return cls({}, data_format=data_format)
 
     @classmethod
-    def from_file(cls, filepath: str, game: str = "bg") -> "U7ReadyTypes":
-        return cls.from_bytes(Path(filepath).read_bytes(), game=game)
+    def from_file(
+        cls, filepath: str, game: str = "bg", *, data_format: U7GameplayFormat = "exult"
+    ) -> "U7ReadyTypes":
+        return cls.from_bytes(
+            Path(filepath).read_bytes(), game=game, data_format=data_format
+        )
 
     @classmethod
-    def from_bytes(cls, data: bytes, game: str = "bg") -> "U7ReadyTypes":
-        if not data:
-            return cls({})
-        pos = 0
-        count = data[pos]
-        pos += 1
-        if count == 255:
-            if pos + 2 > len(data):
-                return cls({})
-            count = int.from_bytes(data[pos : pos + 2], "little")
-            pos += 2
+    def from_bytes(
+        cls, data: bytes, game: str = "bg", *, data_format: U7GameplayFormat = "exult"
+    ) -> "U7ReadyTypes":
+        table = read_gameplay_table(data, 9, "READY.DAT", data_format=data_format)
         mapping = _READY_BG_TO_EXULT if game.lower() == "bg" else _READY_SI_TO_EXULT
         slots: dict[int, int] = {}
-        for _ in range(count):
-            if pos + 9 > len(data):
-                break
-            shape = int.from_bytes(data[pos : pos + 2], "little")
-            raw_ready = data[pos + 2] >> 3
-            pos += 9
-            slots[shape] = mapping.get(raw_ready, 0xFF)
-        return cls(slots)
+        records = []
+        for raw in table.records:
+            shape = int.from_bytes(raw[:2], "little")
+            slot = mapping.get(raw[2] >> 3, 0xFF)
+            slots[shape] = slot
+            records.append(U7ReadyRecord(shape, slot, bool(raw[2] & 1), raw))
+        return cls(slots, records, table)
+
+    def spell_flag_for_shape(self, shape: int) -> bool | None:
+        """Return the stored spell flag; None means that no flag was loaded for the shape."""
+        return self.spell_flags.get(shape)
 
     def slot_for_shape(self, shape: int) -> int | None:
         return self.slots.get(shape)
@@ -1294,19 +1366,26 @@ def _read_ireg_inventory(
     depth: int = 0,
     path: str = "",
     inherited_flags: U7ObjectFlags = U7ObjectFlags.NONE,
+    ireg_context: U7IregContext | None = None,
+    extras: U7IregExtras | None = None,
+    offset_base: int = 0,
 ) -> tuple[list[U7NPCInventoryItem], int]:
     """Read one NPC inventory IREG section starting at *pos*.
 
     Quality/lift/flag-byte offsets and invisible/okay_to_take/temporary
     decoding are shared with :mod:`titan.u7.map` via
-    :func:`titan.u7.ireg.decode_ireg_payload`. No TFA shape-class lookup is
-    threaded through NPC inventory parsing, so simple (6/10-byte) entries
-    always decode with ``shape_class=None`` -- quantity/quality_flags
-    reinterpretation only applies to container/body entries, whose byte
-    offsets don't depend on shape_class.
+    :func:`titan.u7.ireg.decode_ireg_payload`. Optional ``ireg_context``
+    supplies TFA and supplemental flags; missing context is recorded on
+    each item's ``ireg_warnings`` alongside the retained raw payload.
     """
     items: list[U7NPCInventoryItem] = []
+    extras = extras if extras is not None else U7IregExtras()
+    scope_offset = pos
+    last_item: U7NPCInventoryItem | None = None
+    last_offset: int | None = None
+    index_id: U7IregIndexId | None = None
     while pos < len(data):
+        entry_offset = pos
         entry_len = data[pos]
         pos += 1
 
@@ -1314,7 +1393,15 @@ def _read_ireg_inventory(
             return items, pos
 
         if entry_len == 2:
-            pos += 2
+            index_id, pos = read_ireg_index(
+                data, entry_offset, scope_offset, offset_base=offset_base
+            )
+            extras.indices.append(index_id)
+            if not index_id.complete:
+                extras.warnings.append(
+                    f"IREG offset {entry_offset + offset_base}: index ID is truncated"
+                )
+                break
             continue
 
         extended = False
@@ -1328,21 +1415,23 @@ def _read_ireg_inventory(
             entry_len = data[pos]
             pos += 1
         elif entry_len == 0xFF:
-            if pos >= len(data):
-                break
-            sp_type = data[pos]
-            pos += 1
-            if sp_type == 2:
+            special, pos = read_ireg_special(
+                data, entry_offset, offset_base=offset_base
+            )
+            extras.add_special(special, last_offset)
+            if last_item is not None:
+                last_item.ireg_specials.append(special)
+                last_item.ireg_warnings.extend(special.warnings)
+            if special.type_id == 2:
                 return items, pos
-            if pos + 2 > len(data):
-                break
-            sp_len = struct.unpack_from("<H", data, pos)[0]
-            pos += 2 + sp_len
             continue
 
         entry_start = pos
         pos += entry_len
         if pos > len(data):
+            extras.warnings.append(
+                f"IREG offset {entry_offset + offset_base}: object payload is truncated"
+            )
             break
 
         testlen = entry_len - (1 if extended else 0)
@@ -1357,6 +1446,7 @@ def _read_ireg_inventory(
             extended_lift=extended_lift,
             inherited_flags=inherited_flags,
             shape_class=None,
+            context=ireg_context,
         )
         if decoded is None:
             continue
@@ -1366,27 +1456,39 @@ def _read_ireg_inventory(
         valid_shape = valid_shape_count is None or shape < valid_shape_count
         item_path = f"{path}/{shape}:{frame}" if path else f"{shape}:{frame}"
         if valid_shape:
-            items.append(
-                U7NPCInventoryItem(
-                    shape=shape,
-                    frame=frame,
-                    x=ed[0],
-                    y=ed[1],
-                    lift=decoded.lift,
-                    quality=decoded.quality,
-                    depth=depth,
-                    path=item_path,
-                    raw_quality=decoded.raw_quality,
-                    object_flags=decoded.object_flags,
-                    raw_flag_byte=decoded.raw_flag_byte,
-                    record_length=decoded.record_length,
-                    is_extended=decoded.is_extended,
-                )
+            last_item = U7NPCInventoryItem(
+                shape=shape,
+                frame=frame,
+                x=ed[0],
+                y=ed[1],
+                lift=decoded.lift,
+                quality=decoded.quality,
+                depth=depth,
+                path=item_path,
+                raw_quality=decoded.raw_quality,
+                object_flags=decoded.object_flags,
+                raw_flag_byte=decoded.raw_flag_byte,
+                record_length=decoded.record_length,
+                is_extended=decoded.is_extended,
+                ireg_kind=decoded.kind,
+                ireg_data=decoded.class_data,
+                ireg_warnings=decoded.context_warnings,
+                ireg_raw_hex=decoded.raw_hex,
+                ireg_offset=entry_offset + offset_base,
+                ireg_index_id=index_id,
             )
+            last_offset = entry_offset + offset_base
+            items.append(last_item)
+        else:
+            last_item, last_offset = None, None
 
         if valid_shape and decoded.has_children_marker:
             is_container = (
-                shape in container_shapes if container_shapes is not None else True
+                True
+                if ireg_context is not None
+                else shape in container_shapes
+                if container_shapes is not None
+                else True
             )
             if is_container:
                 child_items, pos = _read_ireg_inventory(
@@ -1397,6 +1499,9 @@ def _read_ireg_inventory(
                     depth + 1,
                     item_path,
                     inherited_flags=decoded.child_inherit_flags,
+                    ireg_context=ireg_context,
+                    extras=extras,
+                    offset_base=offset_base,
                 )
                 items.extend(child_items)
     return items, pos
@@ -1483,26 +1588,9 @@ def _skip_special_ireg(data: bytes, pos: int) -> int:
     """Skip scheduled usecode (``read_special_ireg`` format).
 
     Each entry is prefixed by ``0xFF``.  The sequence ends with
-    ``0xFF 0x01`` (IREG_ENDMARK).
+    ``0xFF 0x02`` (IREG_ENDMARK).
     """
-    while pos < len(data):
-        if data[pos] != 0xFF:
-            return pos
-        pos += 1  # consume 0xFF
-
-        if pos >= len(data):
-            break
-        if data[pos] == 0x02:  # IREG_ENDMARK
-            pos += 1
-            return pos
-
-        # type(1) + len(2) + data(len)
-        if pos + 3 > len(data):
-            break
-        pos += 1
-        sp_len = struct.unpack_from("<H", data, pos)[0]
-        pos += 2 + sp_len
-    return pos
+    return read_ireg_specials(data, pos)[1]
 
 
 # ============================================================================
@@ -1548,6 +1636,12 @@ class U7NPC:
     has_inventory: bool = False
     inventory: list[U7NPCInventoryItem] = field(default_factory=list)
     unused: bool = False
+    metadata: U7ActorMetadata | None = None
+    used_in_game_raw: int | None = None
+    unused_compatibility: bool = False
+    ireg_specials: list[U7IregSpecial] = field(default_factory=list)
+    inventory_ireg: U7IregExtras | None = None
+    ireg_warnings: list[str] = field(default_factory=list)
 
     @property
     def schedule_name(self) -> str:
@@ -1563,6 +1657,8 @@ class U7NPC:
 
     @property
     def is_dead(self) -> bool:
+        if self.metadata is not None:
+            return self.metadata.is_dead
         return bool(self.rflags & (1 << 15))
 
 
@@ -1570,7 +1666,7 @@ class U7NPCData:
     """All NPCs from ``npc.dat``.
 
     Reads each NPC's fixed-header fields (stats, position, name) and
-    skips any IREG inventory data.  For reliable container-nesting
+    decodes embedded IREG inventory data.  For reliable container-nesting
     detection, pass a set of container shape numbers via
     *container_shapes* (shape class 6 from
     :class:`~titan.u7.typeflag.U7TypeFlags`).
@@ -1582,11 +1678,20 @@ class U7NPCData:
         num_npcs1: int = 0,
         num_npcs2: int = 0,
         npc_flavor: str = "runtime",
+        *,
+        fix_unused: bool = False,
+        warnings: list[str] | None = None,
     ):
         self.npcs: list[U7NPC] = npcs
         self.num_npcs1 = num_npcs1
         self.num_npcs2 = num_npcs2
         self.npc_flavor = npc_flavor
+        self.fix_unused = fix_unused
+        self.warnings = list(warnings or [])
+        if fix_unused:
+            self.warnings.append(
+                "NPC.DAT: Avatar used-in-game word is zero; Exult legacy unused compatibility is active."
+            )
         self._parsed_bytes = 0
 
     # ---- factory ----------------------------------------------------------
@@ -1600,12 +1705,17 @@ class U7NPCData:
         sex_unknown: bool = False,
         original_new_game: bool = False,
         npc_flavor: str | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
         """Read ``npc.dat`` bytes.
 
         ``npc_flavor`` may be ``"runtime"``, ``"original"``, ``"unknown"``,
         or ``"auto"``.  The older ``original_new_game`` and ``sex_unknown``
         booleans are still honored for callers that already know provenance.
+        ``game`` selects BG's six-bit or SI's five-bit strength field; source
+        flavor does not identify the game. The default preserves BG behavior.
         """
         if len(data) < 4:
             raise ValueError("npc.dat too short")
@@ -1622,7 +1732,13 @@ class U7NPCData:
                 original_new_game = False
                 sex_unknown = True
             elif flavor == "auto":
-                return cls.from_bytes_auto(data, container_shapes, valid_shape_count)
+                return cls.from_bytes_auto(
+                    data,
+                    container_shapes,
+                    valid_shape_count,
+                    game=game,
+                    ireg_context=ireg_context,
+                )
             else:
                 raise ValueError(f"Unknown npc.dat flavor: {npc_flavor}")
 
@@ -1637,6 +1753,8 @@ class U7NPCData:
                 if sex_unknown
                 else ("original-new-game" if original_new_game else "runtime")
             ),
+            game=game,
+            ireg_context=ireg_context,
         )
 
     @classmethod
@@ -1645,6 +1763,9 @@ class U7NPCData:
         data: bytes,
         container_shapes: Union[set, None] = None,
         valid_shape_count: int | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
         """Auto-detect runtime vs original new-game ``npc.dat`` where possible.
 
@@ -1660,6 +1781,8 @@ class U7NPCData:
             sex_unknown=False,
             original_new_game=False,
             npc_flavor="runtime",
+            game=game,
+            ireg_context=ireg_context,
         )
         original = cls._from_bytes_core(
             data,
@@ -1668,6 +1791,8 @@ class U7NPCData:
             sex_unknown=False,
             original_new_game=True,
             npc_flavor="original-new-game",
+            game=game,
+            ireg_context=ireg_context,
         )
         runtime_score = cls._score_npc_parse(runtime, data)
         original_score = cls._score_npc_parse(original, data)
@@ -1683,6 +1808,8 @@ class U7NPCData:
             sex_unknown=True,
             original_new_game=False,
             npc_flavor="unknown",
+            game=game,
+            ireg_context=ireg_context,
         )
 
     @classmethod
@@ -1694,12 +1821,22 @@ class U7NPCData:
         sex_unknown: bool,
         original_new_game: bool,
         npc_flavor: str,
+        *,
+        monster_actors: bool = False,
+        offset_base: int = 0,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
+        """Read actor streams, keeping monster ordinals separate from NPC identities."""
+        game = game.lower()
+        if game not in ("bg", "si"):
+            raise ValueError(f"U7 actor game must be bg or si: {game}")
         num1 = struct.unpack_from("<H", data, 0)[0]
         num2 = struct.unpack_from("<H", data, 2)[0]
         pos = 4
         npcs: list[U7NPC] = []
         total = num1 + num2
+        fix_unused = False
 
         for npc_idx in range(total):
             if pos + 78 > len(data):
@@ -1713,7 +1850,14 @@ class U7NPCData:
                     valid_shape_count,
                     sex_unknown,
                     original_new_game,
+                    actor_npc_num=-1 if monster_actors else npc_idx,
+                    offset_base=offset_base,
+                    game=game,
+                    ireg_context=ireg_context,
+                    has_usecode=npc_idx < num1 if not monster_actors else False,
+                    fix_unused=fix_unused,
                 )
+                fix_unused = npc.unused_compatibility
                 npcs.append(npc)
             except (struct.error, IndexError, ValueError):
                 break
@@ -1722,8 +1866,14 @@ class U7NPCData:
             num_npcs1=num1,
             num_npcs2=num2,
             npc_flavor=npc_flavor,
+            fix_unused=fix_unused,
         )
         result._parsed_bytes = pos
+        result.warnings.extend(
+            f"Actor {npc.npc_num}: {warning}"
+            for npc in npcs
+            for warning in npc.ireg_warnings
+        )
         return result
 
     @staticmethod
@@ -1750,16 +1900,23 @@ class U7NPCData:
         save: U7Save,
         container_shapes: Union[set, None] = None,
         valid_shape_count: int | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
         data = save.get_data("npc.dat")
         if data is None:
             raise ValueError("Save does not contain 'npc.dat'")
-        return cls.from_bytes(
+        result = cls.from_bytes(
             data,
             container_shapes,
             valid_shape_count,
             npc_flavor="runtime",
+            game=game,
+            ireg_context=ireg_context,
         )
+        result.warnings[:0] = save.warnings
+        return result
 
     @classmethod
     def from_file(
@@ -1770,6 +1927,9 @@ class U7NPCData:
         original_new_game: bool = False,
         npc_flavor: str | None = None,
         valid_shape_count: int | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
         """Read a loose ``npc.dat`` file from disk."""
         with open(filepath, "rb") as f:
@@ -1780,6 +1940,8 @@ class U7NPCData:
                 sex_unknown,
                 original_new_game,
                 npc_flavor=npc_flavor,
+                game=game,
+                ireg_context=ireg_context,
             )
 
     @classmethod
@@ -1788,6 +1950,9 @@ class U7NPCData:
         filepath: str,
         container_shapes: Union[set, None] = None,
         valid_shape_count: int | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
         """Read original new-game NPC data from ``STATIC/INITGAME.DAT``.
 
@@ -1815,6 +1980,8 @@ class U7NPCData:
                     container_shapes=container_shapes,
                     valid_shape_count=valid_shape_count,
                     npc_flavor="original-new-game",
+                    game=game,
+                    ireg_context=ireg_context,
                 )
         raise ValueError(f"INITGAME.DAT does not contain npc.dat: {filepath}")
 
@@ -1824,22 +1991,32 @@ class U7NPCData:
         data: bytes,
         container_shapes: Union[set, None] = None,
         valid_shape_count: int | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
         """Read Exult ``monsnpcs.dat`` monster actors.
 
         ``monsnpcs.dat`` stores one uint16 monster count followed by actor
         records in the same serialized form used by ``npc.dat``.  Adapt that
-        single count to the two-count ``npc.dat`` header so the shared actor
-        reader can parse it.
+        single count to the two-count ``npc.dat`` header. Decode with Exult's
+        non-NPC actor identity (-1), retaining ordinals only for reporting.
         """
         if len(data) < 2:
             raise ValueError("monsnpcs.dat too short")
         count = struct.unpack_from("<H", data, 0)[0]
         npc_like = struct.pack("<HH", count, 0) + data[2:]
-        return cls.from_bytes(
+        return cls._from_bytes_core(
             npc_like,
             container_shapes=container_shapes,
             valid_shape_count=valid_shape_count,
+            sex_unknown=False,
+            original_new_game=False,
+            npc_flavor="runtime",
+            monster_actors=True,
+            offset_base=-2,
+            game=game,
+            ireg_context=ireg_context,
         )
 
     @classmethod
@@ -1848,11 +2025,18 @@ class U7NPCData:
         filepath: str,
         container_shapes: Union[set, None] = None,
         valid_shape_count: int | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> "U7NPCData":
         """Read a loose Exult ``monsnpcs.dat`` file from disk."""
         with open(filepath, "rb") as f:
             return cls.from_monsnpcs_bytes(
-                f.read(), container_shapes, valid_shape_count
+                f.read(),
+                container_shapes,
+                valid_shape_count,
+                game=game,
+                ireg_context=ireg_context,
             )
 
     @classmethod
@@ -1861,9 +2045,18 @@ class U7NPCData:
         save: U7Save,
         container_shapes: Union[set, None] = None,
         valid_shape_count: int | None = None,
+        *,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
     ) -> dict[int, str]:
         """Extract ``{npc_index: name}`` from ``npc.dat`` in a save."""
-        npc_data = cls.from_save(save, container_shapes, valid_shape_count)
+        npc_data = cls.from_save(
+            save,
+            container_shapes,
+            valid_shape_count,
+            game=game,
+            ireg_context=ireg_context,
+        )
         return npc_data.name_map()
 
     def name_map(self) -> dict[int, str]:
@@ -1882,8 +2075,17 @@ class U7NPCData:
         valid_shape_count: int | None,
         sex_unknown: bool,
         original_new_game: bool,
+        *,
+        actor_npc_num: int | None = None,
+        offset_base: int = 0,
+        game: str = "bg",
+        ireg_context: U7IregContext | None = None,
+        has_usecode: bool | None = None,
+        fix_unused: bool = False,
     ) -> tuple:
-        """Parse one NPC record.  Returns ``(U7NPC, new_pos)``."""
+        """Decode one actor; a monster's reporting ordinal is not an NPC identity."""
+        if actor_npc_num is None:
+            actor_npc_num = npc_idx
         # -- fixed header (78 bytes) ----------------------------------------
         locx = data[pos]  # 0
         locy = data[pos + 1]  # 1
@@ -1911,7 +2113,7 @@ class U7NPCData:
         if original_new_game or unk0 == 0:
             magic_val = data[pos + 27]
             mana_val = data[pos + 28]
-            if npc_idx == 0:
+            if actor_npc_num == 0:
                 magic = magic_val & 0x1F
                 mana = mana_val & 0x1F
             else:
@@ -1923,7 +2125,7 @@ class U7NPCData:
 
         face_num = struct.unpack_from("<H", data, pos + 29)[0]  # 29-30
         if original_new_game:
-            face_num = npc_idx
+            face_num = actor_npc_num
         # skip 1                                                    # 31
         experience = struct.unpack_from("<I", data, pos + 32)[0]  # 32-35
         training = data[pos + 36]  # 36
@@ -1969,11 +2171,17 @@ class U7NPCData:
         lift = (usefun_lift >> 12) & 0xF
         alignment = (rflags >> 3) & 3
         attack_mode = amode_byte & 0xF
-        strength = strength_val & 0x3F
+        # SI bits 5..6 hold skin and bit 7 freeze; BG keeps bit 5 in strength.
+        strength = strength_val & (0x1F if game == "si" else 0x3F)
         intelligence = intel_val & 0x1F
         combat = combat_val & 0x7F
 
-        unused = iflag2 == 0 and npc_idx > 0
+        # Exult shares this state from Avatar through both NPC groups. Monsters
+        # have semantic identity -1 and cannot activate or use the slot repair.
+        compatibility = actor_npc_num >= 0 and (
+            fix_unused or (actor_npc_num == 0 and iflag2 == 0)
+        )
+        unused = iflag2 == 0 and actor_npc_num > 0 and not compatibility
         has_contents = (
             bool(iflag1 and not unused) if original_new_game else bool(iflag1 & 1)
         )
@@ -2022,18 +2230,45 @@ class U7NPCData:
             is_female=is_female,
             has_inventory=has_contents,
             unused=unused,
+            used_in_game_raw=iflag2,
+            unused_compatibility=compatibility,
+            metadata=U7ActorMetadata.from_bytes(
+                data[pos:p],
+                game=game,
+                original_new_game=original_new_game,
+                npc_num=actor_npc_num,
+                health=health,
+                strength=strength,
+                has_usecode=has_usecode,
+            ),
         )
+        if npc.metadata is not None and npc.metadata.effective_flags & (1 << 6):
+            npc.in_party = True
 
         # -- skip inventory / scheduled usecode ----------------------------
         if has_contents:
+            inventory_start = p
+            npc.inventory_ireg = U7IregExtras()
             npc.inventory, p = _read_ireg_inventory(
                 data,
                 p,
                 container_shapes,
                 valid_shape_count,
+                ireg_context=ireg_context,
+                extras=npc.inventory_ireg,
+                offset_base=offset_base,
             )
+            npc.inventory_ireg.raw_hex = data[inventory_start:p].hex()
+            npc.ireg_warnings.extend(npc.inventory_ireg.warnings)
         if has_sched_usecode:
-            p = _skip_special_ireg(data, p)
+            npc.ireg_specials, p = read_ireg_specials(
+                data, p, owner_offset=pos + offset_base, offset_base=offset_base
+            )
+            for special in npc.ireg_specials:
+                npc.ireg_warnings.extend(
+                    f"IREG offset {special.offset}: {warning}"
+                    for warning in special.warnings
+                )
 
         return npc, p
 
@@ -2042,12 +2277,12 @@ class U7NPCData:
     def dump_summary(self) -> str:
         named = sum(1 for n in self.npcs if n.name)
         in_party = sum(1 for n in self.npcs if n.in_party)
-        alive = sum(1 for n in self.npcs if n.health > 0)
+        alive = sum(1 for n in self.npcs if not n.is_dead and not n.unused)
         return (
             f"NPCs: {len(self.npcs)} parsed "
             f"({self.num_npcs1}+{self.num_npcs2} declared), "
             f"{named} named, {in_party} in party, {alive} alive"
-        )
+        ) + "".join(f"\nWarning: {warning}" for warning in self.warnings)
 
     def dump_detail(self) -> str:
         lines = [
@@ -2113,6 +2348,11 @@ class U7NPCData:
                 "inventory_count",
                 "dead",
                 "unused",
+                "actor_extensions",
+                "used_in_game_raw",
+                "unused_compatibility",
+                "ireg_specials",
+                "ireg_warnings",
             ]
         )
         for n in self.npcs:
@@ -2150,6 +2390,11 @@ class U7NPCData:
                     len(n.inventory),
                     n.is_dead,
                     n.unused,
+                    json.dumps(n.metadata.as_row()) if n.metadata is not None else "",
+                    n.used_in_game_raw,
+                    n.unused_compatibility,
+                    json.dumps([special.as_row() for special in n.ireg_specials]),
+                    json.dumps(n.ireg_warnings),
                 ]
             )
         return buf.getvalue()
@@ -2159,6 +2404,8 @@ class U7NPCData:
         shape_names: object | None = None,
         ready_types: U7ReadyTypes | None = None,
         npc_nums: set[int] | None = None,
+        *,
+        effective_ready: U7ReadyMetadata | None = None,
     ) -> str:
         buf = io.StringIO()
         writer = csv.writer(buf, lineterminator="\n")
@@ -2180,6 +2427,16 @@ class U7NPCData:
                 "ready_slot",
                 "path",
                 "path_names",
+                "effective_ready",
+                "ireg_kind",
+                "ireg_data",
+                "ireg_warnings",
+                "ireg_raw_hex",
+                "saved_index_word",
+                "saved_index_id",
+                "saved_slot_name",
+                "ireg_index_raw_hex",
+                "ireg_specials",
             ]
         )
         for n in self.npcs:
@@ -2207,6 +2464,22 @@ class U7NPCData:
                         else "",
                         item.path,
                         _inventory_path_names(item.path, shape_names),
+                        json.dumps(
+                            effective_ready.resolve(item.shape, item.frame).as_row()
+                        )
+                        if effective_ready
+                        else "",
+                        item.ireg_kind,
+                        json.dumps(item.ireg_data),
+                        json.dumps(item.ireg_warnings),
+                        item.ireg_raw_hex,
+                        item.ireg_index_id.raw_word if item.ireg_index_id else "",
+                        item.ireg_index_id.index if item.ireg_index_id else "",
+                        item.ireg_index_id.slot_name if item.ireg_index_id else "",
+                        item.ireg_index_id.raw_hex if item.ireg_index_id else "",
+                        json.dumps(
+                            [special.as_row() for special in item.ireg_specials]
+                        ),
                     ]
                 )
         return buf.getvalue()
@@ -2220,12 +2493,15 @@ def _inventory_location(
         return "backpack"
     if item.depth > 0:
         return "nested_container"
+    if item.ireg_index_id is not None:
+        if item.ireg_index_id.slot_name:
+            return f"saved_readied:{item.ireg_index_id.slot_name}"
+        if item.ireg_index_id.index == -1:
+            return "actor_inventory"
+        return "invalid_saved_slot"
     if item.shape == 801:
         return "backpack_container"
-    ready_slot = ready_types.slot_name_for_shape(item.shape) if ready_types else ""
-    if ready_slot:
-        return f"readied:{ready_slot}"
-    return "readied_or_actor_top"
+    return "actor_top_slot_unrecorded"
 
 
 def _inventory_path_names(path: str, shape_names: object | None) -> str:

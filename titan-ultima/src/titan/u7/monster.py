@@ -21,6 +21,14 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from titan.u7.eggs import EggQueryParams, format_csv as eggs_csv, query_eggs
+from titan.u7.actor_flags import U7ActorFlags, load_u7_actor_flags
+from titan.u7.combat_metadata import U7CombatMetadata
+from titan.u7.gameplay_metadata import (
+    U7GameplayFormat,
+    U7GameplayMetadata,
+    U7GameplayTable,
+    read_gameplay_table,
+)
 from titan.u7.names import U7ShapeNames
 from titan.u7.save import U7NPC, U7NPCData, U7Save
 from titan.u7.typeflag import U7TypeFlags
@@ -34,15 +42,12 @@ ALIGNMENT_NAMES = {
     3: "chaotic",
 }
 
-ATTACK_MODE_NAMES = {
-    0: "nearest",
-    1: "weakest",
-    2: "strongest",
-    3: "berserk",
-    4: "protect",
-    5: "defend",
-    6: "flank",
-    7: "random",
+MONSTER_BEHAVIOR_CATEGORY_NAMES = {
+    0: "noncombatant",
+    1: "opportunist",
+    2: "unpredictable",
+    3: "tactician",
+    4: "berserker",
 }
 
 MOVE_FLAG_BITS = (
@@ -60,11 +65,11 @@ DAMAGE_BITS = (
     (0, "normal"),
     (1, "fire"),
     (2, "magic"),
-    (3, "poison"),
+    (3, "lightning"),  # Also poison/starvation/freezing in the shared damage enum.
     (4, "ethereal"),
     (5, "sonic"),
-    (6, "lightning"),
-    (7, "death"),
+    (6, "unknown_6"),
+    (7, "unknown_7"),
 )
 
 _MONSTERS_ENTRY_SIZE = 25
@@ -82,7 +87,7 @@ class U7MonsterDefinition:
     """Decoded one-record entry from ``MONSTERS.DAT``."""
 
     source_file: str
-    file_version: int | None
+    declared_count: int | None
     offset: int
     shape: int
     deleted: bool
@@ -119,6 +124,11 @@ class U7MonsterDefinition:
     raw_hex: str = ""
 
     @property
+    def file_version(self) -> None:
+        """Deprecated compatibility attribute: MONSTERS.DAT has a count, no version byte."""
+        return None
+
+    @property
     def shape_hex(self) -> str:
         return f"0x{self.shape:03X}"
 
@@ -128,9 +138,20 @@ class U7MonsterDefinition:
 
     @property
     def attack_mode_name(self) -> str:
-        return ATTACK_MODE_NAMES.get(
+        """Compatibility label for the static behavior category, not a live attack mode."""
+        return self.behavior_category_name
+
+    @property
+    def behavior_category(self) -> int:
+        """Generator category after the stored one-based encoding is decoded."""
+        return self.attack_mode
+
+    @property
+    def behavior_category_name(self) -> str:
+        """Name only the five generator categories supported by the engine."""
+        return MONSTER_BEHAVIOR_CATEGORY_NAMES.get(
             self.attack_mode,
-            f"attack_{self.attack_mode}",
+            f"unknown_category_{self.attack_mode}",
         )
 
     @property
@@ -145,10 +166,21 @@ class U7MonsterDefinition:
     def immune_names(self) -> str:
         return _bit_names(self.immune, DAMAGE_BITS)
 
-    def as_row(self) -> dict[str, object]:
-        return {
+    @property
+    def legacy_actor_flags(self) -> int:
+        """Stored byte-0F ability bits; effective actor abilities require supplemental data."""
+        return (
+            int(self.can_teleport)
+            | (int(self.can_summon) << 1)
+            | (int(self.can_be_invisible) << 2)
+        )
+
+    def as_row(self, actor_flags: U7ActorFlags | None = None) -> dict[str, object]:
+        row: dict[str, object] = {
             "source_file": self.source_file,
-            "file_version": "" if self.file_version is None else self.file_version,
+            "declared_count": ""
+            if self.declared_count is None
+            else self.declared_count,
             "offset": self.offset,
             "shape": self.shape,
             "shape_hex": self.shape_hex,
@@ -185,6 +217,8 @@ class U7MonsterDefinition:
             "cant_bleed": int(self.cant_bleed),
             "attack_mode": self.attack_mode,
             "attack_mode_name": self.attack_mode_name,
+            "behavior_category": self.behavior_category,
+            "behavior_category_name": self.behavior_category_name,
             "byte13_extra": self.byte13_extra,
             "equip_offset": self.equip_offset,
             "can_teleport": int(self.can_teleport),
@@ -193,12 +227,25 @@ class U7MonsterDefinition:
             "sfx": self.sfx,
             "raw_hex": self.raw_hex,
         }
+        if actor_flags is not None:
+            effective = actor_flags.resolve(
+                self.shape,
+                legacy_flags=self.legacy_actor_flags,
+                legacy_source=f"{self.source_file}#offset={self.offset}",
+            ).as_row()
+            row.update(
+                {key: "" if self.deleted else value for key, value in effective.items()}
+            )
+        return row
 
 
-class U7MonsterDefinitions:
+class U7MonsterDefinitions(U7GameplayMetadata):
     """All decoded ``MONSTERS.DAT`` records."""
 
-    def __init__(self, records: list[U7MonsterDefinition]) -> None:
+    def __init__(
+        self, records: list[U7MonsterDefinition], table: U7GameplayTable | None = None
+    ) -> None:
+        super().__init__(table)
         self.records = records
 
     @classmethod
@@ -206,11 +253,16 @@ class U7MonsterDefinitions:
         cls,
         filepath: str,
         game: str = "bg",
+        *,
+        headerless: bool = False,
+        data_format: U7GameplayFormat = "exult",
     ) -> "U7MonsterDefinitions":
         return cls.from_bytes(
             Path(filepath).read_bytes(),
             source_file=filepath,
             game=game,
+            headerless=headerless,
+            data_format=data_format,
         )
 
     @classmethod
@@ -218,11 +270,13 @@ class U7MonsterDefinitions:
         cls,
         static_dir: str,
         game: str = "bg",
+        *,
+        data_format: U7GameplayFormat = "exult",
     ) -> "U7MonsterDefinitions":
         for name in ("MONSTERS.DAT", "monsters.dat"):
             path = Path(static_dir) / name
             if path.is_file():
-                return cls.from_file(str(path), game=game)
+                return cls.from_file(str(path), game=game, data_format=data_format)
         raise FileNotFoundError(f"MONSTERS.DAT not found in {static_dir}")
 
     @classmethod
@@ -231,45 +285,49 @@ class U7MonsterDefinitions:
         data: bytes,
         source_file: str = "",
         game: str = "bg",
+        *,
+        headerless: bool = False,
+        data_format: U7GameplayFormat = "exult",
     ) -> "U7MonsterDefinitions":
-        header_size = 1 if len(data) % _MONSTERS_ENTRY_SIZE == 1 else 0
-        file_version = data[0] if header_size else None
-        payload_len = len(data) - header_size
+        table = read_gameplay_table(
+            data,
+            _MONSTERS_ENTRY_SIZE,
+            "MONSTERS.DAT",
+            headerless=headerless,
+            data_format=data_format,
+        )
         records: list[U7MonsterDefinition] = []
 
-        for rel_offset in range(
-            0,
-            payload_len - (payload_len % _MONSTERS_ENTRY_SIZE),
-            _MONSTERS_ENTRY_SIZE,
-        ):
-            offset = header_size + rel_offset
-            entry = data[offset : offset + _MONSTERS_ENTRY_SIZE]
+        for index, entry in enumerate(table.records):
+            offset = table.header_size + index * _MONSTERS_ENTRY_SIZE
             records.append(
                 cls._read_record(
                     entry,
                     source_file=source_file,
-                    file_version=file_version,
+                    declared_count=table.declared_count,
                     offset=offset,
                     game=game,
+                    data_format=data_format,
                 )
             )
-        return cls(records)
+        return cls(records, table)
 
     @staticmethod
     def _read_record(
         entry: bytes,
         source_file: str,
-        file_version: int | None,
+        declared_count: int | None,
         offset: int,
         game: str,
+        data_format: U7GameplayFormat = "exult",
     ) -> U7MonsterDefinition:
         shape = int.from_bytes(entry[0:2], "little")
         raw = entry[2:]
-        deleted = raw[-1] == 0xFF
+        deleted = data_format == "exult" and raw[-1] == 0xFF
         if deleted:
             return U7MonsterDefinition(
                 source_file=source_file,
-                file_version=file_version,
+                declared_count=declared_count,
                 offset=offset,
                 shape=shape,
                 deleted=True,
@@ -286,7 +344,7 @@ class U7MonsterDefinitions:
 
         return U7MonsterDefinition(
             source_file=source_file,
-            file_version=file_version,
+            declared_count=declared_count,
             offset=offset,
             shape=shape,
             deleted=False,
@@ -324,33 +382,73 @@ class U7MonsterDefinitions:
         )
 
     def active_records(self) -> list[U7MonsterDefinition]:
+        """Return raw non-removal records, including superseded definitions."""
         return [record for record in self.records if not record.deleted]
 
     def by_shape(self) -> dict[int, U7MonsterDefinition]:
-        return {record.shape: record for record in self.active_records()}
+        """Resolve each stream in order, including later removals and reinstatements."""
+        resolved: dict[int, U7MonsterDefinition] = {}
+        for record in self.records:
+            if record.deleted:
+                resolved.pop(record.shape, None)
+            else:
+                resolved[record.shape] = record
+        return resolved
 
-    def dump_summary(self) -> str:
+    def validate_semantics(
+        self,
+        *,
+        equipment_count: int | None = None,
+        shape_count: int | None = None,
+    ) -> list[str]:
+        """Check effective categories/references when bounds are known; retain all raw data."""
+        warnings = []
+        for record in self.by_shape().values():
+            if record.behavior_category not in MONSTER_BEHAVIOR_CATEGORY_NAMES:
+                warnings.append(
+                    f"MONSTERS.DAT shape {record.shape} has unsupported behavior category {record.behavior_category}."
+                )
+            if equipment_count is not None and record.equip_offset > equipment_count:
+                warnings.append(
+                    f"MONSTERS.DAT shape {record.shape} equipment reference {record.equip_offset} exceeds {equipment_count} templates."
+                )
+            if shape_count is not None and record.shape >= shape_count:
+                warnings.append(
+                    f"MONSTERS.DAT shape {record.shape} is outside the {shape_count}-shape archive."
+                )
+        return warnings
+
+    def dump_summary(self, actor_flags: U7ActorFlags | None = None) -> str:
         active = len(self.active_records())
         deleted = len(self.records) - active
+        effective = list(self.by_shape().values())
         lines = [
             (
                 "Monster definitions: "
-                f"{active} active, {deleted} deleted, {len(self.records)} total"
+                f"{active} active, {deleted} deleted, {len(self.records)} total; "
+                f"{len(effective)} effective shapes"
             )
         ]
-        for record in self.active_records()[:20]:
+        for record in effective[:20]:
             lines.append(
                 f"  {record.shape:4d} {record.shape_hex:>6} "
                 f"STR={record.strength:2d} DEX={record.dexterity:2d} "
                 f"INT={record.intelligence:2d} CMB={record.combat:2d} "
-                f"armor={record.armor:2d} flags={record.move_flags or '-'}"
+                f"armor={record.armor:2d} behavior={record.behavior_category_name} flags={record.move_flags or '-'}"
             )
-        if active > 20:
-            lines.append(f"  ... {active - 20} more")
+            if actor_flags is not None:
+                flags = actor_flags.resolve(
+                    record.shape, legacy_flags=record.legacy_actor_flags
+                )
+                lines.append(f"       Effective actor flags: {flags.summary()}")
+        if len(effective) > 20:
+            lines.append(f"  ... {len(effective) - 20} more")
+        lines.extend(f"Warning: {warning}" for warning in self.warnings)
+        lines.extend(f"Warning: {warning}" for warning in self.validate_semantics())
         return "\n".join(lines)
 
-    def dump_csv(self) -> str:
-        return _rows_to_csv([record.as_row() for record in self.records])
+    def dump_csv(self, actor_flags: U7ActorFlags | None = None) -> str:
+        return _rows_to_csv([record.as_row(actor_flags) for record in self.records])
 
     @staticmethod
     def merge(
@@ -364,7 +462,9 @@ class U7MonsterDefinitions:
                     merged.pop(record.shape, None)
                 else:
                     merged[record.shape] = record
-        return U7MonsterDefinitions([merged[key] for key in sorted(merged)])
+        result = U7MonsterDefinitions([merged[key] for key in sorted(merged)])
+        result._source_warnings = [*base.warnings, *(mod.warnings if mod else [])]
+        return result
 
 
 @dataclass
@@ -393,59 +493,59 @@ class U7MonsterEquipElement:
         }
 
 
-class U7MonsterEquipment:
+class U7MonsterEquipment(U7GameplayMetadata):
     """Decoded monster ``equip.dat`` records."""
 
     def __init__(
         self,
         records: list[list[U7MonsterEquipElement]],
         source_file: str = "",
+        table: U7GameplayTable | None = None,
+        *,
+        data_format: U7GameplayFormat = "exult",
     ) -> None:
+        super().__init__(table, data_format=data_format)
         self.records = records
         self.source_file = source_file
 
     @classmethod
-    def from_file(cls, filepath: str) -> "U7MonsterEquipment":
+    def from_file(
+        cls, filepath: str, *, data_format: U7GameplayFormat = "exult"
+    ) -> "U7MonsterEquipment":
         data = Path(filepath).read_bytes()
-        records = cls.from_bytes(data, source_file=filepath)
+        records = cls.from_bytes(data, source_file=filepath, data_format=data_format)
         return records
 
     @classmethod
-    def from_dir(cls, data_dir: str) -> "U7MonsterEquipment":
+    def from_dir(
+        cls, data_dir: str, *, data_format: U7GameplayFormat = "exult"
+    ) -> "U7MonsterEquipment":
         for name in ("equip.dat", "EQUIP.DAT"):
             path = Path(data_dir) / name
             if path.is_file():
-                return cls.from_file(str(path))
-        return cls([], source_file="")
+                return cls.from_file(str(path), data_format=data_format)
+        return cls([], source_file="", data_format=data_format)
 
     @classmethod
     def from_bytes(
         cls,
         data: bytes,
         source_file: str = "",
+        *,
+        data_format: U7GameplayFormat = "exult",
     ) -> "U7MonsterEquipment":
-        if not data:
-            return cls([], source_file=source_file)
-        pos = 0
-        count = data[pos]
-        pos += 1
-        if count == 255:
-            if pos + 2 > len(data):
-                return cls([], source_file=source_file)
-            count = int.from_bytes(data[pos : pos + 2], "little")
-            pos += 2
-
         records: list[list[U7MonsterEquipElement]] = []
         record_size = _EQUIP_ELEMENT_SIZE * _EQUIP_ELEMENTS_PER_RECORD
-        for record_index in range(count):
-            if pos + record_size > len(data):
-                break
+        table = read_gameplay_table(
+            data, record_size, "EQUIP.DAT", data_format=data_format
+        )
+        for record_index, record in enumerate(table.records):
             elements: list[U7MonsterEquipElement] = []
             for element_index in range(_EQUIP_ELEMENTS_PER_RECORD):
-                shape = int.from_bytes(data[pos : pos + 2], "little")
-                probability = data[pos + 2]
-                quantity = data[pos + 3]
-                pos += _EQUIP_ELEMENT_SIZE
+                pos = element_index * _EQUIP_ELEMENT_SIZE
+                shape = int.from_bytes(record[pos : pos + 2], "little")
+                probability = record[pos + 2]
+                quantity = record[pos + 3]
                 elements.append(
                     U7MonsterEquipElement(
                         record_index=record_index,
@@ -456,7 +556,15 @@ class U7MonsterEquipment:
                     )
                 )
             records.append(elements)
-        return cls(records, source_file=source_file)
+        result = cls(records, source_file=source_file, table=table)
+        for elements in records:
+            for element in elements:
+                if element.shape and element.probability > 100:
+                    result._source_warnings.append(
+                        f"EQUIP.DAT template {element.equip_offset}, element {element.element_index} "
+                        f"has probability {element.probability} above 100."
+                    )
+        return result
 
     def by_offset(self, equip_offset: int) -> list[U7MonsterEquipElement]:
         if equip_offset <= 0 or equip_offset > len(self.records):
@@ -491,66 +599,85 @@ class U7WeaponInfo:
     shape: int
     ammo: int
 
+    @property
+    def uses_charges(self) -> bool:
+        """A consumption mode of -2 uses object quality as weapon charges."""
+        return self.ammo == -2
 
-class U7WeaponInfos:
+
+class U7WeaponInfos(U7GameplayMetadata):
     """Decoded `weapons.dat` ammo references by weapon shape."""
 
+    world_metadata: U7CombatMetadata | None = None
+
     def __init__(
-        self, records: dict[int, U7WeaponInfo], deleted: set[int] | None = None
+        self,
+        records: dict[int, U7WeaponInfo],
+        deleted: set[int] | None = None,
+        table: U7GameplayTable | None = None,
+        *,
+        data_format: U7GameplayFormat = "exult",
     ) -> None:
+        super().__init__(table, data_format=data_format)
         self.records = records
         self.deleted = deleted or set()
 
     @classmethod
-    def from_dir(cls, data_dir: str, game: str = "bg") -> "U7WeaponInfos":
+    def from_dir(
+        cls,
+        data_dir: str,
+        game: str = "bg",
+        *,
+        patch_dir: str | Path | None = None,
+        data_format: U7GameplayFormat = "exult",
+    ) -> "U7WeaponInfos":
         del game
-        for name in ("weapons.dat", "WEAPONS.DAT"):
-            path = Path(data_dir) / name
-            if path.is_file():
-                return cls.from_file(str(path))
-        return cls({})
+        world = U7CombatMetadata.from_dir(
+            "weapon", data_dir, patch_dir=patch_dir, data_format=data_format
+        )
+        result = cls.from_bytes(world.resolved_bytes(), data_format=data_format)
+        result.world_metadata = world
+        result._source_warnings.extend(world.warnings)
+        return result
 
     @classmethod
-    def from_file(cls, filepath: str) -> "U7WeaponInfos":
-        return cls.from_bytes(Path(filepath).read_bytes())
+    def from_file(
+        cls, filepath: str, *, data_format: U7GameplayFormat = "exult"
+    ) -> "U7WeaponInfos":
+        return cls.from_bytes(Path(filepath).read_bytes(), data_format=data_format)
 
     @classmethod
-    def from_bytes(cls, data: bytes) -> "U7WeaponInfos":
-        if not data:
-            return cls({})
-        pos = 0
-        count = data[pos]
-        pos += 1
-        if count == 255:
-            if pos + 2 > len(data):
-                return cls({})
-            count = int.from_bytes(data[pos : pos + 2], "little")
-            pos += 2
+    def from_bytes(
+        cls, data: bytes, *, data_format: U7GameplayFormat = "exult"
+    ) -> "U7WeaponInfos":
+        table = read_gameplay_table(
+            data, 2 + _WEAPON_ENTRY_PAYLOAD_SIZE, "WEAPONS.DAT", data_format=data_format
+        )
         records: dict[int, U7WeaponInfo] = {}
         deleted: set[int] = set()
-        for _ in range(count):
-            if pos + 2 + _WEAPON_ENTRY_PAYLOAD_SIZE > len(data):
-                break
-            shape = int.from_bytes(data[pos : pos + 2], "little")
-            pos += 2
-            payload = data[pos : pos + _WEAPON_ENTRY_PAYLOAD_SIZE]
-            pos += _WEAPON_ENTRY_PAYLOAD_SIZE
-            if payload[-1] == 0xFF:
+        for raw in table.records:
+            shape = int.from_bytes(raw[:2], "little")
+            payload = raw[2:]
+            if data_format == "exult" and payload[-1] == 0xFF:
                 records.pop(shape, None)
                 deleted.add(shape)
                 continue
             deleted.discard(shape)
             ammo = int.from_bytes(payload[0:2], "little", signed=True)
             records[shape] = U7WeaponInfo(shape=shape, ammo=ammo)
-        return cls(records, deleted)
+        return cls(records, deleted, table)
 
     @classmethod
     def merge(cls, base: "U7WeaponInfos", patch: "U7WeaponInfos") -> "U7WeaponInfos":
         """Overlay sparse patch records, including explicit deletions."""
+        if base.data_format != patch.data_format:
+            raise ValueError("U7 weapon metadata: cannot mix retail and Exult layers")
         records = {**base.records, **patch.records}
         for shape in patch.deleted:
             records.pop(shape, None)
-        return cls(records)
+        result = cls(records, data_format=base.data_format)
+        result._source_warnings = [*base.warnings, *patch.warnings]
+        return result
 
     def ammo_for_weapon(self, shape: int) -> int | None:
         info = self.records.get(shape)
@@ -608,6 +735,8 @@ def _live_monster_row(
 def live_monsters_from_source(
     source: str,
     container_shapes: set | None = None,
+    *,
+    game: str = "bg",
 ) -> tuple[U7NPCData, str]:
     """Read live monster actors from a save, GAMEDAT dir, or monsnpcs.dat."""
     path = Path(source)
@@ -622,7 +751,7 @@ def live_monsters_from_source(
     else:
         save = U7Save.from_file(str(path))
         data = save.get_data("monsnpcs.dat") or b"\x00\x00"
-    return U7NPCData.from_monsnpcs_bytes(data, container_shapes), source_file
+    return U7NPCData.from_monsnpcs_bytes(data, container_shapes, game=game), source_file
 
 
 def live_monsters_csv(monsters: U7NPCData, source_file: str) -> str:
@@ -638,6 +767,8 @@ def monster_definitions_csv(
     static_dir: str,
     game: str = "bg",
     mod_file: str | None = None,
+    *,
+    exult_flx_path: str | None = None,
 ) -> tuple[str, str, str]:
     """Return base, mod, and merged monster definition CSV text."""
     base = U7MonsterDefinitions.from_dir(static_dir, game=game)
@@ -647,10 +778,16 @@ def monster_definitions_csv(
         else None
     )
     merged = U7MonsterDefinitions.merge(base, mod)
+    defaults = load_u7_actor_flags(game=game, exult_flx_path=exult_flx_path)
+    effective = load_u7_actor_flags(
+        game=game,
+        exult_flx_path=exult_flx_path,
+        patch_dirs=[Path(mod_file).parent] if mod_file else (),
+    )
     return (
-        base.dump_csv(),
-        mod.dump_csv() if mod else _rows_to_csv([]),
-        merged.dump_csv(),
+        base.dump_csv(defaults),
+        mod.dump_csv(effective) if mod else _rows_to_csv([]),
+        merged.dump_csv(effective),
     )
 
 
@@ -746,9 +883,7 @@ def _load_monster_equipment_inputs(
         if mod_monsters
         else Path(static_dir)
     )
-    weapons = U7WeaponInfos.from_dir(str(weapon_dir), game=game)
-    if not weapons.records and weapon_dir != Path(static_dir):
-        weapons = U7WeaponInfos.from_dir(static_dir, game=game)
+    weapons = U7WeaponInfos.from_dir(static_dir, game=game, patch_dir=weapon_dir)
     names = U7ShapeNames.from_static_dir(static_dir) or U7ShapeNames([])
     tfa = U7TypeFlags.from_dir(static_dir)
     return definitions, equipment, weapons, names, tfa
@@ -760,6 +895,8 @@ def monster_equipment_rows(
     mod_monsters: str | None = None,
     equip_file: str | None = None,
     monster_shapes: set[int] | None = None,
+    *,
+    diagnostics: list[str] | None = None,
 ) -> list[dict[str, object]]:
     """Calculate possible monster equipment rows from definitions + equip.dat."""
     definitions, equipment, weapons, names, tfa = _load_monster_equipment_inputs(
@@ -768,6 +905,10 @@ def monster_equipment_rows(
         mod_monsters,
         equip_file,
     )
+    if diagnostics is not None:
+        diagnostics.extend(
+            [*definitions.warnings, *equipment.warnings, *weapons.warnings]
+        )
     return monster_equipment_rows_from_data(
         definitions, equipment, weapons, names, tfa, monster_shapes
     )
@@ -783,26 +924,41 @@ def monster_equipment_rows_from_data(
 ) -> list[dict[str, object]]:
     """Calculate spawn equipment using the caller's resolved world metadata."""
     rows: list[dict[str, object]] = []
-    for definition in definitions.active_records():
+    for definition in definitions.by_shape().values():
         if monster_shapes and definition.shape not in monster_shapes:
             continue
         if definition.equip_offset <= 0:
             continue
         elements = equipment.by_offset(definition.equip_offset)
         for element in elements:
-            if element.shape <= 0 or element.probability <= 0 or element.quantity <= 0:
+            if element.shape <= 0 or element.probability <= 0:
                 continue
             shape_entry = tfa.get(element.shape)
+            weapon = weapons.records.get(element.shape)
+            # Match Exult Shape_info::has_quality, which includes container/actor classes.
+            charged = bool(
+                shape_entry is not None
+                and shape_entry.shape_class in (2, 6, 7, 11, 12, 13)
+                and weapon is not None
+                and weapon.uses_charges
+            )
+            if element.quantity <= 0 and not charged:
+                continue
             is_quantity = (
                 shape_entry is not None
                 and shape_entry.shape_class == U7TypeFlags.SHAPE_CLASS_QUANTITY
             )
-            min_quantity = 1 if is_quantity else element.quantity
-            max_quantity = element.quantity
+            min_quantity = 1 if charged or is_quantity else element.quantity
+            max_quantity = 1 if charged else element.quantity
             avg_on_create = (
-                (1 + element.quantity) / 2 if is_quantity else float(element.quantity)
+                1.0
+                if charged
+                else (1 + element.quantity) / 2
+                if is_quantity
+                else float(element.quantity)
             )
-            expected_quantity = avg_on_create * (element.probability / 100)
+            chance = min(element.probability, 100) / 100
+            expected_quantity = avg_on_create * chance
             base_row = {
                 "monster_shape": definition.shape,
                 "monster_shape_hex": definition.shape_hex,
@@ -815,15 +971,21 @@ def monster_equipment_rows_from_data(
                 "item_shape_hex": f"0x{element.shape:04X}",
                 "item_name": names.get(element.shape),
                 "probability": element.probability,
-                "quantity": element.quantity,
-                "quantity_mode": "random_1_to_quantity"
+                "quantity": 1 if charged else element.quantity,
+                "quantity_parameter": element.quantity,
+                "charges_if_created": element.quantity if charged else "",
+                "quantity_mode": "one_item_with_charges"
+                if charged
+                else "random_1_to_quantity"
                 if is_quantity
                 else "exact_quantity",
                 "min_quantity_if_created": min_quantity,
                 "max_quantity_if_created": max_quantity,
                 "average_quantity_if_created": f"{avg_on_create:.2f}",
                 "expected_quantity_per_spawn": f"{expected_quantity:.2f}",
-                "note": "",
+                "note": "Quantity parameter sets charges on one item."
+                if charged
+                else "",
             }
             rows.append(base_row)
             ammo_shape = weapons.ammo_for_weapon(element.shape)
@@ -838,11 +1000,13 @@ def monster_equipment_rows_from_data(
                         "item_shape_hex": f"0x{ammo_shape:04X}",
                         "item_name": names.get(ammo_shape),
                         "quantity": "2d10",
+                        "quantity_parameter": "",
+                        "charges_if_created": "",
                         "quantity_mode": "exult_random_2d10_ammo",
                         "min_quantity_if_created": 2,
                         "max_quantity_if_created": 20,
                         "average_quantity_if_created": f"{avg_ammo:.2f}",
-                        "expected_quantity_per_spawn": f"{avg_ammo * (element.probability / 100):.2f}",
+                        "expected_quantity_per_spawn": f"{avg_ammo * chance:.2f}",
                         "note": "Generated by Exult when monster equipment creates an ammo-using weapon.",
                     }
                 )
@@ -855,6 +1019,8 @@ def monster_equipment_csv(
     mod_monsters: str | None = None,
     equip_file: str | None = None,
     monster_shapes: set[int] | None = None,
+    *,
+    diagnostics: list[str] | None = None,
 ) -> str:
     return _rows_to_csv(
         monster_equipment_rows(
@@ -863,6 +1029,7 @@ def monster_equipment_csv(
             mod_monsters,
             equip_file,
             monster_shapes,
+            diagnostics=diagnostics,
         )
     )
 
@@ -873,6 +1040,8 @@ def monster_equipment_summary(
     mod_monsters: str | None = None,
     equip_file: str | None = None,
     monster_shapes: set[int] | None = None,
+    *,
+    diagnostics: list[str] | None = None,
 ) -> str:
     rows = monster_equipment_rows(
         static_dir,
@@ -880,6 +1049,7 @@ def monster_equipment_summary(
         mod_monsters,
         equip_file,
         monster_shapes,
+        diagnostics=diagnostics,
     )
     lines = [f"Monster equipment: {len(rows)} possible item row(s)."]
     by_monster: dict[tuple[int, str], list[dict[str, object]]] = {}
@@ -893,7 +1063,12 @@ def monster_equipment_summary(
         label = f"{shape} ({name})" if name else str(shape)
         parts = [
             f"{row['item_shape']}:{row['item_name']} x{row['quantity']}"
-            f" @{row['probability']}%"
+            + (
+                f" ({row['charges_if_created']} charges)"
+                if row["charges_if_created"] != ""
+                else ""
+            )
+            + f" @{row['probability']}%"
             for row in monster_rows
         ]
         lines.append(f"  {label}: " + "; ".join(parts))
@@ -910,6 +1085,8 @@ def monster_report(
     mod_monsters: str | None = None,
     mod_equip: str | None = None,
     output_dir: str | None = None,
+    *,
+    exult_flx_path: str | None = None,
 ) -> dict[str, str]:
     """Build a joined monster report and optionally write CSV files."""
     base_defs = U7MonsterDefinitions.from_dir(static_dir, game=game)
@@ -919,6 +1096,12 @@ def monster_report(
         else None
     )
     merged_defs = U7MonsterDefinitions.merge(base_defs, mod_defs)
+    base_actor_flags = load_u7_actor_flags(game=game, exult_flx_path=exult_flx_path)
+    actor_flags = load_u7_actor_flags(
+        game=game,
+        exult_flx_path=exult_flx_path,
+        patch_dirs=[Path(mod_monsters).parent] if mod_monsters else (),
+    )
     equipment_path = mod_equip or _pick_mod_equip(mod_monsters)
     equipment = (
         U7MonsterEquipment.from_file(equipment_path)
@@ -926,16 +1109,23 @@ def monster_report(
         else U7MonsterEquipment.from_dir(static_dir)
     )
     outputs: dict[str, str] = {
-        "monster_definitions_base.csv": base_defs.dump_csv(),
-        "monster_definitions_mod.csv": mod_defs.dump_csv()
+        "monster_definitions_base.csv": base_defs.dump_csv(base_actor_flags),
+        "monster_definitions_mod.csv": mod_defs.dump_csv(actor_flags)
         if mod_defs
         else _rows_to_csv([]),
-        "monster_definitions_merged.csv": merged_defs.dump_csv(),
+        "monster_definitions_merged.csv": merged_defs.dump_csv(actor_flags),
         "monster_equipment.csv": equipment.dump_csv(),
+        "monster_metadata_warnings.txt": "\n".join(
+            [
+                *merged_defs.warnings,
+                *actor_flags.warnings,
+                *merged_defs.validate_semantics(equipment_count=len(equipment.records)),
+            ]
+        ),
     }
 
     if live_source:
-        monsters, source_file = live_monsters_from_source(live_source)
+        monsters, source_file = live_monsters_from_source(live_source, game=game)
         outputs["live_monsters.csv"] = live_monsters_csv(monsters, source_file)
     else:
         outputs["live_monsters.csv"] = _rows_to_csv([])
@@ -980,6 +1170,7 @@ def monster_report(
             f"live_source={live_source or ''}",
             f"mod_monsters={mod_monsters or ''}",
             f"mod_equip={equipment_path or ''}",
+            "actor_flag_sources=" + "; ".join(actor_flags.sources),
             "",
             "Files:",
             *sorted(name for name in outputs if name != "manifest.txt"),

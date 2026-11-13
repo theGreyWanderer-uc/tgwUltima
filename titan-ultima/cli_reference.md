@@ -34,6 +34,7 @@ titan uw2 <command>             # Ultima Underworld II: Labyrinth of Worlds
 titan u8 <command>              # Ultima 8: Pagan
 titan u7 <command>              # Ultima 7: The Black Gate / Serpent Isle
 titan u6 <command>              # Ultima 6: The False Prophet
+titan md <command>              # Martian Dreams maps, actors, saved state and text
 titan u3 <command>              # Ultima III NES map conversion
 titan u9 <command>              # Ultima 9: Ascension
 titan uo <command>              # Ultima Online Classic Client
@@ -3505,6 +3506,242 @@ shown with their full contents tree.
 
 ---
 
+#### `u7 ireg-rewrite`
+
+Apply a guarded JSON edit plan to a standalone IREG stream. The source stays
+unchanged; the output must be a new file. `--format` is required and selects
+the source grammar, without converting between retail and Exult.
+
+```powershell
+titan u7 ireg-rewrite u7ireg55 --format exult --edits edits.json -o repaired/u7ireg55
+# Quality/flag edits require matching class metadata:
+titan u7 ireg-rewrite u7ireg55 --format exult --edits edits.json --static STATIC --game si -o repaired/u7ireg55
+```
+
+An edit plan contains `source_sha256` (the complete source's SHA-256) and an
+`edits` array. Each edit requires its original record `offset`, the **entire
+record's** `expected_hex` including prefix/length, and exactly one operation:
+
+- `fields`: `frame`, `lift`, `x_byte`, `y_byte`, `quality_byte`, `invisible`,
+  `okay_to_take` or `temporary`, within the supported existing class/layout.
+- `special_payload_hex`: replace a special record's payload; its stored
+  length is recalculated and known types receive structural validation.
+- `index_word`: replace an Exult saved inventory index's raw unsigned word.
+
+For example, generate a plan for a deliberately selected record in Python:
+
+```python
+import hashlib
+import json
+from pathlib import Path
+from titan.u7.ireg_rewrite import read_ireg_wire_records
+
+raw = Path("u7ireg55").read_bytes()
+records = read_ireg_wire_records(raw)
+record = next(r for r in records if r.kind == "object")  # inspect before choosing
+plan = {
+    "source_sha256": hashlib.sha256(raw).hexdigest(),
+    "edits": [{"offset": record.offset, "expected_hex": record.raw.hex(),
+               "fields": {"frame": 0}}],
+}
+Path("edits.json").write_text(json.dumps(plan, indent=2), encoding="utf-8")
+```
+
+All offsets refer to the original input, even when a special grows or shrinks.
+Unedited records, unknown bytes, padding, localized text and controls are
+preserved verbatim. The JSON report on stdout includes source/output hashes,
+original/output offsets and before/after record bytes. Stale plans, duplicate
+offsets, truncation and unsupported field/layout combinations fail before an
+output file is created. No edits produces a byte-identical copy.
+
+Coordinates are stored bytes, not world-coordinate conversion. Retail edits
+must preserve their high nibble because chunk regrouping is not implemented.
+Semantic flag edits are Exult-only; a flag without a stored representation
+is rejected. Ordinary records cannot silently promote to wider formats.
+`quality_byte` is the raw stored byte, including any class-specific flag bits.
+This command does not add/delete/reparent objects, rewrite NPC headers, repack
+saves or validate runtime fit, script execution or the existence of a frame
+in the graphic archive. Work on extracted streams and review the changes.
+
+---
+
+#### `u7 ireg-tree` and `u7 ireg-tree-edit`
+
+Inspect and edit **Exult standalone world IREG** with matching shape metadata.
+The tree retains original object bytes, nested lists, terminators, scoped index
+controls, padding, opaque records and owned/orphan specials. Actor streams and
+retail structural editing are outside this command's scope.
+
+```powershell
+titan u7 ireg-tree u7ireg55 --static STATIC --game bg --superchunk 85 -o tree.json
+titan u7 ireg-tree-edit u7ireg55 --static STATIC --game bg --plan tree-plan.json --dry-run
+titan u7 ireg-tree-edit u7ireg55 --static STATIC --game bg --plan tree-plan.json -o edited/u7ireg55
+# Inspect a world member in a save by occurrence path, including nested saves:
+titan u7 ireg-tree original.sav --static STATIC --superchunk 85 --member-path 7,2 -o saved-tree.json
+```
+
+Both commands accept `--patch-dir DIR`, `--game bg|si` (default BG) and
+`--custom-game`. Select the same metadata during inspection and editing.
+`--superchunk` is decimal 0..143; the filename suffix `55` is hexadecimal 85.
+
+Inspection JSON includes source/context hashes, `objects` with original
+offsets and `record_sha256`/`owned_sha256`, scoped `lists`, `wire_records` and
+`special_owners`. Build a separate plan from these inspected identities:
+
+```json
+{
+  "source_sha256": "<source_sha256 from inspection>",
+  "context_sha256": "<context_sha256 from inspection>",
+  "superchunk": 85,
+  "operations": [
+    {
+      "action": "reparent",
+      "offset": 123,
+      "expected_sha256": "<owned_sha256 of object 123>",
+      "parent_offset": 456,
+      "parent_sha256": "<record_sha256 of destination 456>",
+      "x": 8, "y": 9, "lift": 0,
+      "index_word": 255,
+      "flag_policy": "preserve"
+    }
+  ]
+}
+```
+
+Replace the illustrative offsets and hash placeholders with inspected values.
+Every operation uses original input offsets. Supported operations:
+
+- `delete`: requires `offset`, `expected_sha256` (owned hash) and boolean
+  `cascade`. Nonempty lists, including opaque/control events, require `true`.
+- `reparent`: requires all placement/policy fields shown above. Destination
+  is an ordinary container/body, or `parent_offset: null` with
+  `parent_sha256: null` for the world. Contained x/y are gump bytes 0..255;
+  world x/y are absolute tiles within the same superchunk. Lift must fit the
+  existing record. Egg/barge moves and class-specific receivers are rejected.
+
+`index_word` is an explicit saved-slot request: low byte 0..17 or 255 for no
+slot; the high byte is preserved. It does not certify runtime fit. Moves append
+to the destination list with an explicit index control, leaving original
+persistent controls in place for siblings. Specials move/delete with their
+owner; unrelated opaque bytes remain verbatim. `flag_policy: "preserve"`
+retains decoded invisible/take/temporary flags where their existing layout
+can encode them, otherwise fails. `"inherit"` permits and reports resulting
+flag changes. Subtree cycles, overlapping source subtrees, stale hashes and
+unresolved class dispatch fail before output creation.
+
+To edit a saved member directly, add the inspection's `save` object to the
+plan, containing the archive `source_sha256` and `member_path` array. The
+plan's top-level source hash continues to identify the IREG member. Run
+`ireg-tree-edit original.sav ... -o edited.sav`; it validates the edited tree
+before embedding the exact member occurrence with the save repacker.
+Duplicate/empty members and unrelated payloads retain their identities.
+
+`--dry-run` validates in memory and reports changes without writing. Otherwise
+`-o` must name a new file. The report includes old/new object offsets, raw
+record changes, effective flag changes and hashes. Empty operations produce
+byte-identical output. Creation, class conversion and promotion use the
+additional operations below. Actor headers use `actor-rewrite`; engine-load
+validation remains separate.
+
+Creation adds an `object_id` (unique nonempty string), `record_hex` containing
+exactly one empty object record, and all the explicit placement/policy fields
+shown for reparenting. For `parent_offset`, use an original container/body
+offset, another creation's string ID, or null for the world. New-parent IDs
+can refer forward in the plan and require `parent_sha256: null`. Existing
+parents require their original record hash. Results include `created_offsets`.
+For example, a new empty container of shape 200 at superchunk 85:
+
+```json
+{"action":"create", "object_id":"new_box", "record_hex":"0c0000c8000000000000000000",
+ "parent_offset":null, "parent_sha256":null, "x":300, "y":1800, "lift":0,
+ "index_word":255, "flag_policy":"inherit"}
+```
+
+That record assumes matching metadata identifies shape 200 as an ordinary
+container. Use `create_ireg_record(shape, context=..., frame=0, lift=0)` from
+`titan.u7.ireg_authoring` to generate a record for the actual target metadata.
+It initializes class state to zero; explicit record bytes can supply body,
+egg, spellbook or other class-specific state. Child lists are built through
+creation IDs, rather than packed into `record_hex`.
+
+`convert` and `promote` require `offset` and `expected_sha256` (owned hash).
+Their optional fields are `shape`, `frame`, `lift`, `record_format`
+(`auto`, `ordinary`, `fd`, `fe`), `simple_length` (6 or 10), `body_npc`,
+`replacement_hex`, `allow_data_loss` (default false), and `flag_policy`
+(default preserve). Both action names use the same validated operation.
+
+```json
+{"action":"promote", "offset":123, "expected_sha256":"<owned hash>",
+ "frame":200, "lift":80, "record_format":"auto"}
+```
+
+Auto selects FE when the shape exceeds 1023 or the frame exceeds 63, and FD
+when only lift exceeds 15. Existing extended width is retained. Simple 6-byte
+records can grow to 10 bytes with zero-initialized extension bytes; `body_npc`
+can promote a 12-byte body to the 13-byte word-NPC form. Demotion is rejected.
+Compatible shape changes retain class payload/reserved bytes. Different
+class-layout families require an explicit `replacement_hex` record and
+`allow_data_loss: true`; before/after record hex remains in the report.
+Converting a nonempty container to a non-container requires moving/deleting
+its contents in a preceding guarded transaction. Lists, specials and opaque
+events stay intact. Promotion from an ordinary record with nonzero ignored
+lift bits also requires explicit loss consent, since those bits become
+meaningful in extended lift encoding.
+
+#### `u7 actor-headers` and `u7 actor-rewrite`
+
+Inspect and write complete NPC/monster headers while retaining inventories,
+actor specials, unknown bytes, count groups and trailing data. Source game
+and flavor are explicit; original-new-game bytes are not converted to Exult.
+
+```powershell
+titan u7 actor-headers npc.dat --static STATIC --game si --flavor runtime -o actors.json
+titan u7 actor-headers original.sav --static STATIC --game si --flavor runtime --member-path 7 -o saved-actors.json
+titan u7 actor-headers monsnpcs.dat --static STATIC --game si --flavor runtime --kind monsters
+titan u7 actor-rewrite npc.dat --static STATIC --plan actor-plan.json --dry-run
+titan u7 actor-rewrite npc.dat --static STATIC --plan actor-plan.json -o edited/npc.dat
+```
+
+Both commands accept `--patch-dir` and `--custom-game`. `actor-headers`
+requires `--game bg|si` and `--flavor runtime|original-new-game`; monster
+streams require runtime. The edit plan copies source/context hashes, game,
+kind and flavor from inspection. Each edit selects an actor ordinal and its
+complete-record hash, then either named `fields` or a complete `header_hex`:
+
+```json
+{
+  "source_sha256":"<inspected actor-stream hash>",
+  "context_sha256":"<inspected metadata hash>",
+  "game":"si", "kind":"npc", "flavor":"runtime",
+  "edits":[{"index":0, "expected_sha256":"<actors[0].sha256>",
+            "fields":{"health":20, "strength":25, "usecode_name_hex":"6d795f6e7063"}}]
+}
+```
+
+Named fields cover packed position/shape/frame/lift/usecode, stats, status
+words, schedule fields, 16-bit shape/polymorph extensions, flags, food,
+names and raw documented header fields. `shape` edits the low ten packed
+bits; `shape16` is the separate runtime override. `extended_skin` writes the
+saved byte; iflag1 bit 4 controls whether the engine uses it. Strength preserves BG's
+two high bits and SI's three high bits. Other masked stats preserve their
+status bits. Overlapping raw/masked edits are rejected.
+`name` encodes Latin-1 with a 16-byte limit; `name_hex` supplies exactly 16
+bytes for localized/raw names. `usecode_name_hex` inserts/resizes/removes the
+runtime named-function area and updates its flag; empty hex removes it.
+`header_hex` can replace every header byte, including reserved regions.
+The replacement must have the exact prefix length implied by its flags.
+
+Header edits cannot add/remove inventory or actor-special framing. All tails
+are preserved and independently reparsed. Runtime extension field edits are
+rejected with original-new-game flavor. For direct save embedding, copy the
+inspection's `save` block into the plan; the leaf must be `NPC.DAT` or
+`MONSNPCS.DAT` matching `kind`. Output is a new file, with archive/member/actor
+hash guards. `--dry-run` validates the entire edit and repack in memory.
+This does not add/remove actors, move objects between actors, simulate load
+corrections or certify engine behavior.
+
+---
+
 #### `u7 egg-query`
 
 Query egg trigger objects from IREG. Surfaces each egg's type, usecode function number, trigger probability, distance, criteria, and flags. With no filter flags, launches an interactive wizard; supply any filter flag to run non-interactively.
@@ -4572,6 +4809,64 @@ titan u7 save-extract exult00bg.sav -e flaginit -o flags/
 
 ---
 
+#### `u7 save-repack`
+
+Replace selected member occurrences in a U7 named Flex or ZIP save/INITGAME
+archive. Unedited payloads, duplicates, named empty members, sparse Flex slots,
+raw names and container metadata are preserved. ZIP level-2 groups and
+embedded map Flex archives are supported without flattening their storage.
+
+```powershell
+# Obtain occurrence paths and source/member SHA-256 guards.
+titan u7 save-list original.sav --strict --json > members.json
+# Validate the entire replacement plan and resulting archive without writing.
+titan u7 save-repack original.sav --plan repack.json --dry-run
+# Write a new archive; existing output paths are rejected.
+titan u7 save-repack original.sav --plan repack.json -o edited.sav
+```
+
+`repack.json` has this shape; replace the example path/hash values with those
+from the member listing:
+
+```json
+{
+  "source_sha256": "<64-digit source SHA-256>",
+  "replacements": [
+    {
+      "member_path": [7],
+      "expected_sha256": "<64-digit original member SHA-256>",
+      "file": "edited/u7ireg55"
+    }
+  ]
+}
+```
+
+Replacement file paths are relative to the plan file, unless absolute.
+`member_path` uses zero-based **occurrence indices**, not names or sparse Flex
+slot numbers. Duplicate names remain distinct. ZIP level-2 members use the
+flattened indices from `save-list --json`. For a member inside an embedded
+Flex map, use a path such as `[7, 2]`: outer occurrence 7, then inner
+occurrence 2. List an extracted inner archive separately to obtain its indices
+and original payload hashes. Ancestor/descendant or duplicate path edits in one
+plan are rejected.
+
+Both source and member hashes are required by the CLI. All replacements and
+the resulting container are validated before output creation. A report on
+stdout records source/output hashes and each leaf member's before/after hash
+and size. An empty replacement list, or byte-identical replacement content,
+produces a byte-identical archive. Original archives are never overwritten.
+
+Changed ZIP members retain their compression method (stored/deflated); other
+compressed records are copied verbatim. Editing ZIP64, multidisk, aliased or
+unsupported signed/container layouts is rejected rather than converted.
+This command replaces existing payloads; it does not add/delete/rename
+members, guess repairs for damaged archives, or certify that replacement game
+state is semantically valid. Use `ireg-tree-edit` for guarded Exult world
+deletion/reparenting with direct save embedding, or `ireg-rewrite` for field edits,
+then embed its output through this plan.
+
+---
+
 #### `u7 gflag-dump`
 
 Dump global flags from an Exult savegame or a loose `flaginit` file.
@@ -5155,9 +5450,18 @@ titan u6 tile-export-all -g "C:/Ultima6" -o tiles_png/
 Render the U6 surface world or a dungeon level to PNG, with animated
 tiles and optional world-object overlay.
 
+With `--objects`, a crop includes visible sprite cells even when the object's
+anchor lies just beyond its right or bottom edge. Object layering and animation
+ticks use the existing U6 rules. See the [crop audit](reference/u6/render/u6_map_crop_reference.md).
+Objects with the invisibility flag are hidden by default; `--show-invisible`
+includes them and requires `--objects`. The z-order audit accepts the same
+visibility option. Crop x/y must be nonnegative, width/height must be positive,
+and the entire region must fit the selected 1024×1024 surface or 256×256
+underground map. Invalid regions report an error without writing the output.
+
 ```
 titan u6 map-render [-g DIR] [-p FILE] [--region x,y,w,h] [--dungeon N]
-                     [--full] [--tick N] [--objects] [-o FILE]
+                     [--full] [--tick N] [--objects] [--show-invisible] [-o FILE]
 ```
 
 | Argument | Description |
@@ -5169,6 +5473,7 @@ titan u6 map-render [-g DIR] [-p FILE] [--region x,y,w,h] [--dungeon N]
 | `--full` | Render the entire surface (very large image) |
 | `--tick N` | Animation tick, for water/animated tiles (default: `0`) |
 | `--objects` | Overlay world objects (furniture, items, etc.) from `LZOBJBLK`/`LZDNGBLK` |
+| `--show-invisible` | Include invisible world objects; requires `--objects`; default is hidden |
 | `-o FILE`, `--output FILE` | Output PNG path |
 
 **Examples**
@@ -5187,26 +5492,31 @@ titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
 
 #### `u6 map-audit-zorder`
 
-Whole-map audit for unresolved object z-order ties in `map-render
---objects`. Reproduces that command's own anchor/overflow/layer-tier
-rules and flags every world coordinate where two or more objects land
-on the exact same final tier -- a coin-flip decided by file order, not
-a deliberate hierarchy. A reported pair is a *candidate*, not a
-confirmed bug -- cross-check against a real screenshot before trusting
-one.
+Inspect ordered object overlaps in `map-render --objects` at animation tick zero.
+Uses the renderer's original U6 cell-stack rules, without object/tile/coordinate
+exceptions. Ordinary cells prepend, foreground anchors insert before existing
+foreground cells, and foreground overflow appends. Background cells replace the
+selected ground tile. Earlier ordinary records therefore appear above later ones.
+
+Rows show distinct named overlays with intersecting opaque pixels: `UNDER`,
+`OVER`, `order` and `overlap_pixels` describe the actual draw order. The header is
+`total ordered overlap candidates`. These are deterministic overlaps to inspect,
+not unresolved ties or confirmed rendering errors. Backgrounds are not competing
+overlays. See the [U6 layer policy](reference/u6/render/u6_object_layering_reference.md) for validation and scope.
 
 ```
 titan u6 map-audit-zorder [-g DIR] [--min-winner-opacity F] [--min-loser-opacity F]
-                           [--limit N] [--dungeons]
+                           [--limit N] [--dungeons] [--show-invisible]
 ```
 
 | Argument | Description |
 |----------|-------------|
 | `-g DIR`, `--gamedir DIR` | U6 game directory |
-| `--min-winner-opacity F` | Min opacity for a tied tile to count as a plausible occluding "winner" (default: `0.60`) |
-| `--min-loser-opacity F` | Min opacity for a tied tile to count as a real, hideable "loser" (default: `0.10`) |
+| `--min-winner-opacity F` | Minimum opacity of the top overlay (default: `0.60`) |
+| `--min-loser-opacity F` | Minimum opacity of an underlying overlay (default: `0.10`) |
 | `--limit N` | Max rows to print, `0` = unlimited (default: `200`) |
 | `--dungeons` | Also scan all 5 dungeon levels |
+| `--show-invisible` | Include invisible world objects in the audit, matching that render mode |
 
 **Examples**
 ```bash
@@ -5498,6 +5808,92 @@ titan u6 schedule-dump SCHEDULE --actor 0
 ```
 
 ---
+
+## Martian Dreams commands (`titan md`)
+
+### `map-render`
+
+Render the MD surface or an underground level using the shared U6 format
+readers and MD-specific resource wrappers, palette and animation defaults.
+
+```text
+titan md map-render -g <MARTIAN-or-parent> --region 385,596,64,64 --objects --actors -o md_start.png
+titan md map-render -g <MARTIAN> --dungeon 0 --objects -o underground.png
+titan md map-render -g <MARTIAN> --full --objects -o world.png
+```
+
+| Option | Description |
+|---|---|
+| `-g`, `--gamedir` | MARTIAN directory or installation parent; defaults to `[md.game] base` |
+| `-p`, `--palette` | Palette path; defaults to the game's `MDPAL` |
+| `--region x,y,w,h` | Crop in tiles; must fit within the selected map |
+| `--dungeon 0-4` | Select an underground level instead of the surface |
+| `--full` | Entire selected map; cannot be combined with `--region` |
+| `--objects` | Overlay visible world objects with multi-tile footprints |
+| `--actors` | Overlay MD party/NPC/creature appearances between ordinary objects and foreground cells |
+| `--savegame DIR` | Read DOS `OBJLIST` clock/world flags and any selected actor/object overlays |
+| `--show-markers` | Include MD marker tiles 2041-2047; requires `--objects` |
+| `--show-invisible` | Include invisible world-object sprites; requires `--objects`; default is hidden |
+| `--tick N` | Nonnegative animation tick for automatically animated tiles |
+| `--palette-tick N` | VGA palette update phase, independent of tile tick; `0` keeps original colors |
+| `--lighting` | Apply DOS lighting/dither masks, visible wall faces and object-cell clipping to a region up to 11x11 tiles, viewed from its center; default atlas output is full bright |
+| `-o`, `--output` | Output PNG; defaults to `md_surface.png` or `md_underground_N.png` |
+
+Specify `--region`, `--dungeon` or `--full`. The surface produces a
+16384x16384 image; a complete underground level produces a 4096x4096 image.
+Objects and actors default to the packaged initial world. Actor 118 talk flag 5
+selects the filled cistern; canals require both flags 5 and 6 (opened valves).
+Both use fixed dry/wet art, independent of `--tick`. Power flags control
+machinery animations and restore load-time lamp/furnace frames and steam leaks;
+watches follow the saved hour. See [power-state reference](reference/md/animation/md_power_animation_reference.md) for the
+verified stop/start ranges and timing.
+Invisible NPCs are hidden, while invisible party members retain outlines.
+`--show-invisible` controls world objects; actor overlays retain their existing
+NPC visibility and party-outline rules. Marker inclusion still uses `--show-markers`,
+and `--lighting` still applies normal visibility and wall-corner clipping.
+Cistern filling/release cutscenes and transient effects are not simulated.
+`--lighting` reads the selected save's clock, dream illumination, readied party
+lights and selected actor's brown-berry timer. Nearby powered lamp posts and
+other local light sources contribute through the surrounding view context.
+Visible brick, interior and iron wall faces follow neighboring visibility;
+objects are clipped per footprint cell at unseen wall corners. See the
+[viewport compositor trace](reference/md/render/md_viewport_reference.md) for wall families and native checks.
+See [lighting and palette reference](reference/md/palette/md_lighting_palette_reference.md) for original
+clock thresholds, palette ranges, bounded-view semantics and executable checks.
+See [water-state reference](reference/md/animation/md_water_animation_reference.md) for water-state evidence.
+No MD save-editing commands are exposed.
+
+### Actor, save-state and reference commands
+
+All commands below accept `-g/--gamedir` (or `[md.game] base`) and
+`-o/--output FILE`. Output is UTF-8; omit the file for stdout.
+
+| Command | Selection | Output |
+|---|---|---|
+| `actor-list` | `--actor 0-255`; defaults to active slots; `--savegame DIR` selects saved actors | JSON actor names, positions, appearance, stats and raw flags |
+| `gamestate-dump` | `--savegame DIR`; defaults to initial state | JSON party, game clock, gender, dream flags, berry timers, power, cistern pressure, opened valves and resulting canal state |
+| `converse-dump` | `--item N`; defaults to all NPC scripts | `TALK.LZC` bytecode disassembly, retaining unknown opcodes and operands |
+| `converse-report` | All NPC scripts | JSON coverage and unknown opcode locations |
+| `look-dump` | `--tile 0-2047`; defaults to stored name records | JSON raw/singular/plural names and range-end tile numbers |
+| `book-dump` | `--book N`; defaults to all text records | `MDTEXT.LZC` text with line/page markers preserved |
+
+The MD actor tables use base appearance `0x16f1`, talk flags `0x18f1`,
+movement flags `0x1af1`, combat mode `0x13f1`, movement points `0x15f1`,
+and worktype `0x11f1`. The byte at `0x12f1` is retained as raw `magic`,
+matching Nuvie's loader; its MD gameplay semantics are not established.
+Cold is status bit 0, replacing U6's protection meaning.
+
+MD game time starts at `0x1cf3`. Canal restoration is actor 118 talk flag 6
+(retail Trippet script, item 53, offset 2038); power is actor 115 flag 2.
+These inspections never interpret U6 karma, sacred-quest or Gargish bytes
+as MD state. `TALK.LZC` record 0 is non-NPC build text and is excluded from
+normal dialogue exports. MD `0xdf` at Dr. Blood's offsets 2243 and 2710 is
+`SET_YSTRING`: evaluate an actor expression, apply the game's actor-ID
+resolution, and assign `"you"` for resolved actor 1 or the actor's name to
+string variable `0x22` (`$Y`). Unlike `0xd8` (`SETNAME`), it special-cases
+actor 1. The MD-specific name was verified in retail `GAME.EXE` and bounded
+machine-code emulation; the context-free U6 opcode table remains unchanged.
+See [the investigation](reference/md/converse/md_converse_opcode_df_reference.md) for addresses and reproduction.
 
 ## Ultima 9 commands (`titan u9`)
 
@@ -9273,7 +9669,7 @@ A value on the command line always wins.
 | `u6 tile-export` | Export one U6 tile to PNG |
 | `u6 tile-export-all` | Batch-export a range of U6 tiles to PNG |
 | `u6 map-render` | Render the U6 surface world or a dungeon level to PNG |
-| `u6 map-audit-zorder` | Flag candidate object z-order ties in `map-render --objects` |
+| `u6 map-audit-zorder` | Inspect engine-ordered object pixel overlaps in `map-render --objects` |
 | `u6 object-list` | List world objects in a surface block or dungeon level |
 | `u6 egg-list` | List every egg (object spawner) in a surface block or dungeon level |
 | `u6 actor-list` | List the NPC/actor identity table |

@@ -46,7 +46,9 @@ def library(tmp_path, monkeypatch):
     static, patch = tmp_path / "game" / "static", tmp_path / "game" / "patch"
     static.mkdir(parents=True)
     patch.mkdir()
-    target = ArchiveTarget("Test SI", static, patch, root=static.parent)
+    target = ArchiveTarget(
+        "Test SI", static, patch, standalone=True, root=static.parent
+    )
     flex(
         static / "SHAPES.VGA", [bytes(64), *([b""] * 149), sprite(), sprite(), sprite()]
     )

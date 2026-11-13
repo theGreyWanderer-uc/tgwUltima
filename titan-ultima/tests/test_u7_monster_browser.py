@@ -119,7 +119,7 @@ def owner(tmp_path, monkeypatch):
     for path in (static, patch, gamedat, saves):
         path.mkdir()
     (static / "MONSTERS.DAT").write_bytes(
-        definition(150) + definition(151, 20) + definition(152, 30, equip=0)
+        b"\x03" + definition(150) + definition(151, 20) + definition(152, 30, equip=0)
     )
     (static / "EQUIP.DAT").write_bytes(equipment())
     (static / "WEAPONS.DAT").write_bytes(b"\x01" + weapon(161, 162))
@@ -161,10 +161,52 @@ def answers(monkeypatch, sequence):
     monkeypatch.setattr("builtins.input", lambda prompt="": next(pending))
 
 
+def test_browser_uses_si_live_actor_strength_bits(owner):
+    record = bytearray(actor())
+    record[18] = 0x36  # Skin bit 5 is not part of SI strength.
+    (owner.gamedat / "MONSNPCS.DAT").write_bytes(struct.pack("<H", 1) + record)
+    session = browser.load_session(owner, Source(owner.gamedat, "live"), "si")
+    assert session.npcs.npcs[0].strength == 22
+
+
 def definitions(owner):
     return browser.load_session(
         owner, Source(owner.static / "MONSTERS.DAT", "definitions"), "si"
     )
+
+
+def test_actor_abilities_are_resolved_from_patch_separately_from_binary(
+    owner, monkeypatch
+):
+    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    raw = bytearray(definition(150))
+    raw[15] = 0
+    (owner.patch / "monsters.dat").write_bytes(b"\1" + raw)
+    (owner.patch / "shape_info.txt").write_text(
+        "%%section actor_flags\n:150/0/0/1/1/0/0/0/0\n%%endsection\n"
+    )
+    session = definitions(owner)
+    entry = next(e for e in session.records if e.shape == 150)
+    assert not entry.definition.can_teleport
+    assert entry.definition.as_row(session.actor_flags)["effective_can_teleport"] == 1
+    text = browser.detail(session, entry)
+    assert "behavior category: noncombatant" in text
+    assert "Effective actor flags: can_teleport|can_summon" in text
+    assert str(owner.patch / "shape_info.txt") in text
+
+
+def test_foreign_definition_does_not_inherit_owner_actor_flags(
+    owner, tmp_path, monkeypatch
+):
+    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    (owner.patch / "shape_info.txt").write_text(
+        "%%section actor_flags\n:190/0/0/1\n%%endsection\n"
+    )
+    path = tmp_path / "foreign" / "MONSTERS.DAT"
+    path.parent.mkdir()
+    path.write_bytes(b"\1" + definition(190))
+    session = browser.load_session(owner, Source(path, "definitions"), "si")
+    assert session.actor_flags.resolve(190).flag_value(2) is None
 
 
 def live(owner):
@@ -173,7 +215,7 @@ def live(owner):
 
 def test_base_plus_sparse_patch_definitions_and_deletions(owner):
     (owner.patch / "monsters.dat").write_bytes(
-        b"\x01"
+        b"\x03"
         + definition(150, 40)
         + definition(151, deleted=True)
         + definition(155, 15)
@@ -193,7 +235,7 @@ def test_foreign_definition_file_does_not_inherit_owner_definitions(owner, tmp_p
     other = tmp_path / "other"
     other.mkdir()
     path = other / "MONSTERS.DAT"
-    path.write_bytes(definition(190))
+    path.write_bytes(b"\x01" + definition(190))
     session = browser.load_session(owner, Source(path, "definitions"), "si")
     assert [e.shape for e in session.records] == [190]
 

@@ -15,6 +15,7 @@ from titan import _wizard_ui as ui
 from titan._terminal_image import play_terminal, terminal_image
 from titan.u7 import npc_browser as npc_ui
 from titan.u7.archive_targets import ArchiveTarget
+from titan.u7.actor_flags import U7ActorFlags, load_u7_actor_flags
 from titan.u7.eggs import EggQueryParams, query_eggs
 from titan.u7.install import existing_path
 from titan.u7.monster import (
@@ -26,7 +27,8 @@ from titan.u7.monster import (
     monster_equipment_rows_from_data,
 )
 from titan.u7.names import U7ShapeNames
-from titan.u7.save import U7Identity, U7NPC, U7NPCData, U7ReadyTypes, U7Save
+from titan.u7.save import U7Identity, U7NPC, U7NPCData, U7Save
+from titan.u7.gameplay_metadata import read_gameplay_table
 from titan.u7.shape_archive import find_archive
 from titan.u7.shape_browser import ShapeLibrary, load_library, playback_provider
 from titan.u7.target_picker import game_targets, select_target
@@ -60,6 +62,7 @@ class Session(npc_ui.Session):
     archive: U7Save | None = field(default=None, repr=False)
     spawn_cache: dict[int, list[dict[str, object]]] = field(default_factory=dict)
     world_matches: bool = True
+    actor_flags: U7ActorFlags = field(default_factory=U7ActorFlags)
 
     def name(self, entry: MonsterEntry) -> str:
         return clean(
@@ -102,24 +105,18 @@ def _definitions(
     merged = U7MonsterDefinitions([])
     for path in paths:
         data = path.read_bytes()
-        if len(data) % 25 not in {0, 1}:
-            raise ValueError(f"Incomplete MONSTERS.DAT record: {path}")
         parsed = U7MonsterDefinitions.from_bytes(data, str(path), game)
+        if parsed.warnings:
+            raise ValueError(f"{path}: {'; '.join(parsed.warnings)}")
         merged = U7MonsterDefinitions.merge(merged, parsed)
     return merged
 
 
 def _counted_records(data: bytes, stride: int, name: str) -> None:
     """The existing readers tolerate partial tables; report those explicitly."""
-    if not data:
-        raise ValueError(f"{name} header is incomplete")
-    header, count = 1, data[0]
-    if count == 255:
-        if len(data) < 3:
-            raise ValueError(f"{name} extended count is incomplete")
-        header, count = 3, int.from_bytes(data[1:3], "little")
-    if len(data) < header + count * stride:
-        raise ValueError(f"{name} entries are incomplete")
+    table = read_gameplay_table(data, stride, name)
+    if table.warnings:
+        raise ValueError("; ".join(table.warnings))
 
 
 def _metadata(session: Session) -> tuple[set[int] | None, int | None]:
@@ -164,12 +161,7 @@ def _metadata(session: Session) -> tuple[set[int] | None, int | None]:
             shape_count = len(shapes.effective.records)
     except READ_ERRORS as error:
         session.warnings.append(f"Shape bounds unavailable: {error}")
-    ready = npc_ui.owner_file(target, "READY.DAT")
-    if ready:
-        try:
-            session.ready = U7ReadyTypes.from_file(str(ready), game=session.game)
-        except READ_ERRORS as error:
-            session.warnings.append(f"Ready-slot preferences unavailable: {error}")
+    npc_ui.load_inventory_metadata(session, session.typeflags)
     return containers, shape_count
 
 
@@ -184,6 +176,7 @@ def _equipment(session: Session) -> None:
         blob = path.read_bytes()
         _counted_records(blob, 60, "EQUIP.DAT")
         session.equipment = U7MonsterEquipment.from_bytes(blob, str(path))
+        session.warnings.extend(session.equipment.warnings)
     except READ_ERRORS as error:
         session.warnings.append(f"Possible equipment unavailable: {error}")
         return
@@ -243,6 +236,7 @@ def load_session(target: ArchiveTarget, source: npc_ui.Source, game: str) -> Ses
                 session.identity = U7Identity.from_bytes(identity.read_bytes()).game
         else:
             session.archive = U7Save.from_file(str(path))
+            session.warnings.extend(session.archive.warnings)
             session.title, session.format = (
                 session.archive.title,
                 session.archive.container_format,
@@ -278,7 +272,39 @@ def load_session(target: ArchiveTarget, source: npc_ui.Source, game: str) -> Ses
             session.warnings.append(
                 "No active monster definitions found for this source."
             )
+        try:
+            flag_patch = target.patch
+            owned = {
+                p.resolve()
+                for p in (
+                    find_archive(target.static, "MONSTERS.DAT")
+                    if target.static
+                    else None,
+                    find_archive(target.patch, "MONSTERS.DAT"),
+                )
+                if p
+            }
+            if (
+                source.kind == "definitions"
+                and source.path.is_file()
+                and source.path.resolve() not in owned
+            ):
+                flag_patch = source.path.parent
+            session.actor_flags = load_u7_actor_flags(
+                game=game, patch_dirs=[flag_patch]
+            )
+            session.warnings.extend(session.actor_flags.warnings)
+        except READ_ERRORS as error:
+            session.warnings.append(f"Actor flag metadata unavailable: {error}")
         _equipment(session)
+        session.warnings.extend(
+            session.definitions.validate_semantics(
+                equipment_count=len(session.equipment.records)
+                if session.equipment is not None
+                else None,
+                shape_count=shape_count,
+            )
+        )
     if source.kind == "definitions":
         session.records = [
             MonsterEntry(d.shape, d.shape, d) for d in session.definitions.records
@@ -288,7 +314,13 @@ def load_session(target: ArchiveTarget, source: npc_ui.Source, game: str) -> Ses
             "monsnpcs.dat is not present in this source; no monsters are inherited from other saves or GAMEDAT."
         )
     else:
-        session.npcs = U7NPCData.from_monsnpcs_bytes(blob, containers, shape_count)
+        session.npcs = U7NPCData.from_monsnpcs_bytes(
+            blob,
+            containers,
+            shape_count,
+            game=game,
+            ireg_context=session.ireg_context,
+        )
         expected = session.npcs.num_npcs1
         if (
             len(session.npcs.npcs) != expected
@@ -342,7 +374,9 @@ def filter_entries(
     return matches
 
 
-def definition_detail(definition: U7MonsterDefinition) -> str:
+def definition_detail(
+    definition: U7MonsterDefinition, actor_flags: U7ActorFlags | None = None
+) -> str:
     abilities = [
         label
         for flag, label in (
@@ -366,10 +400,22 @@ def definition_detail(definition: U7MonsterDefinition) -> str:
             f"Definition source: {definition.source_file} (offset {definition.offset})",
             f"Base stats: STR {definition.strength}; DEX {definition.dexterity}; INT {definition.intelligence}; combat {definition.combat}",
             f"Armour {definition.armor}; innate weapon damage {definition.weapon}; reach {definition.reach}",
-            f"Alignment: {definition.alignment_name}; attack: {definition.attack_mode_name}",
-            f"Movement: {definition.move_flags or 'none'}; abilities: {', '.join(abilities) or 'none'}",
+            f"Alignment: {definition.alignment_name}; behavior category: {definition.behavior_category_name}",
+            f"Movement: {definition.move_flags or 'none'}; stored legacy abilities/traits: {', '.join(abilities) or 'none'}",
             f"Immune damage: {definition.immune_names or 'none'}; vulnerable damage: {definition.vulnerable_names or 'none'}",
             f"Protected effects: {', '.join(safe) or 'none'}; SFX {definition.sfx}; equipment offset {definition.equip_offset}",
+            *(
+                [
+                    f"Effective actor flags: {actor_flags.resolve(definition.shape, legacy_flags=definition.legacy_actor_flags).summary()}"
+                    + (
+                        f"; sources: {'; '.join(actor_flags.sources)}"
+                        if actor_flags.sources
+                        else ""
+                    )
+                ]
+                if actor_flags is not None
+                else []
+            ),
         ]
     )
 
@@ -390,10 +436,14 @@ def detail(session: Session, entry: MonsterEntry) -> str:
             ]
         )
     lines.append(
-        definition_detail(entry.definition)
+        definition_detail(entry.definition, session.actor_flags)
         if entry.definition
         else "No matching monster definition available in this world."
     )
+    if entry.definition is None and session.world_matches:
+        lines.append(
+            f"Effective actor flags: {session.actor_flags.resolve(entry.shape).summary()}"
+        )
     return "\n".join(lines)
 
 
@@ -462,6 +512,11 @@ def equipment_lines(session: Session, entry: MonsterEntry) -> list[str]:
         ]
     return [
         f"Shape {row['item_shape']} {clean(str(row['item_name'])) or '(unnamed)'}: {row['probability']}% chance; quantity {row['min_quantity_if_created']}-{row['max_quantity_if_created']}"
+        + (
+            f" | {row['charges_if_created']} charges on one item"
+            if row["charges_if_created"] != ""
+            else ""
+        )
         + (
             f" | generated ammunition for weapon {row['generated_from_item_shape']}"
             if row["generated"]
@@ -640,7 +695,7 @@ def _export(
     elif action == "C":
         if session.source.kind == "definitions":
             rows = [
-                {"name": session.name(e), **e.definition.as_row()}
+                {"name": session.name(e), **e.definition.as_row(session.actor_flags)}
                 for e in matches
                 if e.definition
             ]
@@ -672,7 +727,19 @@ def _export(
             "record_number": current.number,
             "shape": current.shape,
             "name": session.name(current),
-            "definition": current.definition.as_row() if current.definition else None,
+            "definition": current.definition.as_row(session.actor_flags)
+            if current.definition
+            else None,
+            "actor_flag_sources": session.actor_flags.sources,
+            "effective_actor_flags": session.actor_flags.resolve(
+                current.shape,
+                legacy_flags=current.definition.legacy_actor_flags
+                if current.definition
+                else 0,
+                legacy_source=current.definition.source_file
+                if current.definition
+                else "",
+            ).as_row(),
             "actual_actor": asdict(current.actor) if current.actor else None,
             "actual_inventory": npc_ui.inventory_rows(session, current.actor)
             if current.actor

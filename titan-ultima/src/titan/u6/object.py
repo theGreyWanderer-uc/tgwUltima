@@ -118,7 +118,7 @@ import os
 import struct
 from dataclasses import dataclass, field
 
-from titan.u6.lzw import U6Lzw
+from titan.u6.game_profile import U6GameProfile, U6_PROFILE
 from titan.u6.map import DUNGEON_LEVELS, SURFACE_SIDE_SUPERCHUNKS, SURFACE_SUPERCHUNKS
 
 # Location (mutually exclusive; status & STATUS_LOCATION_MASK == one of these)
@@ -315,12 +315,12 @@ class U6WorldObjects:
         self.objlist_tail = objlist_tail  # raw bytes after LZDNGBLK's 5 blocks; see titan.u6.actor
 
     @classmethod
-    def from_directory(cls, gamedir: str | os.PathLike[str]) -> U6WorldObjects:
-        def p(name: str) -> str:
-            return os.path.join(gamedir, name)
-
-        surface_data = U6Lzw.decompress_file(p("LZOBJBLK"))
-        dungeon_data = U6Lzw.decompress_file(p("LZDNGBLK"))
+    def from_directory(
+        cls, gamedir: str | os.PathLike[str], *, profile: U6GameProfile = U6_PROFILE
+    ) -> U6WorldObjects:
+        """Load initial world objects using the selected game's resource wrappers."""
+        surface_data = profile.read_resource(gamedir, "LZOBJBLK")
+        dungeon_data = profile.read_resource(gamedir, "LZDNGBLK")
         return cls.from_parts(surface_data, dungeon_data)
 
     @classmethod
