@@ -7,7 +7,7 @@ import struct
 import pytest
 
 from titan.u7.save import U7NPCData, U7Save
-from tests.test_u7_remaining_followups import actor_record
+from tests.test_u7_ammo_avatar_context import actor_record
 
 
 def actor(name, used, *, inventory=b""):

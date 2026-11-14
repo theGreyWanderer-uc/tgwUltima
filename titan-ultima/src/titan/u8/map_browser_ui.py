@@ -38,15 +38,7 @@ PAGE_SIZE = 25
 
 
 def _map_menu(title: str, labels: dict[str, str], default: str = "B") -> str:
-    ui.legacy_menu(title, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ",
-        list(labels),
-        default if default in labels else next(iter(labels)),
-        labels=labels,
-        message=title,
-        hotkeys=True,
-    )
+    return ui.menu(title, labels, default, first_if_missing=True)
 
 
 def _map_number(title: str, low: int, high: int, default: int = 0) -> int:

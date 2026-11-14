@@ -115,3 +115,43 @@ def test_monster_context_keeps_variable_actor_tails() -> None:
     ]
     assert (monsters.npcs[0].magic, monsters.npcs[1].magic) == (0, 23)
     assert monsters._parsed_bytes == len(data) + 2
+
+
+def schedules(names=(b"walk_to_market", b"night_watch"), *, trailing=b""):
+    block = b"".join(struct.pack("<H", len(name)) + name for name in names)
+    data = struct.pack("<iIH2H", -2, 2, len(names), 0, 1)
+    if names:
+        data += struct.pack("<H", len(block)) + block
+    return data + struct.pack("<HHBBBB", 300, 400, 2, 3, 0x80, 0x7F) + trailing
+
+
+def test_scripted_schedule_names_raw_bytes_and_trailing_diagnostics():
+    raw = schedules(trailing=b"tail")
+    parsed = U7Schedules.from_bytes(raw, strict=True)
+    assert parsed.script_names == ("walk_to_market", "night_watch")
+    assert parsed.name_for_type(0x80) == "walk_to_market"
+    assert (
+        "walk_to_market" in parsed.dump_csv()
+        and "walk_to_market" in parsed.dump_detail()
+    )
+    assert parsed.raw == raw and parsed.trailing_data == b"tail" and parsed.warnings
+
+
+def test_shared_schedule_parser_rejects_every_truncated_prefix_strictly():
+    raw = schedules()
+    for length in range(len(raw)):
+        with pytest.raises(ValueError):
+            U7Schedules.from_bytes(raw[:length], strict=True)
+    partial = U7Schedules.from_bytes(raw[:-1])
+    assert not partial.complete and partial.warnings and not partial.entries
+
+
+def test_script_block_lengths_and_cumulative_counts_are_validated():
+    raw = bytearray(schedules())
+    struct.pack_into("<H", raw, 16, 65535)
+    with pytest.raises(ValueError, match="script-name"):
+        U7Schedules.from_bytes(raw, strict=True)
+    with pytest.raises(ValueError, match="not cumulative"):
+        U7Schedules.from_bytes(struct.pack("<i3H", 3, 0, 2, 1), strict=True)
+    with pytest.raises(ValueError, match="Unsupported"):
+        U7Schedules.from_bytes(struct.pack("<i", -3))

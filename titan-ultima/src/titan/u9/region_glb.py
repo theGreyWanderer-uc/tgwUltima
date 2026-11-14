@@ -34,7 +34,7 @@ from titan.u9.map_render import (
     U9MapTextureSource,
 )
 from titan.u9.mesh_export import U9ModelMeshTriangle, flatten_model_triangles
-from titan.u9.model import MATERIAL_ALPHA_NONE, U9Material
+from titan.u9.model import U9Material
 from titan.u9.object_placement import (
     U9ModelProvider,
     U9ObjectFootprintFilter,
@@ -44,6 +44,7 @@ from titan.u9.object_placement import (
 from titan.u9.region_scene import TERRAIN_POINT_WORLD_XY, U9RegionScene
 from titan.u9.transform import mat4_trs
 from titan.u9.types_dat import U9TypesDat
+from titan.u9.model import material_alpha
 
 DEFAULT_U9_GLB_SCALE = 1.0 / 40.0
 """GLB units per native U9 unit, matching Titan's standalone model exports."""
@@ -441,14 +442,6 @@ def _add_water_geometry(
     return 2
 
 
-def _material_alpha(material: U9Material | None) -> int:
-    if material is None:
-        return 255
-    if material.active_alpha != MATERIAL_ALPHA_NONE:
-        return material.active_alpha
-    return material.default_alpha
-
-
 def _object_material_key(material: U9Material | None) -> tuple[object, ...]:
     if material is None:
         return ("untextured",)
@@ -456,7 +449,7 @@ def _object_material_key(material: U9Material | None) -> tuple[object, ...]:
         material.texture_id,
         material.cur_frame,
         material.render_flags,
-        _material_alpha(material),
+        material_alpha(material),
     )
 
 
@@ -486,7 +479,7 @@ def _object_material(
                 f"flags{material.render_flags:04x}"
             ),
             image=image,
-            alpha=_material_alpha(material),
+            alpha=material_alpha(material),
             chromakey=material.is_chromakey,
             additive=material.is_additive,
         )

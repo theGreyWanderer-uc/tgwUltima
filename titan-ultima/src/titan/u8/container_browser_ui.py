@@ -43,15 +43,7 @@ PAGE_SIZE = 25
 
 
 def _container_menu(title: str, labels: dict[str, str], default: str = "B") -> str:
-    ui.legacy_menu(title, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ",
-        list(labels),
-        default if default in labels else next(iter(labels)),
-        labels=labels,
-        message=title,
-        hotkeys=True,
-    )
+    return ui.menu(title, labels, default, first_if_missing=True)
 
 
 def _container_label(session: U8ContainerSession, number: U8InventoryId) -> str:

@@ -16,13 +16,14 @@ from PIL import Image
 
 from titan.u9.map_render import U9MapRenderError, U9ObjectTextureProvider
 from titan.u9.mesh_export import flatten_model_triangles
-from titan.u9.model import MATERIAL_ALPHA_NONE, U9Material
+from titan.u9.model import U9Material
 from titan.u9.object_placement import (
     U9ModelProvider,
     U9ObjectPlacementResolution,
 )
 from titan.u9.region_scene import TERRAIN_POINT_WORLD_XY, U9RegionScene
 from titan.u9.transform import mat4_trs
+from titan.u9.model import material_alpha
 
 
 class U9ObjectRasterError(Exception):
@@ -82,14 +83,6 @@ def _model_geometry(
     )
 
 
-def _material_alpha(material: U9Material | None) -> int:
-    if material is None:
-        return 255
-    if material.active_alpha != MATERIAL_ALPHA_NONE:
-        return material.active_alpha
-    return material.default_alpha
-
-
 def _raster_material(
     textures: U9ObjectTextureProvider,
     material: U9Material | None,
@@ -110,7 +103,7 @@ def _raster_material(
             cache[key] = cached
         return cached
 
-    alpha = _material_alpha(material)
+    alpha = material_alpha(material)
     key = (material.texture_id, material.cur_frame, material.render_flags | alpha << 16)
     cached = cache.get(key)
     if cached is not None:

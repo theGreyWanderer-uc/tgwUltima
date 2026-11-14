@@ -12,8 +12,6 @@ __all__ = [
     "U7Xforms",
 ]
 
-import csv
-import io
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -27,6 +25,7 @@ from titan.u7.gameplay_metadata import (
 from titan.u7.names import U7ShapeNames
 from titan.u7.usecode import U7UsecodeFile
 from titan.u7.combat_metadata import U7CombatMetadata
+from titan._files import rows_to_csv
 
 
 def _read_count(data: bytes, pos: int = 0) -> tuple[int, int]:
@@ -51,16 +50,6 @@ def _find_file(data_dir: str, names: tuple[str, ...]) -> Path | None:
 
 def _name(shape_names: U7ShapeNames | None, shape: int) -> str:
     return shape_names.get(shape) if shape_names else ""
-
-
-def _rows_to_csv(rows: list[dict[str, object]]) -> str:
-    buf = io.StringIO()
-    if not rows:
-        return ""
-    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
-    writer.writeheader()
-    writer.writerows(rows)
-    return buf.getvalue()
 
 
 def _power_names(value: int) -> str:
@@ -399,7 +388,7 @@ class U7Weapons(U7GameplayMetadata):
             }
             for rec in self.records
         ]
-        return _rows_to_csv(rows)
+        return rows_to_csv(rows)
 
 
 @dataclass
@@ -633,7 +622,7 @@ class U7Ammos(U7GameplayMetadata):
                     "raw_hex": rec.raw.hex(),
                 }
             )
-        return _rows_to_csv(rows)
+        return rows_to_csv(rows)
 
 
 @dataclass
@@ -707,7 +696,7 @@ class U7Armors(U7GameplayMetadata):
         return cls(records, table)
 
     def dump_csv(self, names: U7ShapeNames | None = None) -> str:
-        return _rows_to_csv(
+        return rows_to_csv(
             [
                 {
                     "shape": rec.shape,
@@ -837,7 +826,7 @@ class U7Containers(U7GameplayMetadata):
         return result
 
     def dump_csv(self, names: U7ShapeNames | None = None) -> str:
-        return _rows_to_csv(
+        return rows_to_csv(
             [
                 {
                     "shape": rec.shape,
@@ -882,7 +871,7 @@ class U7Xforms:
                         "target_color": target_color,
                     }
                 )
-        return _rows_to_csv(rows)
+        return rows_to_csv(rows)
 
 
 @dataclass
@@ -959,7 +948,7 @@ class U7Blends:
         )
 
     def dump_csv(self) -> str:
-        return _rows_to_csv(
+        return rows_to_csv(
             [
                 {
                     "index": rec.index,
@@ -1034,7 +1023,7 @@ class U7UsecodeIndex:
         )
 
     def dump_csv(self) -> str:
-        return _rows_to_csv(
+        return rows_to_csv(
             [
                 {
                     "offset": fn.offset,

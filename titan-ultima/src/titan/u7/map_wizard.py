@@ -19,9 +19,7 @@ from titan.u7.shape_archive import discover_base_archive, find_archive
 from titan.u7.target_picker import game_targets, select_map, select_target
 
 
-def _menu(message: str, labels: dict[str, str], default: str) -> str:
-    ui.legacy_menu(message, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice("> ", list(labels), default, message=message, labels=labels)
+_menu = ui.menu
 
 
 def _integer(label: str, default: int, low: int, high: int) -> int:

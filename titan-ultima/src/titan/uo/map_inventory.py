@@ -11,7 +11,6 @@ ID), so ``names.csv`` rolls the statics up by name.
 
 from __future__ import annotations
 
-import csv
 import html
 import json
 from dataclasses import dataclass, field
@@ -23,6 +22,7 @@ from PIL import Image
 from titan.uo.map import UOMap
 from titan.uo.render import _COLOR16_RGB, UOArtSource
 from titan.uo.tiledata import UOTileData, flag_names
+from titan._files import write_csv
 
 COVERAGE_TOPS = (10, 25, 50, 100, 200, 400)
 
@@ -330,7 +330,7 @@ def write_uo_map_inventory(
         ("land.csv", land),
         ("names.csv", names),
     ):
-        _write_csv(outdir / name, records)
+        write_csv(outdir / name, records)
 
     summary = {
         "facet": inv.facet,
@@ -360,16 +360,6 @@ def write_uo_map_inventory(
             _html(inv, summary, statics, land, names), encoding="utf-8"
         )
     return summary
-
-
-def _write_csv(path: Path, records: list[dict]) -> None:
-    if not records:
-        path.write_text("", encoding="utf-8")
-        return
-    with path.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(records[0]))
-        writer.writeheader()
-        writer.writerows(records)
 
 
 def _to_image(pixels: np.ndarray) -> Image.Image:

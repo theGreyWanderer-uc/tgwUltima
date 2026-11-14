@@ -28,11 +28,7 @@ from titan.u8.palette_browser import (
 from titan.u8.shape_browser_ui import choose_u8_shape_target
 
 
-def _menu(message: str, labels: dict[str, str], default: str) -> str:
-    ui.legacy_menu(message, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ", list(labels), default, labels=labels, message=message, hotkeys=True
-    )
+_menu = ui.menu
 
 
 def _integer(message: str, default: int, maximum: int) -> int:

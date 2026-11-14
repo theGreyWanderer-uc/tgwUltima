@@ -36,11 +36,7 @@ RECORDS_PER_PAGE = 12
 READ_ERRORS = (OSError, ValueError)
 
 
-def menu(message: str, labels: dict[str, str], default: str) -> str:
-    ui.legacy_menu(message, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ", list(labels), default, labels=labels, message=message, hotkeys=True
-    )
+menu = ui.menu
 
 
 def integer(message: str, default: int, low: int, high: int) -> int:

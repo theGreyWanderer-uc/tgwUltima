@@ -23,6 +23,8 @@ from PIL import Image, ImageSequence
 from titan.u7.cli.shapes import cmd_shape_animate
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
+from pathlib import Path
+import pytest
 
 _SHAPE_NUM = 200  # > FIRST_OBJ_SHAPE (150), so it's treated as an RLE sprite
 _TRANSLUCENT_INDEX = 254  # xfstart with a single BLENDS.DAT record
@@ -159,3 +161,28 @@ class ShapeAnimateFramesModeTranslucencyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_cycle_export_rejects_empty_frame_without_creating_gif(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "empty.shp"
+    source.write_bytes(b"placeholder")
+    shape = U7Shape()
+    shape.frames = [U7Shape.Frame()]
+    monkeypatch.setattr(U7Shape, "from_file", lambda _path: shape)
+    output = tmp_path / "empty.gif"
+    status = cmd_shape_animate(
+        SimpleNamespace(
+            file=str(source),
+            palette=None,
+            frame=0,
+            static=None,
+            shape=None,
+            mode="cycle",
+            output=str(output),
+        )
+    )
+    assert status == 1
+    assert "Frame 0 has no pixel data" in capsys.readouterr().err
+    assert not output.exists()

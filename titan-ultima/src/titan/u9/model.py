@@ -67,6 +67,7 @@ __all__ = [
     "U9Triangle",
     "U9TriangleCorner",
     "U9Material",
+    "material_alpha",
     "INVISIBLE_TEXTURE_ID",
 ]
 
@@ -307,6 +308,15 @@ class U9Material:
     @property
     def clamps_t(self) -> bool:
         return bool(self.render_flags & MATERIAL_FLAG_CLAMP_T)
+
+
+def material_alpha(material: U9Material | None) -> int:
+    """Return a material's effective 0-255 alpha; no material is opaque."""
+    if material is None:
+        return 255
+    if material.active_alpha != MATERIAL_ALPHA_NONE:
+        return material.active_alpha
+    return material.default_alpha
 
 
 @dataclass(frozen=True)

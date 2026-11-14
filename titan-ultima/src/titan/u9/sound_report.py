@@ -26,6 +26,7 @@ from titan.u9.sound_control import (
 )
 from titan.u9.typename import U9TypeNameError, U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
+from titan._files import case_insensitive_child
 
 KNOWN_AUDIO_ARCHIVES = ("speech.flx", "sfx.flx", "music.flx")
 
@@ -79,17 +80,6 @@ class U9SoundReportError(Exception):
     """Raised when audio report inputs cannot be discovered or read."""
 
 
-def _case_insensitive_child(directory: Path, filename: str) -> Path | None:
-    wanted = filename.casefold()
-    try:
-        return next(
-            (child for child in directory.iterdir() if child.name.casefold() == wanted),
-            None,
-        )
-    except OSError:
-        return None
-
-
 def _discover_audio_archives(source: str | Path) -> tuple[list[Path], Path]:
     path = Path(source).expanduser().resolve()
     if not path.exists():
@@ -97,12 +87,12 @@ def _discover_audio_archives(source: str | Path) -> tuple[list[Path], Path]:
     if path.is_file():
         return [path], path.parent
 
-    sound_dir = _case_insensitive_child(path, "sound")
+    sound_dir = case_insensitive_child(path, "sound")
     helper_dir = sound_dir if sound_dir is not None and sound_dir.is_dir() else path
     archives = [
         candidate
         for name in KNOWN_AUDIO_ARCHIVES
-        if (candidate := _case_insensitive_child(helper_dir, name)) is not None
+        if (candidate := case_insensitive_child(helper_dir, name)) is not None
     ]
     if not archives:
         raise U9SoundReportError(
@@ -138,9 +128,9 @@ def _load_sfx_links(
     references: dict[int, list[dict[str, Any]]] = defaultdict(list)
     direct_template_types: dict[int, list[int]] = defaultdict(list)
     effective_template_types: dict[int, list[int]] = defaultdict(list)
-    categories = _read_category_names(_case_insensitive_child(helper_dir, "sfxcat.flx"))
+    categories = _read_category_names(case_insensitive_child(helper_dir, "sfxcat.flx"))
 
-    template_path = _case_insensitive_child(helper_dir, "SFXTMPL.FLX")
+    template_path = case_insensitive_child(helper_dir, "SFXTMPL.FLX")
     if template_path is not None:
         try:
             templates = U9SfxTemplates.from_file(template_path)
@@ -182,7 +172,7 @@ def _load_sfx_links(
         except (OSError, U9FlxArchiveError, U9SoundControlError) as error:
             warnings.append(f"could not load SFXTMPL.FLX links: {error}")
 
-    association_path = _case_insensitive_child(helper_dir, "sfxassoc.flx")
+    association_path = case_insensitive_child(helper_dir, "sfxassoc.flx")
     if association_path is not None:
         try:
             associations = U9SfxAssociations.from_file(association_path)
@@ -214,7 +204,7 @@ def _load_sfx_links(
 def _load_types(helper_dir: Path) -> U9TypesDat | None:
     candidates = (helper_dir, helper_dir.parent / "static")
     for directory in candidates:
-        types_path = _case_insensitive_child(directory, "TYPES.DAT")
+        types_path = case_insensitive_child(directory, "TYPES.DAT")
         if types_path is None:
             continue
         try:
@@ -227,7 +217,7 @@ def _load_types(helper_dir: Path) -> U9TypesDat | None:
 def _load_type_names(helper_dir: Path) -> U9TypeNames | None:
     candidates = (helper_dir, helper_dir.parent / "static")
     for directory in candidates:
-        names_path = _case_insensitive_child(directory, "TYPENAME.FLX")
+        names_path = case_insensitive_child(directory, "TYPENAME.FLX")
         if names_path is None:
             continue
         try:

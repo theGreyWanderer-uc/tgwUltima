@@ -11,6 +11,10 @@ from titan.u7 import cli as u7_cli
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapRenderer
 from titan.u7 import install as u7_install
+import pytest
+from PIL import Image, ImageDraw, ImageFont
+from titan.u7.map import _frame_to_rgba, _load_map_font
+from titan.u7.shape import U7Shape
 
 
 def _write_native_map_data(map_root: Path, map_number: int) -> None:
@@ -242,3 +246,24 @@ def test_map_render_uses_configured_game_static_as_patch_base(
         "base_static_dir": str(base_static),
         "game": "si",
     }
+
+
+def test_map_frame_without_pixels_has_a_clear_error() -> None:
+    with pytest.raises(ValueError, match="U7 frame has no pixel data"):
+        _frame_to_rgba(U7Shape.Frame(), bytes(768))
+
+
+def test_map_font_fallback_can_draw_when_arial_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fallback = ImageFont.load_default()
+
+    def missing_font(*args, **kwargs):
+        raise OSError("Arial unavailable")
+
+    monkeypatch.setattr(ImageFont, "truetype", missing_font)
+    monkeypatch.setattr(ImageFont, "load_default", lambda: fallback)
+    font = _load_map_font(18)
+    image = Image.new("L", (100, 30))
+    ImageDraw.Draw(image).text((0, 0), "SC 0", fill=255, font=font)
+    assert image.getbbox() is not None

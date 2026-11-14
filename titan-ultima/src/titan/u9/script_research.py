@@ -10,7 +10,6 @@ from __future__ import annotations
 __all__ = ["export_script_research_bundle"]
 
 import csv
-import hashlib
 import json
 import os
 from collections import Counter, defaultdict
@@ -19,6 +18,7 @@ from typing import Iterable, Mapping
 
 from titan.u9.activity import ACTIVITY_OPCODE_CATALOGUE, U9Activities
 from titan.u9.triggers import TRIGGER_OPCODE_CATALOGUE, U9TriggerRecord, U9Triggers
+from titan._files import sha256_file
 
 
 def _hex8(value: int) -> str:
@@ -79,14 +79,6 @@ def _operand_columns(record: U9TriggerRecord) -> dict[str, object]:
     if special_action is not None:
         columns["special_action_meaning"] = special_action.meaning
     return columns
-
-
-def _sha256(path: str | os.PathLike[str]) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def export_script_research_bundle(
@@ -489,7 +481,7 @@ def export_script_research_bundle(
         sources[name] = {
             "path": str(source.resolve()),
             "size": source.stat().st_size,
-            "sha256": _sha256(source),
+            "sha256": sha256_file(source),
         }
     manifest = {
         "formats": {

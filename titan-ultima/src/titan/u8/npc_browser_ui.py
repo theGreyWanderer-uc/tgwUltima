@@ -36,15 +36,7 @@ PAGE_SIZE = 30
 
 
 def _npc_menu(message: str, labels: dict[str, str], default: str | None = None) -> str:
-    ui.legacy_menu(message, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ",
-        list(labels),
-        default or next(iter(labels)),
-        labels=labels,
-        message=message,
-        hotkeys=True,
-    )
+    return ui.menu(message, labels, default or next(iter(labels)))
 
 
 def _npc_path(message: str, default: str = "") -> Path:

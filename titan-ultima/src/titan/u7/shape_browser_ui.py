@@ -41,13 +41,7 @@ ARCHIVES = (
 PAGE_SIZE = 30
 
 
-def _menu(
-    message: str, labels: dict[str, str], default: str, *, hotkeys: bool = True
-) -> str:
-    ui.legacy_menu(message, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ", list(labels), default, labels=labels, message=message, hotkeys=hotkeys
-    )
+_menu = ui.menu
 
 
 def _integer(message: str, default: int, low: int, high: int) -> int:

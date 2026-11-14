@@ -6,7 +6,6 @@ __all__ = [
     "_animdata_metadata",
     "_client_path",
     "_entry_iter",
-    "_equipconv_rows",
     "_land_metadata",
     "_load_animdata",
     "_load_artdef",
@@ -38,7 +37,6 @@ from titan.uo.animdata import UOAnimData, UOAnimDataEntry
 from titan.uo.artdef import UOArtDef
 from titan.uo.definfo import (
     UODefFile,
-    UOEquipConvDefEntry,
     UORedirectDefEntry,
     load_all_defs,
 )
@@ -246,19 +244,6 @@ def _redirect_metadata(
         f"{prefix}_hue": "" if entry.hue is None else entry.hue,
         f"{prefix}_line": entry.line_number,
     }
-
-
-def _equipconv_rows(
-    entries: list[UOEquipConvDefEntry],
-    *,
-    body: int,
-    equipment: int,
-) -> list[UOEquipConvDefEntry]:
-    return [
-        entry
-        for entry in entries
-        if entry.body == body and entry.equipment == equipment
-    ]
 
 
 def _static_metadata(

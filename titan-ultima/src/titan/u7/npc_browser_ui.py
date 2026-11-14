@@ -68,13 +68,7 @@ def npc_preview(session: Session, npc: U7NPC) -> None:
         print(f"  NPC preview unavailable: {clean(str(error))}")
 
 
-def _menu(
-    prompt: str, labels: dict[str, str], default: str, *, hotkeys: bool = True
-) -> str:
-    ui.legacy_menu(prompt, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ", list(labels), default, labels=labels, message=prompt, hotkeys=hotkeys
-    )
+_menu = ui.menu
 
 
 def _paged(title: str, lines: list[str]) -> None:
