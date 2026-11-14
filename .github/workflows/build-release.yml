@@ -198,7 +198,9 @@ jobs:
 
       - name: Lint Titan
         working-directory: titan-ultima
-        run: python -m ruff check .
+        run: |
+          python -m ruff check .
+          python -m ruff format --check .
 
       - name: Run Titan tests
         working-directory: titan-ultima

@@ -503,9 +503,7 @@ def _build_model_object(
             elif gate_colour is not None:
                 base_index = gate_colour
             palette_index = (
-                shaded_palette_index(
-                    assets.palette.colors, base_index, triangle.shade
-                )
+                shaded_palette_index(assets.palette.colors, base_index, triangle.shade)
                 if shadeable
                 else base_index
             )

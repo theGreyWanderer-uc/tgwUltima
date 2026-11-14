@@ -114,7 +114,9 @@ class U9Highway:
 
     def __init__(self, data: bytes) -> None:
         if len(data) < HEADER_SIZE:
-            raise U9HighwayError(f"data too small to contain a highway header: {len(data)} bytes")
+            raise U9HighwayError(
+                f"data too small to contain a highway header: {len(data)} bytes"
+            )
 
         point_count, route_count = struct.unpack_from("<II", data, 0)
 
@@ -127,7 +129,9 @@ class U9Highway:
 
         self._data = data
         self.points: tuple[U9HighwayPoint, ...] = tuple(
-            U9HighwayPoint(*struct.unpack_from(POINT_STRUCT, data, HEADER_SIZE + i * POINT_SIZE))
+            U9HighwayPoint(
+                *struct.unpack_from(POINT_STRUCT, data, HEADER_SIZE + i * POINT_SIZE)
+            )
             for i in range(point_count)
         )
 

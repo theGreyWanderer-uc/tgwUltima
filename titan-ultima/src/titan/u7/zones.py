@@ -38,15 +38,15 @@ def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
         txt = txt[1:]
     if len(txt) not in (6, 8):
         raise U7ZoneProfileError(
-            f"Invalid color '{color}' in zone profile; expected #RRGGBB or #RRGGBBAA.")
+            f"Invalid color '{color}' in zone profile; expected #RRGGBB or #RRGGBBAA."
+        )
     try:
         r = int(txt[0:2], 16)
         g = int(txt[2:4], 16)
         b = int(txt[4:6], 16)
         a = int(txt[6:8], 16) if len(txt) == 8 else 255
     except ValueError as exc:
-        raise U7ZoneProfileError(
-            f"Invalid color '{color}' in zone profile.") from exc
+        raise U7ZoneProfileError(f"Invalid color '{color}' in zone profile.") from exc
     return (r, g, b, a)
 
 
@@ -55,7 +55,8 @@ def _load_profile(profile: str) -> dict:
     if not filename:
         raise U7ZoneProfileError(
             f"Unknown zone profile '{profile}'. "
-            f"Available: {', '.join(available_zone_profiles())}")
+            f"Available: {', '.join(available_zone_profiles())}"
+        )
 
     path = _profiles_dir() / filename
     if not path.is_file():
@@ -66,12 +67,14 @@ def _load_profile(profile: str) -> dict:
             data = json.load(f)
     except json.JSONDecodeError as exc:
         raise U7ZoneProfileError(
-            f"Zone profile '{profile}' is invalid JSON: {exc}") from exc
+            f"Zone profile '{profile}' is invalid JSON: {exc}"
+        ) from exc
 
     zones = data.get("zones")
     if not isinstance(zones, list):
         raise U7ZoneProfileError(
-            f"Zone profile '{profile}' is missing a valid 'zones' list.")
+            f"Zone profile '{profile}' is missing a valid 'zones' list."
+        )
 
     return data
 
@@ -102,7 +105,8 @@ def _validate_selected_ids(
     avail = ", ".join(sorted(available_ids, key=lambda v: (len(v), v)))
     raise U7ZoneProfileError(
         f"Unknown zone ID(s) for profile '{profile}': {', '.join(missing)}. "
-        f"Available IDs: {avail}")
+        f"Available IDs: {avail}"
+    )
 
 
 def _zone_is_selected(
@@ -119,18 +123,23 @@ def _zone_is_selected(
     return bool(selected_ids and zid in selected_ids)
 
 
-def _rect_tuple(profile: str, zone: dict, rect: dict) -> tuple[int, int, int, int, tuple[int, int, int, int], str]:
+def _rect_tuple(
+    profile: str, zone: dict, rect: dict
+) -> tuple[int, int, int, int, tuple[int, int, int, int], str]:
     try:
         tx0 = int(rect["tx0"])
         ty0 = int(rect["ty0"])
         tx1 = int(rect["tx1"])
         ty1 = int(rect["ty1"])
         color = _parse_hex_rgba(str(rect.get("color", "#FFFFFF")))
-        label = str(rect.get("label") or f"ID{zone.get('id')} {zone.get('name', '')}").strip()
+        label = str(
+            rect.get("label") or f"ID{zone.get('id')} {zone.get('name', '')}"
+        ).strip()
     except (KeyError, TypeError, ValueError) as exc:
         raise U7ZoneProfileError(
             f"Invalid rectangle entry in zone '{zone.get('id')}' "
-            f"for profile '{profile}'.") from exc
+            f"for profile '{profile}'."
+        ) from exc
     return (tx0, ty0, tx1, ty1, color, label)
 
 
@@ -146,8 +155,7 @@ def build_zone_highlight_rects(
     pipeline: ``(tx0, ty0, tx1, ty1, rgba, label)``.
     """
     if include_all and zone_ids:
-        raise U7ZoneProfileError(
-            "Use either --all-zones or --zone-id (not both).")
+        raise U7ZoneProfileError("Use either --all-zones or --zone-id (not both).")
 
     data = _load_profile(profile)
     zones = data["zones"]
@@ -163,13 +171,16 @@ def build_zone_highlight_rects(
     out: list[tuple[int, int, int, int, tuple[int, int, int, int], str]] = []
 
     for zone in zones:
-        if not _zone_is_selected(zone, include_all=include_all, selected_ids=selected_ids):
+        if not _zone_is_selected(
+            zone, include_all=include_all, selected_ids=selected_ids
+        ):
             continue
 
         rects = zone.get("rects", [])
         if not isinstance(rects, list):
             raise U7ZoneProfileError(
-                f"Zone '{zone.get('id')}' in profile '{profile}' has invalid 'rects'.")
+                f"Zone '{zone.get('id')}' in profile '{profile}' has invalid 'rects'."
+            )
 
         for rect in rects:
             out.append(_rect_tuple(profile, zone, rect))

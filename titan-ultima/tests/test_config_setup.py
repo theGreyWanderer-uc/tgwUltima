@@ -851,7 +851,10 @@ def test_shared_workflows_fall_back_to_exult_for_missing_configured_paths(
     expected = root / "STATIC/PALETTES.FLX"
     assert resolve_u7_path(game, "palette") == expected
     assert shape_wizard._static_path(game) == str(root / "STATIC")
-    assert u7_install.resolve_u7_static_and_palette(game) == (str(root / "STATIC"), str(expected))
+    assert u7_install.resolve_u7_static_and_palette(game) == (
+        str(root / "STATIC"),
+        str(expected),
+    )
     assert u7_install.resolve_u7_text_flx(game) == str(root / "STATIC/TEXT.FLX")
     assert resolve_game_palette(game).colors[0] == (80, 121, 161)
     assert shape_wizard._palette(shape_wizard.ShapeWizardConfig(game=game)).colors[

@@ -167,9 +167,7 @@ def build_flx(
         if not blob:
             continue  # (0, 0) -- an unused slot
         offset = payload_start + len(payload)
-        struct.pack_into(
-            "<II", directory, index * DIR_ENTRY_SIZE, offset, len(blob)
-        )
+        struct.pack_into("<II", directory, index * DIR_ENTRY_SIZE, offset, len(blob))
         payload += blob
 
     total = payload_start + len(payload)
@@ -199,7 +197,9 @@ def write_flx(
     return len(data)
 
 
-def repack(archive: U9FlxArchive, replacements: Mapping[int, bytes] | None = None) -> bytes:
+def repack(
+    archive: U9FlxArchive, replacements: Mapping[int, bytes] | None = None
+) -> bytes:
     """Rebuild ``archive``, optionally swapping some entries.
 
     Slot count is preserved. A replacement of ``b""`` clears a slot.

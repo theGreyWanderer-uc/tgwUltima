@@ -64,6 +64,7 @@ u6_app = typer.Typer(
 # Shared helpers
 # ============================================================================
 
+
 def _u6_gamedir(explicit: Optional[str]) -> Optional[str]:
     """Resolve a U6 game directory: explicit arg, else ``[u6.game] base`` in titan.toml."""
     if explicit:
@@ -112,7 +113,9 @@ def _load_objlist_from_source(source: str) -> bytes:
 def _parse_region(value: str) -> tuple[int, int, int, int]:
     parts = value.split(",")
     if len(parts) != 4:
-        print(f"ERROR: --region must be 'x,y,width,height', got: {value}", file=sys.stderr)
+        print(
+            f"ERROR: --region must be 'x,y,width,height', got: {value}", file=sys.stderr
+        )
         raise SystemExit(1)
     try:
         x, y, w, h = (int(p) for p in parts)
@@ -125,6 +128,7 @@ def _parse_region(value: str) -> tuple[int, int, int, int]:
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — LZW
 # ============================================================================
+
 
 def cmd_lzw_decompress(args: SimpleNamespace) -> int:
     """Decompress a single U6 LZW file to raw bytes."""
@@ -153,6 +157,7 @@ def cmd_lzw_decompress(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — LIBRARY (lib_16 / lib_32)
 # ============================================================================
 
+
 def cmd_lib_list(args: SimpleNamespace) -> int:
     """List a U6 library file's items (CONVERSE.A/B, PORTRAIT.*, etc.)."""
     filepath = args.file
@@ -160,7 +165,9 @@ def cmd_lib_list(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    lib = U6Library.from_file(filepath, entry_size=args.entry_size, has_size_header=args.size_header)
+    lib = U6Library.from_file(
+        filepath, entry_size=args.entry_size, has_size_header=args.size_header
+    )
 
     print(f"{filepath} — lib_{args.entry_size * 8}, {lib.num_items} items")
     print(f"{'Idx':>5}  {'Offset':>8}  {'Flag':>4}  {'Size':>7}  {'Decoded':>7}")
@@ -174,7 +181,9 @@ def cmd_lib_list(args: SimpleNamespace) -> int:
             decoded_len = len(lib.get_item(i))
         except Exception:
             decoded_len = -1
-        print(f"{i:>5}  {item.offset:>8}  0x{item.flag:02X}  {item.size:>7}  {decoded_len:>7}")
+        print(
+            f"{i:>5}  {item.offset:>8}  0x{item.flag:02X}  {item.size:>7}  {decoded_len:>7}"
+        )
     return 0
 
 
@@ -185,9 +194,14 @@ def cmd_lib_extract(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    lib = U6Library.from_file(filepath, entry_size=args.entry_size, has_size_header=args.size_header)
+    lib = U6Library.from_file(
+        filepath, entry_size=args.entry_size, has_size_header=args.size_header
+    )
     if args.item < 0 or args.item >= lib.num_items:
-        print(f"ERROR: Item {args.item} out of range (0..{lib.num_items - 1})", file=sys.stderr)
+        print(
+            f"ERROR: Item {args.item} out of range (0..{lib.num_items - 1})",
+            file=sys.stderr,
+        )
         return 1
 
     data = lib.get_item(args.item)
@@ -207,7 +221,9 @@ def cmd_lib_extract_all(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    lib = U6Library.from_file(filepath, entry_size=args.entry_size, has_size_header=args.size_header)
+    lib = U6Library.from_file(
+        filepath, entry_size=args.entry_size, has_size_header=args.size_header
+    )
     outdir = args.output or f"{Path(filepath).name}_items"
     os.makedirs(outdir, exist_ok=True)
 
@@ -230,6 +246,7 @@ def cmd_lib_extract_all(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — TILEFLAG
 # ============================================================================
 
+
 def cmd_tileflag_dump(args: SimpleNamespace) -> int:
     """Parse TILEFLAG and dump all entries as a readable table."""
     filepath = args.file
@@ -245,8 +262,10 @@ def cmd_tileflag_dump(args: SimpleNamespace) -> int:
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(f"TILEFLAG — {len(entries)} entries\n")
         f.write("=" * 100 + "\n\n")
-        header = (f"{'Tile':>5}  {'Terrain':>7}  {'Flags':>5}  {'Weight':>6}  {'Extra':>5}  "
-                  f"{'Article':<7} {'Notes'}\n")
+        header = (
+            f"{'Tile':>5}  {'Terrain':>7}  {'Flags':>5}  {'Weight':>6}  {'Extra':>5}  "
+            f"{'Article':<7} {'Notes'}\n"
+        )
         f.write(header)
         f.write("-" * 100 + "\n")
         for e in entries:
@@ -267,8 +286,10 @@ def cmd_tileflag_dump(args: SimpleNamespace) -> int:
                 notes.append("supporting")
             if e.is_breakthrough:
                 notes.append("breakthrough")
-            f.write(f"{e.tile_num:>5}  0x{e.terrain:04X}  0x{e.flags:03X}  {e.weight:>6}  "
-                     f"0x{e.extra:03X}  {e.article_word or '-':<7} {','.join(notes)}\n")
+            f.write(
+                f"{e.tile_num:>5}  0x{e.terrain:04X}  0x{e.flags:03X}  {e.weight:>6}  "
+                f"0x{e.extra:03X}  {e.article_word or '-':<7} {','.join(notes)}\n"
+            )
 
     print(f"Dumped {len(entries)} entries -> {out_path}")
     return 0
@@ -277,6 +298,7 @@ def cmd_tileflag_dump(args: SimpleNamespace) -> int:
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — PALETTE
 # ============================================================================
+
 
 def cmd_palette_export(args: SimpleNamespace) -> int:
     """Export U6PAL as a PNG swatch image + text dump."""
@@ -308,6 +330,7 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — TILE
 # ============================================================================
 
+
 def cmd_tile_export(args: SimpleNamespace) -> int:
     """Export one U6 tile to PNG."""
     gamedir = _require_gamedir(args.gamedir)
@@ -318,7 +341,10 @@ def cmd_tile_export(args: SimpleNamespace) -> int:
 
     tile_num = args.tile_num
     if tile_num < 0 or tile_num >= tiles.num_tiles:
-        print(f"ERROR: Tile {tile_num} out of range (0..{tiles.num_tiles - 1})", file=sys.stderr)
+        print(
+            f"ERROR: Tile {tile_num} out of range (0..{tiles.num_tiles - 1})",
+            file=sys.stderr,
+        )
         return 1
 
     outdir = args.output or "."
@@ -340,14 +366,19 @@ def cmd_tile_export_all(args: SimpleNamespace) -> int:
     start = args.start
     end = args.end if args.end is not None else tiles.num_tiles - 1
     if start < 0 or end >= tiles.num_tiles or start > end:
-        print(f"ERROR: Invalid range {start}..{end} (valid: 0..{tiles.num_tiles - 1})", file=sys.stderr)
+        print(
+            f"ERROR: Invalid range {start}..{end} (valid: 0..{tiles.num_tiles - 1})",
+            file=sys.stderr,
+        )
         return 1
 
     outdir = args.output or "tiles_png"
     os.makedirs(outdir, exist_ok=True)
     exported = 0
     for i in range(start, end + 1):
-        tiles.to_pil_image(i, pal, transparent=True).save(os.path.join(outdir, f"tile_{i:04d}.png"))
+        tiles.to_pil_image(i, pal, transparent=True).save(
+            os.path.join(outdir, f"tile_{i:04d}.png")
+        )
         exported += 1
 
     print(f"Exported {exported} tiles ({start}..{end}) -> {outdir}/")
@@ -357,6 +388,7 @@ def cmd_tile_export_all(args: SimpleNamespace) -> int:
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — MAP
 # ============================================================================
+
 
 def cmd_map_render(args: SimpleNamespace) -> int:
     """Render the U6 surface world or a dungeon level to PNG."""
@@ -388,7 +420,10 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     if args.objects:
         for name in ("LZOBJBLK", "LZDNGBLK", "BASETILE", "TILEFLAG"):
             if not os.path.isfile(os.path.join(gamedir, name)):
-                print(f"ERROR: Required file not found for --objects: {os.path.join(gamedir, name)}", file=sys.stderr)
+                print(
+                    f"ERROR: Required file not found for --objects: {os.path.join(gamedir, name)}",
+                    file=sys.stderr,
+                )
                 return 1
 
     chunks = U6Chunks.from_file(chunks_path)
@@ -436,7 +471,11 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         world = U6WorldObjects.from_directory(gamedir)
         basetile = read_basetile(os.path.join(gamedir, "BASETILE"))
         tileflags = U6TileFlags.from_file(os.path.join(gamedir, "TILEFLAG"))
-        obj_iter = world.iter_dungeon(args.dungeon) if args.dungeon is not None else world.iter_surface()
+        obj_iter = (
+            world.iter_dungeon(args.dungeon)
+            if args.dungeon is not None
+            else world.iter_surface()
+        )
 
         ox, oy = (region[0], region[1]) if region else (0, 0)
         rh, rw = grid.shape[:2] if region is None else (region[3], region[2])
@@ -638,7 +677,10 @@ def cmd_object_list(args: SimpleNamespace) -> int:
         label = f"dungeon {args.dungeon}"
     elif args.block is not None:
         if args.block < 0 or args.block >= len(world.surface_objects):
-            print(f"ERROR: --block must be 0-{len(world.surface_objects) - 1}", file=sys.stderr)
+            print(
+                f"ERROR: --block must be 0-{len(world.surface_objects) - 1}",
+                file=sys.stderr,
+            )
             return 1
         objs = world.surface_objects[args.block]
         label = f"surface block {args.block}"
@@ -647,9 +689,11 @@ def cmd_object_list(args: SimpleNamespace) -> int:
         label = "all surface blocks"
 
     print(f"{label}: {len(objs)} top-level object(s)")
-    print(f"{'X':>5} {'Y':>5} {'Z':>2}  {'ObjN':>5} {'Frm':>3}  {'Qty':>4} {'Qual':>4}  {'Flags':<16} Contains")
+    print(
+        f"{'X':>5} {'Y':>5} {'Z':>2}  {'ObjN':>5} {'Frm':>3}  {'Qty':>4} {'Qual':>4}  {'Flags':<16} Contains"
+    )
     print("-" * 78)
-    for o in objs[:args.limit]:
+    for o in objs[: args.limit]:
         flags = []
         if o.is_ok_to_take:
             flags.append("take")
@@ -659,10 +703,14 @@ def cmd_object_list(args: SimpleNamespace) -> int:
             flags.append("temp")
         if o.is_lit:
             flags.append("lit")
-        print(f"{o.x:>5} {o.y:>5} {o.z:>2}  {o.obj_n:>5} {o.frame_n:>3}  {o.qty:>4} {o.quality:>4}  "
-              f"{','.join(flags) or '-':<16} {len(o.contains)}")
+        print(
+            f"{o.x:>5} {o.y:>5} {o.z:>2}  {o.obj_n:>5} {o.frame_n:>3}  {o.qty:>4} {o.quality:>4}  "
+            f"{','.join(flags) or '-':<16} {len(o.contains)}"
+        )
     if len(objs) > args.limit:
-        print(f"... ({len(objs) - args.limit} more not shown; increase --limit to see more)")
+        print(
+            f"... ({len(objs) - args.limit} more not shown; increase --limit to see more)"
+        )
     return 0
 
 
@@ -671,7 +719,10 @@ def cmd_egg_list(args: SimpleNamespace) -> int:
     gamedir = _require_gamedir(args.gamedir)
     for name in ("LZOBJBLK", "LZDNGBLK", "BASETILE", "LOOK.LZD"):
         if not os.path.isfile(os.path.join(gamedir, name)):
-            print(f"ERROR: Required file not found: {os.path.join(gamedir, name)}", file=sys.stderr)
+            print(
+                f"ERROR: Required file not found: {os.path.join(gamedir, name)}",
+                file=sys.stderr,
+            )
             return 1
 
     world = U6WorldObjects.from_directory(gamedir)
@@ -686,7 +737,10 @@ def cmd_egg_list(args: SimpleNamespace) -> int:
         label = f"dungeon {args.dungeon}"
     elif args.block is not None:
         if args.block < 0 or args.block >= len(world.surface_objects):
-            print(f"ERROR: --block must be 0-{len(world.surface_objects) - 1}", file=sys.stderr)
+            print(
+                f"ERROR: --block must be 0-{len(world.surface_objects) - 1}",
+                file=sys.stderr,
+            )
             return 1
         objs = world.surface_objects[args.block]
         label = f"surface block {args.block}"
@@ -696,18 +750,26 @@ def cmd_egg_list(args: SimpleNamespace) -> int:
 
     eggs = [o for o in objs if o.is_egg]
     print(f"{label}: {len(eggs)} egg(s)")
-    print(f"{'X':>5} {'Y':>5} {'Z':>2}  {'Chance':>6}  {'Spawns':<20} {'Max':>3}  {'Qual':>4}")
+    print(
+        f"{'X':>5} {'Y':>5} {'Z':>2}  {'Chance':>6}  {'Spawns':<20} {'Max':>3}  {'Qual':>4}"
+    )
     print("-" * 60)
-    for egg in eggs[:args.limit]:
+    for egg in eggs[: args.limit]:
         target = egg.spawn_target
         if target is None:
-            print(f"{egg.x:>5} {egg.y:>5} {egg.z:>2}  {egg.spawn_probability:>5}%  (no spawn target)")
+            print(
+                f"{egg.x:>5} {egg.y:>5} {egg.z:>2}  {egg.spawn_probability:>5}%  (no spawn target)"
+            )
             continue
         tnum = target.tile_num(basetile)
         name = names.get_name(tnum) or "?"
-        print(f"{egg.x:>5} {egg.y:>5} {egg.z:>2}  {egg.spawn_probability:>5}%  {name:<20} {target.qty:>3}  {target.quality:>4}")
+        print(
+            f"{egg.x:>5} {egg.y:>5} {egg.z:>2}  {egg.spawn_probability:>5}%  {name:<20} {target.qty:>3}  {target.quality:>4}"
+        )
     if len(eggs) > args.limit:
-        print(f"... ({len(eggs) - args.limit} more not shown; increase --limit to see more)")
+        print(
+            f"... ({len(eggs) - args.limit} more not shown; increase --limit to see more)"
+        )
     return 0
 
 
@@ -715,7 +777,10 @@ def cmd_actor_list(args: SimpleNamespace) -> int:
     """List the NPC/actor identity table (position, appearance, stats)."""
     gamedir = _require_gamedir(args.gamedir)
     if not os.path.isfile(os.path.join(gamedir, "LZDNGBLK")):
-        print(f"ERROR: Required file not found: {os.path.join(gamedir, 'LZDNGBLK')}", file=sys.stderr)
+        print(
+            f"ERROR: Required file not found: {os.path.join(gamedir, 'LZDNGBLK')}",
+            file=sys.stderr,
+        )
         return 1
 
     world = U6WorldObjects.from_directory(gamedir)
@@ -724,13 +789,19 @@ def cmd_actor_list(args: SimpleNamespace) -> int:
     if not args.all:
         actors = [a for a in actors if a.is_active]
 
-    print(f"{len(actors)} actor(s) {'(all 256 slots)' if args.all else '(active only; use --all for every slot)'}")
-    print(f"{'ID':>4}  {'X':>5} {'Y':>5} {'Z':>2}  {'ObjN':>5} {'Frm':>3}  "
-          f"{'STR':>3} {'DEX':>3} {'INT':>3} {'HP':>4} {'Lvl':>3}  {'Algn':>4}")
+    print(
+        f"{len(actors)} actor(s) {'(all 256 slots)' if args.all else '(active only; use --all for every slot)'}"
+    )
+    print(
+        f"{'ID':>4}  {'X':>5} {'Y':>5} {'Z':>2}  {'ObjN':>5} {'Frm':>3}  "
+        f"{'STR':>3} {'DEX':>3} {'INT':>3} {'HP':>4} {'Lvl':>3}  {'Algn':>4}"
+    )
     print("-" * 68)
     for a in actors:
-        print(f"{a.actor_id:>4}  {a.x:>5} {a.y:>5} {a.z:>2}  {a.obj_n:>5} {a.frame_n:>3}  "
-              f"{a.strength:>3} {a.dexterity:>3} {a.intelligence:>3} {a.hp:>4} {a.level:>3}  {a.alignment:>4}")
+        print(
+            f"{a.actor_id:>4}  {a.x:>5} {a.y:>5} {a.z:>2}  {a.obj_n:>5} {a.frame_n:>3}  "
+            f"{a.strength:>3} {a.dexterity:>3} {a.intelligence:>3} {a.hp:>4} {a.level:>3}  {a.alignment:>4}"
+        )
     return 0
 
 
@@ -738,25 +809,34 @@ def cmd_gamestate_dump(args: SimpleNamespace) -> int:
     """Show party roster, player state, and game clock/weather from objlist."""
     gamedir = _require_gamedir(args.gamedir)
     if not os.path.isfile(os.path.join(gamedir, "LZDNGBLK")):
-        print(f"ERROR: Required file not found: {os.path.join(gamedir, 'LZDNGBLK')}", file=sys.stderr)
+        print(
+            f"ERROR: Required file not found: {os.path.join(gamedir, 'LZDNGBLK')}",
+            file=sys.stderr,
+        )
         return 1
 
     world = U6WorldObjects.from_directory(gamedir)
     state = U6GameState.parse(world.objlist_tail)
 
-    print(f"Date: {state.clock.date_string()}   Time: {state.clock.time_string()}   "
-          f"Rest counter: {state.clock.rest_counter}")
+    print(
+        f"Date: {state.clock.date_string()}   Time: {state.clock.time_string()}   "
+        f"Rest counter: {state.clock.rest_counter}"
+    )
     print(f"Wind: {state.wind_direction or 'calm'}")
-    print(f"Karma: {state.player.karma}   Alcohol: {state.player.alcohol}   "
-          f"Gender: {state.player.gender_word}   Knows Gargish: {state.player.knows_gargish}   "
-          f"Quest flag: {state.player.quest_flag}")
+    print(
+        f"Karma: {state.player.karma}   Alcohol: {state.player.alcohol}   "
+        f"Gender: {state.player.gender_word}   Knows Gargish: {state.player.knows_gargish}   "
+        f"Quest flag: {state.player.quest_flag}"
+    )
     if state.player.solo_mode:
         print(f"Solo mode: party-roster index {state.player.solo_member_index}")
     else:
         print("Solo mode: off (full party active)")
 
-    print(f"\nParty ({state.party.num_members} member(s), "
-          f"combat mode {'on' if state.party.in_combat_mode else 'off'}):")
+    print(
+        f"\nParty ({state.party.num_members} member(s), "
+        f"combat mode {'on' if state.party.in_combat_mode else 'off'}):"
+    )
     print(f"{'#':>3}  {'Name':<14} {'Actor ID':>8}")
     print("-" * 30)
     for i, member in enumerate(state.party.members):
@@ -768,13 +848,16 @@ def cmd_gamestate_dump(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — STORY FLAGS
 # ============================================================================
 
+
 def cmd_flags_dump(args: SimpleNamespace) -> int:
     """Dump every actor's talk_flags plus quest_flag/knows_gargish from a gamedir or SAVEGAME folder."""
     objlist = _load_objlist_from_source(args.source)
     flags = read_talk_flags(objlist)
     state = U6GameState.parse(objlist)
 
-    print(f"Quest flag: {state.player.quest_flag}   Knows Gargish: {state.player.knows_gargish}")
+    print(
+        f"Quest flag: {state.player.quest_flag}   Knows Gargish: {state.player.knows_gargish}"
+    )
     print()
     print(f"{'Actor':>5}  {'Flags':<8} Bits set")
     print("-" * 40)
@@ -829,7 +912,10 @@ def cmd_flags_set(args: SimpleNamespace) -> int:
         set_gargish_flag(data, bool(args.gargish))
         desc = f"knows_gargish -> {bool(args.gargish)}"
     else:
-        print("ERROR: specify --actor/--flag/--value, --quest-flag, or --gargish", file=sys.stderr)
+        print(
+            "ERROR: specify --actor/--flag/--value, --quest-flag, or --gargish",
+            file=sys.stderr,
+        )
         return 1
 
     if args.in_place and not args.output:
@@ -855,6 +941,7 @@ def cmd_flags_set(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — CONVERSE
 # ============================================================================
 
+
 def cmd_converse_dump(args: SimpleNamespace) -> int:
     """Disassemble one or all scripts from a CONVERSE.A/B library file."""
     filepath = args.file
@@ -862,11 +949,16 @@ def cmd_converse_dump(args: SimpleNamespace) -> int:
         print(f"ERROR: File not found: {filepath}", file=sys.stderr)
         return 1
 
-    lib = U6Library.from_file(filepath, entry_size=args.entry_size, has_size_header=args.size_header)
+    lib = U6Library.from_file(
+        filepath, entry_size=args.entry_size, has_size_header=args.size_header
+    )
 
     if args.item is not None:
         if args.item < 0 or args.item >= lib.num_items:
-            print(f"ERROR: Item {args.item} out of range (0..{lib.num_items - 1})", file=sys.stderr)
+            print(
+                f"ERROR: Item {args.item} out of range (0..{lib.num_items - 1})",
+                file=sys.stderr,
+            )
             return 1
         items = [args.item]
     else:
@@ -901,6 +993,7 @@ def cmd_converse_dump(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — FONT
 # ============================================================================
 
+
 def cmd_font_export(args: SimpleNamespace) -> int:
     """Export the English and runic/gargoyle fonts from U6.CH."""
     filepath = args.file
@@ -922,8 +1015,12 @@ def cmd_font_export(args: SimpleNamespace) -> int:
     if args.text:
         eng_path = os.path.join(outdir, "text_english.png")
         run_path = os.path.join(outdir, "text_runic_gargoyle.png")
-        fonts.english.render_text(args.text, bg=(0, 0, 0), scale=args.scale).save(eng_path)
-        fonts.runic.render_text(args.text, bg=(0, 0, 0), scale=args.scale).save(run_path)
+        fonts.english.render_text(args.text, bg=(0, 0, 0), scale=args.scale).save(
+            eng_path
+        )
+        fonts.runic.render_text(args.text, bg=(0, 0, 0), scale=args.scale).save(
+            run_path
+        )
         print(f"Exported: {eng_path}")
         print(f"Exported: {run_path}")
     return 0
@@ -932,6 +1029,7 @@ def cmd_font_export(args: SimpleNamespace) -> int:
 # ============================================================================
 # CMD_* IMPLEMENTATION FUNCTIONS — LOOK
 # ============================================================================
+
 
 def cmd_look_dump(args: SimpleNamespace) -> int:
     """Dump LOOK.LZD's tile-number -> object-name table."""
@@ -962,6 +1060,7 @@ def cmd_look_dump(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — BOOK
 # ============================================================================
 
+
 def cmd_book_dump(args: SimpleNamespace) -> int:
     """Dump one or all book/sign texts from BOOK.DAT."""
     filepath = args.file
@@ -973,7 +1072,10 @@ def cmd_book_dump(args: SimpleNamespace) -> int:
 
     if args.book is not None:
         if args.book < 0 or args.book >= books.num_books:
-            print(f"ERROR: Book {args.book} out of range (0..{books.num_books - 1})", file=sys.stderr)
+            print(
+                f"ERROR: Book {args.book} out of range (0..{books.num_books - 1})",
+                file=sys.stderr,
+            )
             return 1
         print(books.get_text(args.book))
         return 0
@@ -994,6 +1096,7 @@ def cmd_book_dump(args: SimpleNamespace) -> int:
 # CMD_* IMPLEMENTATION FUNCTIONS — SCHEDULE
 # ============================================================================
 
+
 def cmd_schedule_dump(args: SimpleNamespace) -> int:
     """Dump one or all actors' schedules from SCHEDULE."""
     filepath = args.file
@@ -1002,21 +1105,30 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
         return 1
 
     schedules = U6Schedules.from_file(filepath)
-    actor_ids = [args.actor] if args.actor is not None else range(len(schedules.per_actor))
+    actor_ids = (
+        [args.actor] if args.actor is not None else range(len(schedules.per_actor))
+    )
 
     outdir = args.output
     lines: list[str] = []
     for actor_id in actor_ids:
         if actor_id < 0 or actor_id >= len(schedules.per_actor):
-            print(f"ERROR: Actor {actor_id} out of range (0..{len(schedules.per_actor) - 1})", file=sys.stderr)
+            print(
+                f"ERROR: Actor {actor_id} out of range (0..{len(schedules.per_actor) - 1})",
+                file=sys.stderr,
+            )
             return 1
         entries = schedules.for_actor(actor_id)
         if not entries:
             continue
         lines.append(f"--- actor {actor_id}: {len(entries)} entries ---")
-        lines.append(f"{'Hour':>4} {'Day':>3}  {'Worktype':>8}  {'X':>5} {'Y':>5} {'Z':>2}")
+        lines.append(
+            f"{'Hour':>4} {'Day':>3}  {'Worktype':>8}  {'X':>5} {'Y':>5} {'Z':>2}"
+        )
         for e in entries:
-            lines.append(f"{e.hour:>4} {e.day_of_week:>3}  {e.worktype:>8}  {e.x:>5} {e.y:>5} {e.z:>2}")
+            lines.append(
+                f"{e.hour:>4} {e.day_of_week:>3}  {e.worktype:>8}  {e.x:>5} {e.y:>5} {e.z:>2}"
+            )
 
     text = "\n".join(lines)
     if outdir:
@@ -1034,10 +1146,13 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
 # Typer command wrappers
 # ============================================================================
 
+
 @u6_app.command("lzw-decompress")
 def lzw_decompress_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 LZW-compressed file")],
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Decompress a single U6 LZW file to raw bytes."""
     raise SystemExit(cmd_lzw_decompress(SimpleNamespace(file=file, output=output)))
@@ -1045,49 +1160,92 @@ def lzw_decompress_cmd(
 
 @u6_app.command("lib-list")
 def lib_list_cmd(
-    file: Annotated[str, typer.Argument(help="Path to a U6 library file (e.g. CONVERSE.A)")],
-    entry_size: Annotated[int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")] = 4,
+    file: Annotated[
+        str, typer.Argument(help="Path to a U6 library file (e.g. CONVERSE.A)")
+    ],
+    entry_size: Annotated[
+        int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")
+    ] = 4,
     size_header: Annotated[
-        bool, typer.Option("--size-header", help="File has a leading 4-byte size header (MD/SE)"),
+        bool,
+        typer.Option(
+            "--size-header", help="File has a leading 4-byte size header (MD/SE)"
+        ),
     ] = False,
 ) -> None:
     """List a U6 library file's items."""
-    raise SystemExit(cmd_lib_list(SimpleNamespace(file=file, entry_size=entry_size, size_header=size_header)))
+    raise SystemExit(
+        cmd_lib_list(
+            SimpleNamespace(file=file, entry_size=entry_size, size_header=size_header)
+        )
+    )
 
 
 @u6_app.command("lib-extract")
 def lib_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
     item: Annotated[int, typer.Argument(help="Item index to extract")],
-    entry_size: Annotated[int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")] = 4,
-    size_header: Annotated[bool, typer.Option("--size-header", help="File has a leading 4-byte size header")] = False,
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    entry_size: Annotated[
+        int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")
+    ] = 4,
+    size_header: Annotated[
+        bool,
+        typer.Option("--size-header", help="File has a leading 4-byte size header"),
+    ] = False,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Extract one item from a U6 library file."""
-    raise SystemExit(cmd_lib_extract(SimpleNamespace(
-        file=file, item=item, entry_size=entry_size, size_header=size_header, output=output,
-    )))
+    raise SystemExit(
+        cmd_lib_extract(
+            SimpleNamespace(
+                file=file,
+                item=item,
+                entry_size=entry_size,
+                size_header=size_header,
+                output=output,
+            )
+        )
+    )
 
 
 @u6_app.command("lib-extract-all")
 def lib_extract_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
-    entry_size: Annotated[int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")] = 4,
-    size_header: Annotated[bool, typer.Option("--size-header", help="File has a leading 4-byte size header")] = False,
+    entry_size: Annotated[
+        int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")
+    ] = 4,
+    size_header: Annotated[
+        bool,
+        typer.Option("--size-header", help="File has a leading 4-byte size header"),
+    ] = False,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: <file>_items/)"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory (default: <file>_items/)"
+        ),
     ] = None,
 ) -> None:
     """Extract every non-empty item from a U6 library file."""
-    raise SystemExit(cmd_lib_extract_all(SimpleNamespace(
-        file=file, entry_size=entry_size, size_header=size_header, output=output,
-    )))
+    raise SystemExit(
+        cmd_lib_extract_all(
+            SimpleNamespace(
+                file=file,
+                entry_size=entry_size,
+                size_header=size_header,
+                output=output,
+            )
+        )
+    )
 
 
 @u6_app.command("tileflag-dump")
 def tileflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to TILEFLAG")],
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Parse TILEFLAG and dump all entries as a readable table."""
     raise SystemExit(cmd_tileflag_dump(SimpleNamespace(file=file, output=output)))
@@ -1096,7 +1254,9 @@ def tileflag_dump_cmd(
 @u6_app.command("palette-export")
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to U6PAL")],
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Export U6PAL as a PNG swatch + text dump."""
     raise SystemExit(cmd_palette_export(SimpleNamespace(file=file, output=output)))
@@ -1104,35 +1264,65 @@ def palette_export_cmd(
 
 @u6_app.command("tile-export")
 def tile_export_cmd(
-    tile_num: Annotated[str, typer.Argument(help="Tile number, decimal or 0x-hex (0-0x7FF)")],
+    tile_num: Annotated[
+        str, typer.Argument(help="Tile number, decimal or 0x-hex (0-0x7FF)")
+    ],
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory"),
+        Optional[str],
+        typer.Option("-g", "--gamedir", help="U6 game directory"),
     ] = None,
-    palette: Annotated[Optional[str], typer.Option("-p", "--palette", help="Path to U6PAL")] = None,
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    palette: Annotated[
+        Optional[str], typer.Option("-p", "--palette", help="Path to U6PAL")
+    ] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Export one U6 tile to PNG."""
-    raise SystemExit(cmd_tile_export(SimpleNamespace(
-        tile_num=_parse_tile_num(tile_num), gamedir=gamedir, palette=palette, output=output,
-    )))
+    raise SystemExit(
+        cmd_tile_export(
+            SimpleNamespace(
+                tile_num=_parse_tile_num(tile_num),
+                gamedir=gamedir,
+                palette=palette,
+                output=output,
+            )
+        )
+    )
 
 
 @u6_app.command("tile-export-all")
 def tile_export_all_cmd(
-    gamedir: Annotated[Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")] = None,
-    palette: Annotated[Optional[str], typer.Option("-p", "--palette", help="Path to U6PAL")] = None,
-    start: Annotated[int, typer.Option("--start", help="First tile number (inclusive)")] = 0,
+    gamedir: Annotated[
+        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+    ] = None,
+    palette: Annotated[
+        Optional[str], typer.Option("-p", "--palette", help="Path to U6PAL")
+    ] = None,
+    start: Annotated[
+        int, typer.Option("--start", help="First tile number (inclusive)")
+    ] = 0,
     end: Annotated[
-        Optional[int], typer.Option("--end", help="Last tile number (inclusive); default: last tile"),
+        Optional[int],
+        typer.Option("--end", help="Last tile number (inclusive); default: last tile"),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory (default: tiles_png/)"),
+        Optional[str],
+        typer.Option("-o", "--output", help="Output directory (default: tiles_png/)"),
     ] = None,
 ) -> None:
     """Batch-export a range of U6 tiles to PNG."""
-    raise SystemExit(cmd_tile_export_all(SimpleNamespace(
-        gamedir=gamedir, palette=palette, start=start, end=end, output=output,
-    )))
+    raise SystemExit(
+        cmd_tile_export_all(
+            SimpleNamespace(
+                gamedir=gamedir,
+                palette=palette,
+                start=start,
+                end=end,
+                output=output,
+            )
+        )
+    )
 
 
 @u6_app.command("map-render")
@@ -1269,29 +1459,48 @@ def object_list_cmd(
     limit: Annotated[int, typer.Option("--limit", help="Max rows to print")] = 200,
 ) -> None:
     """List world objects in a surface block or dungeon level."""
-    raise SystemExit(cmd_object_list(SimpleNamespace(gamedir=gamedir, block=block, dungeon=dungeon, limit=limit)))
+    raise SystemExit(
+        cmd_object_list(
+            SimpleNamespace(gamedir=gamedir, block=block, dungeon=dungeon, limit=limit)
+        )
+    )
 
 
 @u6_app.command("egg-list")
 def egg_list_cmd(
-    gamedir: Annotated[Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")] = None,
+    gamedir: Annotated[
+        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+    ] = None,
     block: Annotated[
-        Optional[int], typer.Option("--block", help="Surface superchunk block number (0-63)"),
+        Optional[int],
+        typer.Option("--block", help="Surface superchunk block number (0-63)"),
     ] = None,
     dungeon: Annotated[
-        Optional[int], typer.Option("--dungeon", help="Dungeon level (0-4) instead of a surface block"),
+        Optional[int],
+        typer.Option(
+            "--dungeon", help="Dungeon level (0-4) instead of a surface block"
+        ),
     ] = None,
     limit: Annotated[int, typer.Option("--limit", help="Max rows to print")] = 200,
 ) -> None:
     """List every egg (object spawner) in a surface block or dungeon level, with what it spawns."""
-    raise SystemExit(cmd_egg_list(SimpleNamespace(gamedir=gamedir, block=block, dungeon=dungeon, limit=limit)))
+    raise SystemExit(
+        cmd_egg_list(
+            SimpleNamespace(gamedir=gamedir, block=block, dungeon=dungeon, limit=limit)
+        )
+    )
 
 
 @u6_app.command("actor-list")
 def actor_list_cmd(
-    gamedir: Annotated[Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")] = None,
+    gamedir: Annotated[
+        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+    ] = None,
     all: Annotated[
-        bool, typer.Option("--all", help="Show all 256 actor slots, including inactive/unused ones"),
+        bool,
+        typer.Option(
+            "--all", help="Show all 256 actor slots, including inactive/unused ones"
+        ),
     ] = False,
 ) -> None:
     """List the NPC/actor identity table (position, appearance, stats)."""
@@ -1300,7 +1509,9 @@ def actor_list_cmd(
 
 @u6_app.command("gamestate-dump")
 def gamestate_dump_cmd(
-    gamedir: Annotated[Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")] = None,
+    gamedir: Annotated[
+        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+    ] = None,
 ) -> None:
     """Show party roster, player state, and game clock/weather from objlist."""
     raise SystemExit(cmd_gamestate_dump(SimpleNamespace(gamedir=gamedir)))
@@ -1308,8 +1519,16 @@ def gamestate_dump_cmd(
 
 @u6_app.command("flags-dump")
 def flags_dump_cmd(
-    source: Annotated[str, typer.Argument(help="A gamedir (LZDNGBLK) or a save's SAVEGAME folder (OBJLIST)")],
-    all: Annotated[bool, typer.Option("--all", help="Show every actor, including all-zero talk_flags")] = False,
+    source: Annotated[
+        str,
+        typer.Argument(
+            help="A gamedir (LZDNGBLK) or a save's SAVEGAME folder (OBJLIST)"
+        ),
+    ],
+    all: Annotated[
+        bool,
+        typer.Option("--all", help="Show every actor, including all-zero talk_flags"),
+    ] = False,
 ) -> None:
     """Dump every actor's talk_flags plus quest_flag/knows_gargish."""
     raise SystemExit(cmd_flags_dump(SimpleNamespace(source=source, all=all)))
@@ -1321,66 +1540,142 @@ def flags_compare_cmd(
     source_b: Annotated[str, typer.Argument(help="Second gamedir or SAVEGAME folder")],
 ) -> None:
     """Diff story-flag state (talk_flags, quest_flag, knows_gargish) between two sources."""
-    raise SystemExit(cmd_flags_compare(SimpleNamespace(source_a=source_a, source_b=source_b)))
+    raise SystemExit(
+        cmd_flags_compare(SimpleNamespace(source_a=source_a, source_b=source_b))
+    )
 
 
 @u6_app.command("flags-set")
 def flags_set_cmd(
-    savegame: Annotated[str, typer.Argument(help="A save's SAVEGAME folder (containing OBJLIST)")],
-    actor: Annotated[Optional[int], typer.Option("--actor", help="Actor ID (0-255) whose talk flag to set")] = None,
-    flag: Annotated[Optional[int], typer.Option("--flag", help="Talk-flag bit index (0-7); requires --actor")] = None,
-    value: Annotated[Optional[int], typer.Option("--value", help="0 to clear, 1 to set; requires --actor/--flag")] = None,
-    quest_flag: Annotated[Optional[int], typer.Option("--quest-flag", help="Set the global quest_flag byte")] = None,
-    gargish: Annotated[Optional[int], typer.Option("--gargish", help="0/1: set whether the player knows Gargish")] = None,
+    savegame: Annotated[
+        str, typer.Argument(help="A save's SAVEGAME folder (containing OBJLIST)")
+    ],
+    actor: Annotated[
+        Optional[int],
+        typer.Option("--actor", help="Actor ID (0-255) whose talk flag to set"),
+    ] = None,
+    flag: Annotated[
+        Optional[int],
+        typer.Option("--flag", help="Talk-flag bit index (0-7); requires --actor"),
+    ] = None,
+    value: Annotated[
+        Optional[int],
+        typer.Option("--value", help="0 to clear, 1 to set; requires --actor/--flag"),
+    ] = None,
+    quest_flag: Annotated[
+        Optional[int],
+        typer.Option("--quest-flag", help="Set the global quest_flag byte"),
+    ] = None,
+    gargish: Annotated[
+        Optional[int],
+        typer.Option("--gargish", help="0/1: set whether the player knows Gargish"),
+    ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Write the modified OBJLIST here instead of alongside the original"),
+        Optional[str],
+        typer.Option(
+            "-o",
+            "--output",
+            help="Write the modified OBJLIST here instead of alongside the original",
+        ),
     ] = None,
     in_place: Annotated[
-        bool, typer.Option("--in-place", help="Overwrite the save's own OBJLIST (backed up to OBJLIST.bak first)"),
+        bool,
+        typer.Option(
+            "--in-place",
+            help="Overwrite the save's own OBJLIST (backed up to OBJLIST.bak first)",
+        ),
     ] = False,
 ) -> None:
     """Set/clear one actor's talk flag, or the quest/gargish global flag, in a save's OBJLIST."""
-    raise SystemExit(cmd_flags_set(SimpleNamespace(
-        savegame=savegame, actor=actor, flag=flag, value=value,
-        quest_flag=quest_flag, gargish=gargish, output=output, in_place=in_place,
-    )))
+    raise SystemExit(
+        cmd_flags_set(
+            SimpleNamespace(
+                savegame=savegame,
+                actor=actor,
+                flag=flag,
+                value=value,
+                quest_flag=quest_flag,
+                gargish=gargish,
+                output=output,
+                in_place=in_place,
+            )
+        )
+    )
 
 
 @u6_app.command("converse-dump")
 def converse_dump_cmd(
-    file: Annotated[str, typer.Argument(help="Path to a U6 conversation library file (CONVERSE.A or CONVERSE.B)")],
+    file: Annotated[
+        str,
+        typer.Argument(
+            help="Path to a U6 conversation library file (CONVERSE.A or CONVERSE.B)"
+        ),
+    ],
     item: Annotated[
-        Optional[int], typer.Option("--item", help="Single item index to disassemble; default: every non-empty item"),
+        Optional[int],
+        typer.Option(
+            "--item",
+            help="Single item index to disassemble; default: every non-empty item",
+        ),
     ] = None,
-    entry_size: Annotated[int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")] = 4,
-    size_header: Annotated[bool, typer.Option("--size-header", help="File has a leading 4-byte size header")] = False,
+    entry_size: Annotated[
+        int, typer.Option("--entry-size", help="2 for lib_16, 4 for lib_32")
+    ] = 4,
+    size_header: Annotated[
+        bool,
+        typer.Option("--size-header", help="File has a leading 4-byte size header"),
+    ] = False,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory; omit to print to stdout"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory; omit to print to stdout"
+        ),
     ] = None,
 ) -> None:
     """Disassemble one or all scripts from a CONVERSE.A/B library file."""
-    raise SystemExit(cmd_converse_dump(SimpleNamespace(
-        file=file, item=item, entry_size=entry_size, size_header=size_header, output=output,
-    )))
+    raise SystemExit(
+        cmd_converse_dump(
+            SimpleNamespace(
+                file=file,
+                item=item,
+                entry_size=entry_size,
+                size_header=size_header,
+                output=output,
+            )
+        )
+    )
 
 
 @u6_app.command("font-export")
 def font_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to U6.CH")],
     text: Annotated[
-        Optional[str], typer.Option("--text", help="Also render this text in both fonts, for comparison"),
+        Optional[str],
+        typer.Option(
+            "--text", help="Also render this text in both fonts, for comparison"
+        ),
     ] = None,
-    scale: Annotated[int, typer.Option("--scale", help="Pixel scale factor for the exported images")] = 3,
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    scale: Annotated[
+        int, typer.Option("--scale", help="Pixel scale factor for the exported images")
+    ] = 3,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Export the English and runic/gargoyle fonts from U6.CH as contact sheets."""
-    raise SystemExit(cmd_font_export(SimpleNamespace(file=file, text=text, scale=scale, output=output)))
+    raise SystemExit(
+        cmd_font_export(
+            SimpleNamespace(file=file, text=text, scale=scale, output=output)
+        )
+    )
 
 
 @u6_app.command("look-dump")
 def look_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to LOOK.LZD")],
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Dump LOOK.LZD's tile-number -> object-name table."""
     raise SystemExit(cmd_look_dump(SimpleNamespace(file=file, output=output)))
@@ -1390,23 +1685,39 @@ def look_dump_cmd(
 def book_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to BOOK.DAT")],
     book: Annotated[
-        Optional[int], typer.Option("--book", help="Single book/sign index to print; default: dump every text"),
+        Optional[int],
+        typer.Option(
+            "--book", help="Single book/sign index to print; default: dump every text"
+        ),
     ] = None,
-    output: Annotated[Optional[str], typer.Option("-o", "--output", help="Output directory")] = None,
+    output: Annotated[
+        Optional[str], typer.Option("-o", "--output", help="Output directory")
+    ] = None,
 ) -> None:
     """Dump one or all book/sign texts from BOOK.DAT."""
-    raise SystemExit(cmd_book_dump(SimpleNamespace(file=file, book=book, output=output)))
+    raise SystemExit(
+        cmd_book_dump(SimpleNamespace(file=file, book=book, output=output))
+    )
 
 
 @u6_app.command("schedule-dump")
 def schedule_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to SCHEDULE")],
     actor: Annotated[
-        Optional[int], typer.Option("--actor", help="Single actor ID (0-255); default: every actor with a schedule"),
+        Optional[int],
+        typer.Option(
+            "--actor",
+            help="Single actor ID (0-255); default: every actor with a schedule",
+        ),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory; omit to print to stdout"),
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="Output directory; omit to print to stdout"
+        ),
     ] = None,
 ) -> None:
     """Dump one or all actors' schedules from SCHEDULE."""
-    raise SystemExit(cmd_schedule_dump(SimpleNamespace(file=file, actor=actor, output=output)))
+    raise SystemExit(
+        cmd_schedule_dump(SimpleNamespace(file=file, actor=actor, output=output))
+    )

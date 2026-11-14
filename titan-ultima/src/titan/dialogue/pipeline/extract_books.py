@@ -207,8 +207,21 @@ def _title_case_smart(s: str) -> str:
     if upper_ratio < 0.6:
         return s
     small = {
-        "a", "an", "the", "of", "in", "on", "at", "to",
-        "for", "and", "but", "or", "nor", "by", "as",
+        "a",
+        "an",
+        "the",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "and",
+        "but",
+        "or",
+        "nor",
+        "by",
+        "as",
     }
     words = s.split()
     out: list[str] = []
@@ -261,13 +274,24 @@ def categorize_book(title: str, quality: int) -> str:
         return "Theurgy Spellbooks"
     if "guard log" in tl:
         return "Guard Logs"
-    if "journal" in tl or "diary" in tl or "expedition" in tl or "captain" in tl or "logbook" in tl:
+    if (
+        "journal" in tl
+        or "diary" in tl
+        or "expedition" in tl
+        or "captain" in tl
+        or "logbook" in tl
+    ):
         return "Journals & Logs"
     if "letter" in tl or "acolyte" in tl:
         return "Letters"
     if "saga" in tl or "chronicle" in tl or "history" in tl or "moriens" in tl:
         return "History & Lore"
-    if "mystery" in tl or "mythology" in tl or "destruction" in tl or "objective history" in tl:
+    if (
+        "mystery" in tl
+        or "mythology" in tl
+        or "destruction" in tl
+        or "objective history" in tl
+    ):
         return "History & Lore"
     if "earthen" in tl:
         return "Necromancy"
@@ -359,7 +383,9 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Deprecated compatibility option; ignored. Books are extracted from --json-dir.",
     )
-    parser.add_argument("--out", default=default_out_path, help="Output path for books.json")
+    parser.add_argument(
+        "--out", default=default_out_path, help="Output path for books.json"
+    )
     args = parser.parse_args(argv)
 
     json_dir = Path(args.json_dir).resolve()

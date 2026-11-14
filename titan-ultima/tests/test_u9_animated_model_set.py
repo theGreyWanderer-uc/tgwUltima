@@ -50,9 +50,7 @@ class AnimatedModelSetTests(unittest.TestCase):
             self.assertEqual(
                 [clip["animation_id"] for clip in manifest["clips"]], [172, 174]
             )
-            self.assertEqual(
-                manifest["clips"][1]["selection"]["state"], "walk-forward"
-            )
+            self.assertEqual(manifest["clips"][1]["selection"]["state"], "walk-forward")
             self.assertEqual(
                 manifest["clips"][1]["animation_label"],
                 "humanoid/movement/walkfoward_avatar_none",

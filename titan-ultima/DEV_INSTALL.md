@@ -51,6 +51,7 @@ To run the tests and the linter as CI does, install the extras too:
 ```powershell
 pip install -e ".[glb,test,lint]"
 python -m ruff check .
+python -m ruff format --check .   # drop --check to reformat
 python -m pytest -q
 ```
 

@@ -116,9 +116,7 @@ def _build(
     struct.pack_into("<I", head, 0x0C, 0x00C00000)
     struct.pack_into("<II", head, 0x10, width, height)
     struct.pack_into(f"<{width * height}I", head, TABLE_OFFSET, *table)
-    struct.pack_into(
-        "<I", head, TABLE_OFFSET + width * height * 4, free_page_pool_head
-    )
+    struct.pack_into("<I", head, TABLE_OFFSET + width * height * 4, free_page_pool_head)
     return bytes(head) + payload
 
 
@@ -133,9 +131,7 @@ class FixedHeaderTests(unittest.TestCase):
             self.assertEqual(region.region_table, region.chunk_table)
 
     def test_table_entry_zero_is_not_the_pool_head(self) -> None:
-        region = U9Fixed(
-            _build(1, 1, [0], b"\x00" * 0x1000, free_page_pool_head=1)
-        )
+        region = U9Fixed(_build(1, 1, [0], b"\x00" * 0x1000, free_page_pool_head=1))
         self.assertEqual(region.chunk_table, (0,))
         self.assertEqual(region.free_page_pool_head, 1)
         self.assertEqual(region.used_table_indices(), [])

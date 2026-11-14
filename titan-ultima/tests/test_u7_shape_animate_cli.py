@@ -28,7 +28,9 @@ _SHAPE_NUM = 200  # > FIRST_OBJ_SHAPE (150), so it's treated as an RLE sprite
 _TRANSLUCENT_INDEX = 254  # xfstart with a single BLENDS.DAT record
 _RAW_PALETTE_COLOR = (0, 255, 0)  # what index 254 looks like if NOT blended
 _BLEND_RGBA = (255, 0, 0, 255)  # BLENDS.DAT record for index 254
-_EXPECTED_PREVIEW = tuple(_BLEND_RGBA[:3])  # composite_rgba_preview: raw, undivided blend RGB
+_EXPECTED_PREVIEW = tuple(
+    _BLEND_RGBA[:3]
+)  # composite_rgba_preview: raw, undivided blend RGB
 
 
 def _write_tfa(static_dir: str) -> None:
@@ -139,7 +141,8 @@ class ShapeAnimateFramesModeTranslucencyTests(unittest.TestCase):
         for i, colors in enumerate(per_frame_colors):
             with self.subTest(frame=i):
                 self.assertNotIn(
-                    _RAW_PALETTE_COLOR, colors,
+                    _RAW_PALETTE_COLOR,
+                    colors,
                     "translucent pixel rendered as raw unblended palette colour "
                     "(the frames-mode to_pngs() call is missing translucency args)",
                 )

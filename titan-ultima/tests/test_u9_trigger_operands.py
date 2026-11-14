@@ -342,7 +342,9 @@ class TriggerAuditTests(unittest.TestCase):
             + _record(0x16, 16, 0, 2)
             + TERMINATOR
         )
-        self.assertEqual(U9Triggers(_archive({1: body})).trigger(1).unreachable_marks(), [])
+        self.assertEqual(
+            U9Triggers(_archive({1: body})).trigger(1).unreachable_marks(), []
+        )
 
 
 class RetailCorpusTests(unittest.TestCase):

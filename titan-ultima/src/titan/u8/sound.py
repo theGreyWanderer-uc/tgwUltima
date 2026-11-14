@@ -82,9 +82,9 @@ class SonarcDecoder:
         return table
 
     @staticmethod
-    def _decode_ec(mode: int, samplecount: int,
-                   source: bytes, sourcesize: int,
-                   dest: bytearray) -> None:
+    def _decode_ec(
+        mode: int, samplecount: int, source: bytes, sourcesize: int, dest: bytearray
+    ) -> None:
         """
         Entropy-coding decompression.
 
@@ -127,18 +127,18 @@ class SonarcDecoder:
                     # Sign extend: mode+1 bits
                     sample = sample & ((1 << (mode + 1)) - 1)
                     if sample & (1 << mode):
-                        sample -= (1 << (mode + 1))
+                        sample -= 1 << (mode + 1)
                     dest[dest_idx] = (sample + 0x80) & 0xFF
                     dest_idx += 1
-                    data >>= (mode + 1)
-                    inputbits -= (mode + 2)
+                    data >>= mode + 1
+                    inputbits -= mode + 2
                 elif ones < 7 - mode:
-                    data >>= (ones + 1)  # strip ones and zero
+                    data >>= ones + 1  # strip ones and zero
                     sample = data & 0xFF
                     # Extract mode+ones bits
                     nbits = mode + ones
                     sample = sample & ((1 << nbits) - 1)
-                    sample <<= (7 - mode - ones)
+                    sample <<= 7 - mode - ones
                     sample &= 0x7F
                     if not (sample & 0x40):
                         sample |= 0x80
@@ -146,20 +146,20 @@ class SonarcDecoder:
                     sample = (sample << (7 - mode - ones)) & 0xFF
                     # Re-derive correctly per Pentagram logic
                     sample_raw = data & 0xFF
-                    sample_raw <<= (7 - nbits)
+                    sample_raw <<= 7 - nbits
                     sample_raw &= 0x7F
                     if not (sample_raw & 0x40):
                         sample_raw |= 0x80
                     # sint8 sign extend
                     if sample_raw & 0x80:
                         sample_raw = sample_raw - 256
-                    sample_raw >>= (7 - nbits)
+                    sample_raw >>= 7 - nbits
                     dest[dest_idx] = (sample_raw + 0x80) & 0xFF
                     dest_idx += 1
                     data >>= nbits
-                    inputbits -= (mode + 2 * ones + 1)
+                    inputbits -= mode + 2 * ones + 1
                 else:
-                    data >>= (7 - mode)  # strip ones
+                    data >>= 7 - mode  # strip ones
                     sample = data & 0xFF
                     sample &= 0x7F
                     if not (sample & 0x40):
@@ -170,16 +170,16 @@ class SonarcDecoder:
                     dest[dest_idx] = (sample + 0x80) & 0xFF
                     dest_idx += 1
                     data >>= 7
-                    inputbits -= (2 * 7 - mode)
+                    inputbits -= 2 * 7 - mode
 
             # Mask data to prevent overflow
             data &= 0xFFFFFFFF
             samplecount -= 1
 
     @staticmethod
-    def _decode_lpc(order: int, nsamples: int,
-                    dest: bytearray, dest_start: int,
-                    factors: bytes) -> None:
+    def _decode_lpc(
+        order: int, nsamples: int, dest: bytearray, dest_start: int, factors: bytes
+    ) -> None:
         """
         Linear Predictive Coding pass.
 
@@ -240,15 +240,11 @@ class SonarcDecoder:
             return None
 
         SonarcDecoder._decode_ec(
-            mode, samplecount,
-            source[ec_offset:ec_offset + ec_size], ec_size,
-            dest
+            mode, samplecount, source[ec_offset : ec_offset + ec_size], ec_size, dest
         )
 
         SonarcDecoder._decode_lpc(
-            order, samplecount,
-            dest, 0,
-            source[8:8 + 2 * order]
+            order, samplecount, dest, 0, source[8 : 8 + 2 * order]
         )
 
         # Fix clipped samples
@@ -297,14 +293,14 @@ class SonarcDecoder:
             if frame_bytes == 0 or frame_bytes > len(data) - pos:
                 break
 
-            frame_data = data[pos:pos + frame_bytes]
+            frame_data = data[pos : pos + frame_bytes]
             decoded = cls._audio_decode(frame_data)
 
             if decoded is not None:
                 output.extend(decoded)
             else:
                 # Silence on decode failure
-                output.extend(b'\x80' * frame_samples)
+                output.extend(b"\x80" * frame_samples)
 
             pos += frame_bytes
             sample_pos += frame_samples

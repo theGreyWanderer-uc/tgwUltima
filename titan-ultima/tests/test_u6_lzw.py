@@ -42,10 +42,12 @@ def _pack_codes(codes: list[int], code_size: int = CODE_SIZE) -> bytes:
 def _encode(data: bytes) -> bytes:
     codes: list[int] = []
     if not data:
-        codes.append(CLEAR_CODE)  # a valid stream always opens with CLEAR, even when empty
+        codes.append(
+            CLEAR_CODE
+        )  # a valid stream always opens with CLEAR, even when empty
     for start in range(0, len(data), CHUNK_SIZE):
         codes.append(CLEAR_CODE)
-        codes.extend(data[start:start + CHUNK_SIZE])
+        codes.extend(data[start : start + CHUNK_SIZE])
     codes.append(END_CODE)
     header = len(data).to_bytes(4, "little")
     return header + _pack_codes(codes)

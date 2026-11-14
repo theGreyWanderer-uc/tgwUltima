@@ -31,14 +31,26 @@ def _platform_local_fold_names() -> tuple[str, ...]:
 def get_bundled_fold_path() -> Path:
     """Return the bundled fold executable path for the current platform."""
     binary_name = "fold.exe" if os.name == "nt" else "fold"
-    return Path(__file__).resolve().parents[1] / "tools" / "fold" / _bundled_fold_subdir() / binary_name
+    return (
+        Path(__file__).resolve().parents[1]
+        / "tools"
+        / "fold"
+        / _bundled_fold_subdir()
+        / binary_name
+    )
 
 
 def get_bundled_fold_dll_path() -> Path | None:
     """Return the bundled Windows DLL dependency path, or None on non-Windows."""
     if os.name != "nt":
         return None
-    return Path(__file__).resolve().parents[1] / "tools" / "fold" / "windows-x64" / "libwinpthread-1.dll"
+    return (
+        Path(__file__).resolve().parents[1]
+        / "tools"
+        / "fold"
+        / "windows-x64"
+        / "libwinpthread-1.dll"
+    )
 
 
 def _resolve_fold_exe(usecode_path: Path) -> Path:
@@ -85,7 +97,10 @@ def _resolve_optional_meta(
 ) -> tuple[Path | None, Path | None]:
     """Resolve symbols/classes paths from args, colocated files, then repo defaults."""
     if symbols_path and classes_path:
-        return (symbols_path if symbols_path.is_file() else None, classes_path if classes_path.is_file() else None)
+        return (
+            symbols_path if symbols_path.is_file() else None,
+            classes_path if classes_path.is_file() else None,
+        )
 
     base = usecode_path.parent
     symbols = symbols_path or (base / "symbols.csv")
@@ -96,15 +111,28 @@ def _resolve_optional_meta(
     titan_classes = pipeline_resources / "usecode_classes.csv"
 
     if not symbols.is_file():
-        repo_symbols = titan_symbols if titan_symbols.is_file() else (Path.cwd() / ".github" / "reference" / "symbols.csv")
+        repo_symbols = (
+            titan_symbols
+            if titan_symbols.is_file()
+            else (Path.cwd() / ".github" / "reference" / "symbols.csv")
+        )
         symbols = repo_symbols if repo_symbols.is_file() else symbols
     if not classes.is_file():
-        repo_classes = titan_classes if titan_classes.is_file() else (Path.cwd() / ".github" / "reference" / "usecode_classes.csv")
+        repo_classes = (
+            titan_classes
+            if titan_classes.is_file()
+            else (Path.cwd() / ".github" / "reference" / "usecode_classes.csv")
+        )
         classes = repo_classes if repo_classes.is_file() else classes
-    return (symbols if symbols.is_file() else None, classes if classes.is_file() else None)
+    return (
+        symbols if symbols.is_file() else None,
+        classes if classes.is_file() else None,
+    )
 
 
-def _common_args(game: str, lang: str, symbols: Path | None, classes: Path | None) -> list[str]:
+def _common_args(
+    game: str, lang: str, symbols: Path | None, classes: Path | None
+) -> list[str]:
     args = ["--game", game, "--lang", lang, "--pseudo"]
     if symbols:
         args += ["--symbols", str(symbols)]
@@ -140,9 +168,13 @@ def run_fold(
     if not usecode_path.is_file():
         raise FoldRunError(f"EUSECODE file not found: {usecode_path}")
     if not symbols:
-        raise FoldRunError("symbols.csv not found. Provide --symbols or place symbols.csv next to EUSECODE.FLX")
+        raise FoldRunError(
+            "symbols.csv not found. Provide --symbols or place symbols.csv next to EUSECODE.FLX"
+        )
     if not classes:
-        raise FoldRunError("usecode_classes.csv not found. Provide --classes or place usecode_classes.csv next to EUSECODE.FLX")
+        raise FoldRunError(
+            "usecode_classes.csv not found. Provide --classes or place usecode_classes.csv next to EUSECODE.FLX"
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -210,6 +242,8 @@ def run_fold(
         created += 1
 
     if created == 0:
-        raise FoldRunError(f"fold completed but generated no U8P_*.txt files in: {output_dir}")
+        raise FoldRunError(
+            f"fold completed but generated no U8P_*.txt files in: {output_dir}"
+        )
 
     return created

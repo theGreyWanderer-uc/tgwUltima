@@ -13,7 +13,13 @@ from __future__ import annotations
 import math
 import unittest
 
-from titan.u9.transform import IDENTITY, mat4_multiply, mat4_trs, transform_normal, transform_point
+from titan.u9.transform import (
+    IDENTITY,
+    mat4_multiply,
+    mat4_trs,
+    transform_normal,
+    transform_point,
+)
 
 
 def _approx_equal(a, b, tol=1e-6):
@@ -43,14 +49,18 @@ class Mat4TrsTests(unittest.TestCase):
         parent = mat4_trs((5, 0, 0), (1, 0, 0, 0), (1, 1, 1))
         child_local = mat4_trs((1, 0, 0), (1, 0, 0, 0), (1, 1, 1))
         child_world = mat4_multiply(parent, child_local)
-        self.assertTrue(_approx_equal(transform_point(child_world, (0, 0, 0)), (6, 0, 0)))
+        self.assertTrue(
+            _approx_equal(transform_point(child_world, (0, 0, 0)), (6, 0, 0))
+        )
 
 
 class TransformNormalTests(unittest.TestCase):
     def test_identity_leaves_normal_unchanged(self) -> None:
         self.assertTrue(_approx_equal(transform_normal(IDENTITY, (0, 1, 0)), (0, 1, 0)))
 
-    def test_non_uniform_scale_preserves_normal_perpendicular_to_stretch_axis(self) -> None:
+    def test_non_uniform_scale_preserves_normal_perpendicular_to_stretch_axis(
+        self,
+    ) -> None:
         # stretching X shouldn't affect a normal that's purely in Y or Z.
         m = mat4_trs((0, 0, 0), (1, 0, 0, 0), (2, 1, 1))
         self.assertTrue(_approx_equal(transform_normal(m, (0, 1, 0)), (0, 1, 0)))

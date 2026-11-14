@@ -50,11 +50,12 @@ class U8Palette:
             data = f.read()
 
         if len(data) < cls.TOTAL_SIZE:
-            raise ValueError(f"Palette file too small: {len(data)} bytes "
-                             f"(need {cls.TOTAL_SIZE})")
+            raise ValueError(
+                f"Palette file too small: {len(data)} bytes (need {cls.TOTAL_SIZE})"
+            )
 
         # Skip 4-byte header, read 768 bytes of RGB data
-        raw = data[cls.HEADER_SIZE:cls.HEADER_SIZE + cls.PALETTE_DATA_SIZE]
+        raw = data[cls.HEADER_SIZE : cls.HEADER_SIZE + cls.PALETTE_DATA_SIZE]
         for i in range(256):
             r = raw[i * 3]
             g = raw[i * 3 + 1]
@@ -74,7 +75,7 @@ class U8Palette:
         pal = cls()
         if len(data) < cls.TOTAL_SIZE:
             raise ValueError(f"Palette data too small: {len(data)} bytes")
-        raw = data[cls.HEADER_SIZE:cls.HEADER_SIZE + cls.PALETTE_DATA_SIZE]
+        raw = data[cls.HEADER_SIZE : cls.HEADER_SIZE + cls.PALETTE_DATA_SIZE]
         for i in range(256):
             r, g, b = raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2]
             pal.colors[i] = ((r * 255) // 63, (g * 255) // 63, (b * 255) // 63)

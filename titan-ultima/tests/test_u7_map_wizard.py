@@ -84,7 +84,9 @@ def world(tmp_path, monkeypatch):
     target = ArchiveTarget("Custom SI world", static, patch, standalone=True, root=root)
     monkeypatch.setattr(wizard, "game_targets", lambda game: (target, []))
     monkeypatch.setattr(
-        u7_install, "resolve_u7_static_and_palette", lambda game: (str(tmp_path / "wrong-retail"), None)
+        u7_install,
+        "resolve_u7_static_and_palette",
+        lambda game: (str(tmp_path / "wrong-retail"), None),
     )
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     monkeypatch.setattr(wizard, "open_preview", lambda path: True)
@@ -113,7 +115,9 @@ def test_bare_and_game_only_commands_open_wizard(monkeypatch):
 
 def test_explicit_regions_remain_batch_and_interactive_keeps_defaults(monkeypatch):
     batch, guided = [], []
-    monkeypatch.setattr(cli.maps, "cmd_map_render", lambda args: batch.append(args) or 0)
+    monkeypatch.setattr(
+        cli.maps, "cmd_map_render", lambda args: batch.append(args) or 0
+    )
     monkeypatch.setattr(wizard, "run_wizard", lambda args: guided.append(args) or 0)
     argv = ["map-render", "--game", "si", "--sc", "0x55", "--view", "flat", "--grid"]
     assert CliRunner().invoke(cli.u7_app, argv).exit_code == 0

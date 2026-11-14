@@ -94,13 +94,17 @@ class TextEntryTests(unittest.TestCase):
 
 class TextBlockTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.text = U9TextArchive(_archive({
-            0: _marker(CONVO),
-            1: _string("Avatar!  Good timing."),
-            2: _string("Help me finish them off!"),
-            3: _marker(CONVO2),
-            4: _string("Welcome to Britain."),
-        }))
+        self.text = U9TextArchive(
+            _archive(
+                {
+                    0: _marker(CONVO),
+                    1: _string("Avatar!  Good timing."),
+                    2: _string("Help me finish them off!"),
+                    3: _marker(CONVO2),
+                    4: _string("Welcome to Britain."),
+                }
+            )
+        )
 
     def test_block_runs_to_the_next_marker(self) -> None:
         # There is no END FILE marker; the next BEGIN closes the previous block.
@@ -114,7 +118,9 @@ class TextBlockTests(unittest.TestCase):
 
     def test_markers_are_not_counted_as_lines(self) -> None:
         blocks = self.text.blocks()
-        self.assertTrue(all(not line.is_file_marker for b in blocks for line in b.lines))
+        self.assertTrue(
+            all(not line.is_file_marker for b in blocks for line in b.lines)
+        )
         self.assertEqual(sum(len(b) for b in blocks) + len(blocks), len(self.text))
 
     def test_block_lookup_ignores_case_and_extension(self) -> None:
@@ -126,16 +132,22 @@ class TextBlockTests(unittest.TestCase):
 
     def test_archive_without_markers_has_no_blocks(self) -> None:
         # misctext.flx is a flat list; grouping must not invent a block.
-        flat = U9TextArchive(_archive({0: _string("The door is locked."), 1: _string("Use key on?")}))
+        flat = U9TextArchive(
+            _archive({0: _string("The door is locked."), 1: _string("Use key on?")})
+        )
         self.assertEqual(flat.blocks(), [])
         self.assertEqual(len(flat.entries()), 2)
 
     def test_lines_before_the_first_marker_are_not_attributed(self) -> None:
-        stray = U9TextArchive(_archive({
-            0: _string("orphan line"),
-            1: _marker(CONVO),
-            2: _string("owned line"),
-        }))
+        stray = U9TextArchive(
+            _archive(
+                {
+                    0: _string("orphan line"),
+                    1: _marker(CONVO),
+                    2: _string("owned line"),
+                }
+            )
+        )
         blocks = stray.blocks()
         self.assertEqual(len(blocks), 1)
         self.assertEqual([line.text for line in blocks[0].lines], ["owned line"])
@@ -143,12 +155,16 @@ class TextBlockTests(unittest.TestCase):
 
 class TextSearchTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.text = U9TextArchive(_archive({
-            0: _marker(CONVO),
-            1: _string("Defeat the Guardian."),
-            2: _string("the guardian waits"),
-            3: _string("nothing here"),
-        }))
+        self.text = U9TextArchive(
+            _archive(
+                {
+                    0: _marker(CONVO),
+                    1: _string("Defeat the Guardian."),
+                    2: _string("the guardian waits"),
+                    3: _string("nothing here"),
+                }
+            )
+        )
 
     def test_search_is_case_insensitive_by_default(self) -> None:
         self.assertEqual([e.index for e in self.text.search("guardian")], [1, 2])

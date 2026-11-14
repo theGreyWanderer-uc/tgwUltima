@@ -22,7 +22,7 @@ def _build_flx(comment: bytes, entries_data: list[bytes | None]) -> bytes:
     count = len(entries_data)
     dir_size = count * 8
     header = bytearray(DIR_OFFSET)
-    header[0:len(comment)] = comment
+    header[0 : len(comment)] = comment
     struct.pack_into("<I", header, 0x50, count)
     struct.pack_into("<I", header, 0x54, 2)  # FLX format-version word
     struct.pack_into("<I", header, 0x58, 0)

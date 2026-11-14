@@ -7,7 +7,11 @@ import json
 import struct
 
 from titan.uo.map import UOMap
-from titan.uo.map_inventory import build_uo_map_inventory, tile_category, write_uo_map_inventory
+from titan.uo.map_inventory import (
+    build_uo_map_inventory,
+    tile_category,
+    write_uo_map_inventory,
+)
 from titan.uo.tiledata import UOLandTile, UOStaticTile, UOTileData
 
 # 16x16 tiles -> 2x2 blocks, column-major block order.
@@ -48,10 +52,16 @@ def _tiledata() -> UOTileData:
     land = [UOLandTile(i, 0, 0, "") for i in range(0x20)]
     land[0x03] = UOLandTile(0x03, 0, 3, "grass")
     land[0x16] = UOLandTile(0x16, 0, 22, "sand")
-    statics = [UOStaticTile(i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "") for i in range(0x20)]
+    statics = [
+        UOStaticTile(i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "") for i in range(0x20)
+    ]
     wall_flags = 0x10 | 0x40  # wall | impassable
-    statics[0x10] = UOStaticTile(0x10, wall_flags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, "plaster wall")
-    statics[0x11] = UOStaticTile(0x11, wall_flags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, "plaster wall")
+    statics[0x10] = UOStaticTile(
+        0x10, wall_flags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, "plaster wall"
+    )
+    statics[0x11] = UOStaticTile(
+        0x11, wall_flags, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, "plaster wall"
+    )
     return UOTileData(is_new_format=True, land=land, statics=statics)
 
 
@@ -61,7 +71,13 @@ def test_inventory_counts_ranks_and_rolls_up_by_name(tmp_path):
     inv = build_uo_map_inventory(tmp_path, 0, tiledata=_tiledata(), facet_map=facet_map)
 
     wall = inv.statics[0]
-    assert (wall.tile_id, wall.placements, wall.z_min, wall.z_max, wall.z_common) == (0x10, 4, 0, 10, 0)
+    assert (wall.tile_id, wall.placements, wall.z_min, wall.z_max, wall.z_common) == (
+        0x10,
+        4,
+        0,
+        10,
+        0,
+    )
     assert wall.blocks == 2 and wall.hued == 1 and wall.hues == 1
     assert [r.tile_id for r in inv.land] == [0x03, 0x16]
     assert inv.land[1].placements == 16 and inv.land[0].placements == 256 - 16
@@ -75,14 +91,23 @@ def test_inventory_counts_ranks_and_rolls_up_by_name(tmp_path):
         "by_category": {"wall": 5},
     }
     assert summary["land"]["cells"] == 256
-    rows = list(csv.DictReader(open(tmp_path / "out" / "statics.csv", encoding="utf-8")))
-    assert [(r["tile_hex"], r["name"], r["placements"], r["cumulative_pct"]) for r in rows] == [
+    rows = list(
+        csv.DictReader(open(tmp_path / "out" / "statics.csv", encoding="utf-8"))
+    )
+    assert [
+        (r["tile_hex"], r["name"], r["placements"], r["cumulative_pct"]) for r in rows
+    ] == [
         ("0x0010", "plaster wall", "4", "80.0"),
         ("0x0011", "plaster wall", "1", "100.0"),
     ]
     names = list(csv.DictReader(open(tmp_path / "out" / "names.csv", encoding="utf-8")))
     assert names[0]["name"] == "plaster wall" and names[0]["ids"] == "0x0010 0x0011"
-    assert json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))["facet"] == 0
+    assert (
+        json.loads((tmp_path / "out" / "summary.json").read_text(encoding="utf-8"))[
+            "facet"
+        ]
+        == 0
+    )
 
 
 def test_tile_category_prefers_specific_flags():

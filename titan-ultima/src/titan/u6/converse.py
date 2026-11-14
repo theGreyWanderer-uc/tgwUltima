@@ -121,35 +121,88 @@ from dataclasses import dataclass, field
 # --- Opcode name tables, ported from ConverseInterpret.cpp's op_str()/evop_str() ---
 
 CONTROL_OPS: dict[int, str] = {
-    0x9C: "HORSE", 0x9E: "SLEEP",
-    0xA1: "IF", 0xA2: "ENDIF", 0xA3: "ELSE", 0xA4: "SETF", 0xA5: "CLEARF",
-    0xA6: "DECL", 0xA8: "ASSIGN",
-    0xB0: "JUMP", 0xB5: "DPRINT", 0xB6: "BYE", 0xB8: "ENDDATA", 0xB9: "NEW", 0xBA: "DELETE",
-    0xBE: "INVENTORY", 0xBF: "PORTRAIT",
-    0xC4: "ADDKARMA", 0xC5: "SUBKARMA", 0xC9: "GIVE",
-    0xCB: "WAIT", 0xCD: "WORKTYPE",
+    0x9C: "HORSE",
+    0x9E: "SLEEP",
+    0xA1: "IF",
+    0xA2: "ENDIF",
+    0xA3: "ELSE",
+    0xA4: "SETF",
+    0xA5: "CLEARF",
+    0xA6: "DECL",
+    0xA8: "ASSIGN",
+    0xB0: "JUMP",
+    0xB5: "DPRINT",
+    0xB6: "BYE",
+    0xB8: "ENDDATA",
+    0xB9: "NEW",
+    0xBA: "DELETE",
+    0xBE: "INVENTORY",
+    0xBF: "PORTRAIT",
+    0xC4: "ADDKARMA",
+    0xC5: "SUBKARMA",
+    0xC9: "GIVE",
+    0xCB: "WAIT",
+    0xCD: "WORKTYPE",
     0xD1: "MISC_ACTION",  # Nuvie's MDOP_MISC_ACTION -- shares the U6 opcode space too
-    0xD6: "RESURRECT", 0xD8: "SETNAME", 0xD9: "HEAL", 0xDB: "CURE",
-    0xEE: "ENDANSWER", 0xEF: "KEYWORDS",
-    0xF1: "SLOOK", 0xF2: "SCONVERSE", 0xF3: "SPREFIX",
-    0xF6: "ANSWER", 0xF7: "ASK", 0xF8: "ASKC",
-    0xF9: "INPUTSTR", 0xFB: "INPUT", 0xFC: "INPUTNUM",
+    0xD6: "RESURRECT",
+    0xD8: "SETNAME",
+    0xD9: "HEAL",
+    0xDB: "CURE",
+    0xEE: "ENDANSWER",
+    0xEF: "KEYWORDS",
+    0xF1: "SLOOK",
+    0xF2: "SCONVERSE",
+    0xF3: "SPREFIX",
+    0xF6: "ANSWER",
+    0xF7: "ASK",
+    0xF8: "ASKC",
+    0xF9: "INPUTSTR",
+    0xFB: "INPUT",
+    0xFC: "INPUTNUM",
     0xFF: "SIDENT",
 }
 
 VALUE_OPS: dict[int, str] = {
-    0x81: "GT", 0x82: "GE", 0x83: "LT", 0x84: "LE", 0x85: "NE", 0x86: "EQ",
-    0x90: "ADD", 0x91: "SUB", 0x92: "MUL", 0x93: "DIV", 0x94: "LOR", 0x95: "LAND",
-    0x9A: "CANCARRY", 0x9B: "WEIGHT", 0x9D: "HORSED", 0x9F: "HASOBJ",
-    0xA0: "RAND", 0xAB: "FLAG", 0xB2: "VAR", 0xB3: "SVAR", 0xB4: "DATA",
-    0xB7: "INDEXOF", 0xBB: "OBJCOUNT",
-    0xC6: "INPARTY", 0xC7: "OBJINPARTY", 0xCA: "JOIN", 0xCC: "LEAVE",
-    0xD7: "NPCNEARBY", 0xDA: "WOUNDED", 0xDC: "POISONED", 0xDD: "NPC",
-    0xE0: "EXP", 0xE1: "LVL", 0xE2: "STR", 0xE3: "INT", 0xE4: "DEX",
+    0x81: "GT",
+    0x82: "GE",
+    0x83: "LT",
+    0x84: "LE",
+    0x85: "NE",
+    0x86: "EQ",
+    0x90: "ADD",
+    0x91: "SUB",
+    0x92: "MUL",
+    0x93: "DIV",
+    0x94: "LOR",
+    0x95: "LAND",
+    0x9A: "CANCARRY",
+    0x9B: "WEIGHT",
+    0x9D: "HORSED",
+    0x9F: "HASOBJ",
+    0xA0: "RAND",
+    0xAB: "FLAG",
+    0xB2: "VAR",
+    0xB3: "SVAR",
+    0xB4: "DATA",
+    0xB7: "INDEXOF",
+    0xBB: "OBJCOUNT",
+    0xC6: "INPARTY",
+    0xC7: "OBJINPARTY",
+    0xCA: "JOIN",
+    0xCC: "LEAVE",
+    0xD7: "NPCNEARBY",
+    0xDA: "WOUNDED",
+    0xDC: "POISONED",
+    0xDD: "NPC",
+    0xE0: "EXP",
+    0xE1: "LVL",
+    0xE2: "STR",
+    0xE3: "INT",
+    0xE4: "DEX",
 }
 
 EVAL_OP = 0xA7  # is_valop() includes this, but it has no name in evop_str() (Nuvie
-                # consumes/skips it directly in collect_input() before it's stored).
+# consumes/skips it directly in collect_input() before it's stored).
 
 OPCODE_NAMES: dict[int, str] = {**CONTROL_OPS, **VALUE_OPS, EVAL_OP: "EVAL"}
 
@@ -158,15 +211,15 @@ OPCODE_NAMES: dict[int, str] = {**CONTROL_OPS, **VALUE_OPS, EVAL_OP: "EVAL"}
 # per-script local variable with no fixed global name. ---
 
 KNOWN_INT_VARIABLES: dict[int, str] = {
-    0x10: "SEX",        # avatar gender: 0=male, 1=female
-    0x14: "KARMA",      # avatar's karma
-    0x15: "GARGF",      # 1 = player knows Gargish
+    0x10: "SEX",  # avatar gender: 0=male, 1=female
+    0x14: "KARMA",  # avatar's karma
+    0x15: "GARGF",  # 1 = player knows Gargish
     0x17: "PARTYLIVE",  # number of people (living) following the avatar
-    0x18: "PARTYALL",   # number of people (total) following the avatar
-    0x19: "HP",         # avatar's health
-    0x1A: "QUESTF",     # 0 = "Thou art not upon a sacred quest!"
-    0x20: "WORKTYPE",   # NPC's current schedule activity
-    0x23: "INPUT",      # previous input from the player ($Z)
+    0x18: "PARTYALL",  # number of people (total) following the avatar
+    0x19: "HP",  # avatar's health
+    0x1A: "QUESTF",  # 0 = "Thou art not upon a sacred quest!"
+    0x20: "WORKTYPE",  # NPC's current schedule activity
+    0x23: "INPUT",  # previous input from the player ($Z)
 }
 
 KNOWN_STR_VARIABLES: dict[int, str] = {
@@ -204,7 +257,11 @@ def _is_valop(b: int) -> bool:
 
 
 def _is_ctrl(b: int) -> bool:
-    return (b >= 0xA1 or b == 0x9C or b == 0x9E) and not _is_valop(b) and not _is_datasize(b)
+    return (
+        (b >= 0xA1 or b == 0x9C or b == 0x9E)
+        and not _is_valop(b)
+        and not _is_datasize(b)
+    )
 
 
 @dataclass
@@ -267,11 +324,11 @@ def _read_value(data: bytes, pos: int) -> tuple[int, int]:
     if b == 0xD2:
         if pos + 4 > n:
             raise U6ConverseError(f"truncated 4-byte value at offset {pos}")
-        return int.from_bytes(data[pos:pos + 4], "little"), pos + 4
+        return int.from_bytes(data[pos : pos + 4], "little"), pos + 4
     if b == 0xD4:
         if pos + 2 > n:
             raise U6ConverseError(f"truncated 2-byte value at offset {pos}")
-        return int.from_bytes(data[pos:pos + 2], "little"), pos + 2
+        return int.from_bytes(data[pos : pos + 2], "little"), pos + 2
     return b, pos
 
 
@@ -301,7 +358,7 @@ def disassemble(data: bytes) -> list[U6ConverseInstruction | U6ConverseTextRun]:
             pos += 1
             if pos + 4 > n:
                 raise U6ConverseError(f"truncated JUMP target at offset {pos}")
-            target = int.from_bytes(data[pos:pos + 4], "little")
+            target = int.from_bytes(data[pos : pos + 4], "little")
             pos += 4
             out.append(U6ConverseInstruction(instr_start, b, [], jump_target=target))
             continue
@@ -313,7 +370,11 @@ def disassemble(data: bytes) -> list[U6ConverseInstruction | U6ConverseTextRun]:
             number = data[pos]
             pos += 1
             text, pos = _read_text(data, pos)
-            out.append(U6ConverseInstruction(instr_start, b, [U6ConverseOperand(number)], text=text))
+            out.append(
+                U6ConverseInstruction(
+                    instr_start, b, [U6ConverseOperand(number)], text=text
+                )
+            )
             continue
 
         if b in _TEXT_TAIL_OPS:
@@ -378,7 +439,9 @@ def format_instructions(items: list[U6ConverseInstruction | U6ConverseTextRun]) 
             lines.append(f"{item.offset:6d}  {item.name:<10} -> {item.jump_target}")
         elif item.text is not None:
             operand_str = _format_operands(item.operands)
-            lines.append(f"{item.offset:6d}  {item.name:<10} {operand_str}  {item.text!r}")
+            lines.append(
+                f"{item.offset:6d}  {item.name:<10} {operand_str}  {item.text!r}"
+            )
         else:
             operand_str = _format_operands(item.operands)
             lines.append(f"{item.offset:6d}  {item.name:<10} {operand_str}")

@@ -89,7 +89,9 @@ DEFAULT_AVATAR_ANIMATION_SELECTIONS = (
         animation_label="humanoid/idle/breathe_avatar",
         aliases=("avatar:breathe", "avatar:idle"),
     ),
-    _avatar_movement("run-forward", 173, "runfoward", "avatar:run", "avatar:run-forward"),
+    _avatar_movement(
+        "run-forward", 173, "runfoward", "avatar:run", "avatar:run-forward"
+    ),
     _avatar_movement(
         "walk-forward", 174, "walkfoward", "avatar:walk", "avatar:walk-forward"
     ),

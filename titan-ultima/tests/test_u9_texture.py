@@ -52,14 +52,14 @@ def _build_entry(
     frame_flags = 0x20000000 | unknown1
     if len(pixel_bytes) == sample_count * 2:
         frame_flags |= FRAME_TWO_BYTES_PER_PIXEL
-    frame_header = struct.pack(
-        "<IIIII", frame_flags, width, height, anchor_x, anchor_y
-    )
+    frame_header = struct.pack("<IIIII", frame_flags, width, height, anchor_x, anchor_y)
     frame_header += b"\x00" * (4 * height)  # row-offset table, unused by the decoder
     frame_data = frame_header + pixel_bytes
 
     frame_count = 1
-    frame_offset = TEXTURE_SET_HEADER_SIZE + frame_count * 8  # directly follows the frame directory
+    frame_offset = (
+        TEXTURE_SET_HEADER_SIZE + frame_count * 8
+    )  # directly follows the frame directory
     frame_dir = struct.pack("<II", frame_offset, len(frame_data))
     header = struct.pack(
         "<HBBHHII",
@@ -81,7 +81,9 @@ class DecodeFrame565Tests(unittest.TestCase):
         green = 0b0000011111100000  # G=63
         blue = 0b0000000000011111  # B=31
         pixels = struct.pack("<3H", red, green, blue)
-        entry = _build_entry(width=3, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels)
+        entry = _build_entry(
+            width=3, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels
+        )
 
         frame = decode_frame(entry)
         self.assertFalse(frame.is_transparent)
@@ -100,18 +102,24 @@ class DecodeFrame5551Tests(unittest.TestCase):
         opaque_red = 0b1_11111_00000_00000  # a=1, R=31
         transparent_blue = 0b0_00000_00000_11111  # a=0, B=31
         pixels = struct.pack("<2H", opaque_red, transparent_blue)
-        entry = _build_entry(width=2, height=1, mip_count=0, unknown1=0x0100, pixel_bytes=pixels)
+        entry = _build_entry(
+            width=2, height=1, mip_count=0, unknown1=0x0100, pixel_bytes=pixels
+        )
 
         frame = decode_frame(entry)
         self.assertTrue(frame.is_transparent)
-        self.assertEqual(frame.pixels_rgba, bytes([255, 0, 0, 255]) + bytes([0, 0, 255, 0]))
+        self.assertEqual(
+            frame.pixels_rgba, bytes([255, 0, 0, 255]) + bytes([0, 0, 255, 0])
+        )
 
 
 class DecodeFrameMonochromeTests(unittest.TestCase):
     def test_single_byte_becomes_gray_opaque_pixel(self) -> None:
         # is_8bit is inferred: frame_length - header_size must equal width*height exactly (1 byte/pixel).
         pixels = bytes([128])
-        entry = _build_entry(width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels)
+        entry = _build_entry(
+            width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels
+        )
 
         frame = decode_frame(entry)
         self.assertEqual(frame.pixels_rgba, bytes([128, 128, 128, 255]))
@@ -122,18 +130,24 @@ class DecodeFramePalettedTests(unittest.TestCase):
         # same is_8bit fixture as the grayscale test above, but with a palette this
         # time -- the raw byte (128) must be used as an *index*, not an intensity.
         palette_data = bytearray(256 * 4)
-        palette_data[128 * 4 : 128 * 4 + 4] = bytes([200, 100, 50, 0])  # index 128 -> a distinct color
+        palette_data[128 * 4 : 128 * 4 + 4] = bytes(
+            [200, 100, 50, 0]
+        )  # index 128 -> a distinct color
         palette = U9Palette(bytes(palette_data))
 
         pixels = bytes([128])
-        entry = _build_entry(width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels)
+        entry = _build_entry(
+            width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels
+        )
 
         frame = decode_frame(entry, palette=palette)
         self.assertEqual(frame.pixels_rgba, bytes([200, 100, 50, 255]))
 
     def test_no_palette_falls_back_to_grayscale(self) -> None:
         pixels = bytes([64])
-        entry = _build_entry(width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels)
+        entry = _build_entry(
+            width=1, height=1, mip_count=0, unknown1=0x0000, pixel_bytes=pixels
+        )
 
         frame = decode_frame(entry)
         self.assertEqual(frame.pixels_rgba, bytes([64, 64, 64, 255]))
@@ -161,24 +175,22 @@ class DecodeFramePalettedTests(unittest.TestCase):
 class DecodeFrameRgb565KeyTests(unittest.TestCase):
     def test_stored_rgb565_key_becomes_transparent_when_enabled(self) -> None:
         key = 0x07E0
-        entry = _build_entry(
-            1, 1, 0, key << 12, struct.pack("<H", key)
-        )
+        entry = _build_entry(1, 1, 0, key << 12, struct.pack("<H", key))
         frame = decode_frame(entry)
         self.assertEqual(frame.pixels_rgba, bytes((0, 255, 0, 0)))
 
     def test_disabled_rgb565_key_stays_opaque(self) -> None:
         key = 0x07E0
-        entry = _build_entry(
-            1, 1, 0, 0x40000000 | (key << 12), struct.pack("<H", key)
-        )
+        entry = _build_entry(1, 1, 0, 0x40000000 | (key << 12), struct.pack("<H", key))
         frame = decode_frame(entry)
         self.assertEqual(frame.pixels_rgba, bytes((0, 255, 0, 255)))
 
 
 class DecodeFrameEdgeCaseTests(unittest.TestCase):
     def test_frame_index_out_of_range_raises(self) -> None:
-        entry = _build_entry(width=1, height=1, mip_count=0, unknown1=0, pixel_bytes=bytes([0, 0]))
+        entry = _build_entry(
+            width=1, height=1, mip_count=0, unknown1=0, pixel_bytes=bytes([0, 0])
+        )
         with self.assertRaises(U9TextureError):
             decode_frame(entry, frame_index=5)
 
@@ -202,7 +214,9 @@ class DecodeFrameEdgeCaseTests(unittest.TestCase):
 
     def test_truncated_bc1_raises(self) -> None:
         entry = bytearray(
-            _build_entry(width=4, height=4, mip_count=0, unknown1=0, pixel_bytes=b"\x00\x00")
+            _build_entry(
+                width=4, height=4, mip_count=0, unknown1=0, pixel_bytes=b"\x00\x00"
+            )
         )
         struct.pack_into("<H", entry, 0x06, 1)
         with self.assertRaises(U9TextureError):
@@ -211,7 +225,9 @@ class DecodeFrameEdgeCaseTests(unittest.TestCase):
     def test_unknown_compression_still_raises(self) -> None:
         # only 0 (raw) and 1 (BC1) are known; anything else must not be guessed at
         entry = bytearray(
-            _build_entry(width=1, height=1, mip_count=0, unknown1=0, pixel_bytes=bytes([0, 0]))
+            _build_entry(
+                width=1, height=1, mip_count=0, unknown1=0, pixel_bytes=bytes([0, 0])
+            )
         )
         struct.pack_into("<H", entry, 0x06, 9)
         with self.assertRaises(U9TextureError):
@@ -256,8 +272,12 @@ class TextureStructureTests(unittest.TestCase):
         self.assertEqual(texture_set.animation_mode_code, 2)
         self.assertTrue(texture_set.playback_reverse)
         self.assertEqual(texture_set.playback_rate, 15)
-        self.assertEqual((texture_set.width_exponent, texture_set.height_exponent), (7, 6))
-        self.assertEqual((texture_set.default_first_frame, texture_set.default_last_frame), (1, 4))
+        self.assertEqual(
+            (texture_set.width_exponent, texture_set.height_exponent), (7, 6)
+        )
+        self.assertEqual(
+            (texture_set.default_first_frame, texture_set.default_last_frame), (1, 4)
+        )
         self.assertEqual(texture_set.playback_status, "out_of_range")
         self.assertEqual((frame.anchor_x, frame.anchor_y), (12, 34))
         self.assertEqual(frame.pixel_format_code, 1)
@@ -267,7 +287,10 @@ class TextureStructureTests(unittest.TestCase):
     def test_stored_depth_flag_controls_raw_payload_validation(self) -> None:
         entry = bytearray(_build_entry(1, 1, 0, 0, bytes((7,))))
         struct.pack_into(
-            "<I", entry, 0x18, struct.unpack_from("<I", entry, 0x18)[0] | FRAME_TWO_BYTES_PER_PIXEL
+            "<I",
+            entry,
+            0x18,
+            struct.unpack_from("<I", entry, 0x18)[0] | FRAME_TWO_BYTES_PER_PIXEL,
         )
         with self.assertRaisesRegex(U9TextureError, "stored two-byte depth flag"):
             decode_frame(bytes(entry))
@@ -356,7 +379,10 @@ class IntensityMaskTests(unittest.TestCase):
     def test_intensity_ignores_a_supplied_palette(self) -> None:
         with_palette = self._frame(INTENSITY_FLAG, bytes((1, 2)))
         entry = _build_entry(
-            width=2, height=1, mip_count=0, unknown1=INTENSITY_FLAG,
+            width=2,
+            height=1,
+            mip_count=0,
+            unknown1=INTENSITY_FLAG,
             pixel_bytes=bytes((1, 2)),
         )
         without = decode_frame(entry, 0, None)
@@ -369,7 +395,10 @@ class IntensityMaskTests(unittest.TestCase):
 
     def test_format_code_2_selects_alpha_intensity_88_on_two_byte_frames(self) -> None:
         entry = _build_entry(
-            width=2, height=1, mip_count=0, unknown1=INTENSITY_FLAG,
+            width=2,
+            height=1,
+            mip_count=0,
+            unknown1=INTENSITY_FLAG,
             pixel_bytes=bytes((10, 20, 30, 40)),
         )
         frame = decode_frame(entry)
@@ -403,7 +432,9 @@ class FormatSelectorTests(unittest.TestCase):
 
     def test_selector_3_is_a_plain_mask(self) -> None:
         frame = decode_frame(
-            self._entry(INTENSITY_FLAG, bytes((0x10, 0xFF))), 0, self._palette(),
+            self._entry(INTENSITY_FLAG, bytes((0x10, 0xFF))),
+            0,
+            self._palette(),
             selector=FORMAT_ALPHA_8,
         )
         self.assertTrue(frame.is_intensity)
@@ -412,7 +443,9 @@ class FormatSelectorTests(unittest.TestCase):
     def test_selector_2_splits_the_byte_into_nibbles(self) -> None:
         # high nibble is alpha, low nibble intensity; each scaled by 17
         frame = decode_frame(
-            self._entry(INTENSITY_FLAG, bytes((0xF0, 0x0F))), 0, self._palette(),
+            self._entry(INTENSITY_FLAG, bytes((0xF0, 0x0F))),
+            0,
+            self._palette(),
             selector=FORMAT_ALPHA_INTENSITY_44,
         )
         self.assertTrue(frame.is_intensity)
@@ -422,14 +455,18 @@ class FormatSelectorTests(unittest.TestCase):
     def test_selector_0_uses_the_palette_even_with_bit_9_set(self) -> None:
         # the selector is authoritative; bit 9 is only consulted without one
         frame = decode_frame(
-            self._entry(INTENSITY_FLAG, bytes((1, 1))), 0, self._palette(),
+            self._entry(INTENSITY_FLAG, bytes((1, 1))),
+            0,
+            self._palette(),
             selector=FORMAT_P8,
         )
         self.assertFalse(frame.is_intensity)
         self.assertEqual(frame.pixels_rgba[:4], bytes((255, 0, 0, 255)))
 
     def test_without_a_selector_bit_9_still_decides(self) -> None:
-        frame = decode_frame(self._entry(INTENSITY_FLAG, bytes((5, 6))), 0, self._palette())
+        frame = decode_frame(
+            self._entry(INTENSITY_FLAG, bytes((5, 6))), 0, self._palette()
+        )
         self.assertTrue(frame.is_intensity)
         self.assertEqual(frame.pixels_rgba[:4], bytes((85, 85, 85, 0)))
 
@@ -473,7 +510,10 @@ class SixteenBitSelectorTests(unittest.TestCase):
 
     def _frame(self, flags: int, pixel: int, **kw):
         entry = _build_entry(
-            width=1, height=1, mip_count=0, unknown1=flags,
+            width=1,
+            height=1,
+            mip_count=0,
+            unknown1=flags,
             pixel_bytes=struct.pack("<H", pixel),
         )
         return decode_frame(entry, 0, **kw)

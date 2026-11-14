@@ -70,7 +70,10 @@ PaletteEncoding = Literal["auto", "6bit", "8bit"]
 
 
 def _slot_bounds_error(
-    index: int, offset: int, length: int, data_len: int,
+    index: int,
+    offset: int,
+    length: int,
+    data_len: int,
     occupied: list[tuple[int, int, int]],
 ) -> Optional[str]:
     """Return an error message if slot *index* is truncated or overlaps a
@@ -146,9 +149,13 @@ class U7Palette:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_file(cls, filepath: str, *,
-                   palette_index: int = 0,
-                   encoding: PaletteEncoding = "auto") -> U7Palette:
+    def from_file(
+        cls,
+        filepath: str,
+        *,
+        palette_index: int = 0,
+        encoding: PaletteEncoding = "auto",
+    ) -> U7Palette:
         """Load a palette from ``PALETTES.FLX`` or a raw ``.pal`` file.
 
         If *filepath* is a Flex archive, extract record *palette_index*
@@ -164,10 +171,15 @@ class U7Palette:
         with open(filepath, "rb") as f:
             data = f.read()
 
-        if len(data) >= 0x58 and data[_FLEX_MAGIC_OFFSET:_FLEX_MAGIC_OFFSET + 4] == _FLEX_MAGIC:
+        if (
+            len(data) >= 0x58
+            and data[_FLEX_MAGIC_OFFSET : _FLEX_MAGIC_OFFSET + 4] == _FLEX_MAGIC
+        ):
             pal = cls._from_flex(data, palette_index, encoding=encoding)
         else:
-            pal = cls.from_raw_bytes(data, palette_index=palette_index, encoding=encoding)
+            pal = cls.from_raw_bytes(
+                data, palette_index=palette_index, encoding=encoding
+            )
 
         pal.source = str(filepath)
         return pal
@@ -190,10 +202,17 @@ class U7Palette:
         with open(filepath, "rb") as f:
             data = f.read()
 
-        if len(data) < 0x58 or data[_FLEX_MAGIC_OFFSET:_FLEX_MAGIC_OFFSET + 4] != _FLEX_MAGIC:
+        if (
+            len(data) < 0x58
+            or data[_FLEX_MAGIC_OFFSET : _FLEX_MAGIC_OFFSET + 4] != _FLEX_MAGIC
+        ):
             is_valid = len(data) >= PALETTE_SIZE
             error = None if is_valid else f"File too small: {len(data)} bytes"
-            return [PaletteSlot(0, 0, len(data), is_empty=False, is_valid=is_valid, error=error)]
+            return [
+                PaletteSlot(
+                    0, 0, len(data), is_empty=False, is_valid=is_valid, error=error
+                )
+            ]
 
         count = struct.unpack_from("<I", data, _FLEX_COUNT_OFFSET)[0]
         table_end = _FLEX_TABLE_OFFSET + count * _FLEX_TABLE_ENTRY_SIZE
@@ -204,23 +223,39 @@ class U7Palette:
             )
 
         slots: list[PaletteSlot] = []
-        occupied: list[tuple[int, int, int]] = []  # (start, end, index) of valid populated slots
+        occupied: list[
+            tuple[int, int, int]
+        ] = []  # (start, end, index) of valid populated slots
         for i in range(count):
             tbl_off = _FLEX_TABLE_OFFSET + i * _FLEX_TABLE_ENTRY_SIZE
             off, length = struct.unpack_from("<II", data, tbl_off)
             is_empty = off == 0 or length == 0
-            error = None if is_empty else _slot_bounds_error(i, off, length, len(data), occupied)
+            error = (
+                None
+                if is_empty
+                else _slot_bounds_error(i, off, length, len(data), occupied)
+            )
 
             if not is_empty and error is None:
                 occupied.append((off, off + length, i))
 
-            slots.append(PaletteSlot(i, off, length, is_empty=is_empty, is_valid=error is None, error=error))
+            slots.append(
+                PaletteSlot(
+                    i,
+                    off,
+                    length,
+                    is_empty=is_empty,
+                    is_valid=error is None,
+                    error=error,
+                )
+            )
 
         return slots
 
     @classmethod
-    def _from_flex(cls, data: bytes, palette_index: int, *,
-                    encoding: PaletteEncoding = "auto") -> U7Palette:
+    def _from_flex(
+        cls, data: bytes, palette_index: int, *, encoding: PaletteEncoding = "auto"
+    ) -> U7Palette:
         """Extract palette record from an in-memory Flex archive."""
         count = struct.unpack_from("<I", data, _FLEX_COUNT_OFFSET)[0]
         table_end = _FLEX_TABLE_OFFSET + count * _FLEX_TABLE_ENTRY_SIZE
@@ -232,7 +267,8 @@ class U7Palette:
         if palette_index < 0 or palette_index >= count:
             raise PaletteRecordInvalidError(
                 f"Palette index {palette_index} out of range "
-                f"(archive has {count} records)")
+                f"(archive has {count} records)"
+            )
 
         tbl_off = _FLEX_TABLE_OFFSET + palette_index * _FLEX_TABLE_ENTRY_SIZE
         rec_off = struct.unpack_from("<I", data, tbl_off)[0]
@@ -246,15 +282,15 @@ class U7Palette:
                 f"0x{rec_off:x} + length {rec_len} exceeds archive size {len(data)}"
             )
 
-        raw = data[rec_off:rec_off + rec_len]
+        raw = data[rec_off : rec_off + rec_len]
         pal = cls.from_raw_bytes(raw, palette_index=palette_index, encoding=encoding)
         pal.flex_index = palette_index
         return pal
 
     @classmethod
-    def from_raw_bytes(cls, data: bytes, *,
-                        palette_index: int = 0,
-                        encoding: PaletteEncoding = "auto") -> U7Palette:
+    def from_raw_bytes(
+        cls, data: bytes, *, palette_index: int = 0, encoding: PaletteEncoding = "auto"
+    ) -> U7Palette:
         """Parse palette from raw bytes (768 bytes of RGB triplets).
 
         If data has a 4-byte header (772 bytes) like U8 palettes, skip it.
@@ -264,7 +300,8 @@ class U7Palette:
         """
         if encoding not in ("auto", "6bit", "8bit"):
             raise ValueError(
-                f"Unknown encoding {encoding!r}; expected 'auto', '6bit', or '8bit'")
+                f"Unknown encoding {encoding!r}; expected 'auto', '6bit', or '8bit'"
+            )
 
         pal = cls()
         pal.palette_index = palette_index
@@ -272,13 +309,14 @@ class U7Palette:
 
         if len(data) >= 772 and len(data) < PALETTE_SIZE * 2:
             # Skip 4-byte header (U8-style PAL files have this).
-            payload = data[4:4 + PALETTE_SIZE]
+            payload = data[4 : 4 + PALETTE_SIZE]
         elif len(data) >= PALETTE_SIZE:
             payload = data[:PALETTE_SIZE]
         else:
             raise PaletteRecordInvalidError(
                 f"Palette data too small: {len(data)} bytes "
-                f"(need at least {PALETTE_SIZE})")
+                f"(need at least {PALETTE_SIZE})"
+            )
 
         # Detect whether palette stores 6-bit VGA values (0-63) or full
         # 8-bit values (0-255).  Only check indices 0-254; index 255 is
@@ -306,9 +344,9 @@ class U7Palette:
         return pal
 
     @classmethod
-    def from_double_bytes(cls, data: bytes, *,
-                           encoding: PaletteEncoding = "auto"
-                           ) -> tuple[U7Palette, U7Palette]:
+    def from_double_bytes(
+        cls, data: bytes, *, encoding: PaletteEncoding = "auto"
+    ) -> tuple[U7Palette, U7Palette]:
         """Parse an interleaved "double" palette (>=1536 bytes), as used
         by Exult's ``Palette::set_loaded`` (see ``palette.cc``): even
         bytes form the primary 768-byte palette, odd bytes form a second
@@ -319,10 +357,11 @@ class U7Palette:
         if len(data) < PALETTE_SIZE * 2:
             raise PaletteRecordInvalidError(
                 f"Double-palette data too small: {len(data)} bytes "
-                f"(need at least {PALETTE_SIZE * 2})")
+                f"(need at least {PALETTE_SIZE * 2})"
+            )
 
-        primary_bytes = data[0:PALETTE_SIZE * 2:2]
-        secondary_bytes = data[1:PALETTE_SIZE * 2:2]
+        primary_bytes = data[0 : PALETTE_SIZE * 2 : 2]
+        secondary_bytes = data[1 : PALETTE_SIZE * 2 : 2]
 
         primary = cls.from_raw_bytes(primary_bytes, encoding=encoding)
         secondary = cls.from_raw_bytes(secondary_bytes, encoding=encoding)
@@ -341,7 +380,10 @@ class U7Palette:
         distinguish populated from empty/invalid slots)."""
         with open(filepath, "rb") as f:
             data = f.read(0x58)
-        if len(data) < 0x58 or data[_FLEX_MAGIC_OFFSET:_FLEX_MAGIC_OFFSET + 4] != _FLEX_MAGIC:
+        if (
+            len(data) < 0x58
+            or data[_FLEX_MAGIC_OFFSET : _FLEX_MAGIC_OFFSET + 4] != _FLEX_MAGIC
+        ):
             return 1  # standalone PAL file
         return struct.unpack_from("<I", data, _FLEX_COUNT_OFFSET)[0]
 
@@ -349,7 +391,9 @@ class U7Palette:
     # Colour cycling
     # ------------------------------------------------------------------
 
-    def at_cycle_phase(self, elapsed_ms: int, rot_speed_ms: Optional[int] = None) -> U7Palette:
+    def at_cycle_phase(
+        self, elapsed_ms: int, rot_speed_ms: Optional[int] = None
+    ) -> U7Palette:
         """Return a copy of this palette with Exult's six palette-cycling
         ranges rotated forward by ``elapsed_ms // rot_speed_ms`` steps,
         reproducing ``Game_window::rotatecolours()``'s per-tick rotation
@@ -398,8 +442,7 @@ class U7Palette:
             r, g, b = self.colors[idx]
             for py in range(swatch_size):
                 for ppx in range(swatch_size):
-                    px[col * swatch_size + ppx,
-                       row * swatch_size + py] = (r, g, b)
+                    px[col * swatch_size + ppx, row * swatch_size + py] = (r, g, b)
         return img
 
     def to_text(self) -> str:

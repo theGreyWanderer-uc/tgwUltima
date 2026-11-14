@@ -172,7 +172,7 @@ def read_basetile(filepath: str | os.PathLike[str]) -> tuple[int, ...]:
     with open(filepath, "rb") as f:
         data = f.read()
     count = len(data) // 2
-    return struct.unpack(f"<{count}H", data[:count * 2])
+    return struct.unpack(f"<{count}H", data[: count * 2])
 
 
 @dataclass
@@ -250,7 +250,9 @@ class U6Object:
         return basetile[self.obj_n] + self.frame_n
 
 
-def _parse_block(data: bytes, pos: int) -> tuple[list[U6Object], dict[int, list[U6Object]], int]:
+def _parse_block(
+    data: bytes, pos: int
+) -> tuple[list[U6Object], dict[int, list[U6Object]], int]:
     """
     Parse one block starting at ``pos``.
 
@@ -281,15 +283,28 @@ def _parse_block(data: bytes, pos: int) -> tuple[list[U6Object], dict[int, list[
         x, y, z = unpack_position(h, b1, b2)
         obj_n = obj_n_lo | ((obj_n_hi & 0x03) << 8)
         frame_n = (obj_n_hi & 0xFC) >> 2
-        obj = U6Object(status=status, x=x, y=y, z=z, obj_n=obj_n, frame_n=frame_n, qty=qty, quality=quality)
+        obj = U6Object(
+            status=status,
+            x=x,
+            y=y,
+            z=z,
+            obj_n=obj_n,
+            frame_n=frame_n,
+            qty=qty,
+            quality=quality,
+        )
 
         location = status & STATUS_LOCATION_MASK
         if location == STATUS_IN_CONTAINER:
             idx = x | ((y & 0x03) << 10)
             if idx >= len(flat):
-                raise U6ObjectError(f"container reference {idx} out of range (only {len(flat)} objects so far)")
+                raise U6ObjectError(
+                    f"container reference {idx} out of range (only {len(flat)} objects so far)"
+                )
             flat[idx].contains.append(obj)
-        elif status & STATUS_IN_INVENTORY:  # catches both IN_INVENTORY and READIED (bit 4 set)
+        elif (
+            status & STATUS_IN_INVENTORY
+        ):  # catches both IN_INVENTORY and READIED (bit 4 set)
             actor_inventory.setdefault(x, []).append(obj)
         else:
             top_level.append(obj)
@@ -309,10 +324,18 @@ class U6WorldObjects:
         actor_inventory: dict[int, list[U6Object]],
         objlist_tail: bytes = b"",
     ) -> None:
-        self.surface_objects = surface_objects  # 64 lists, index = surface superchunk number
-        self.dungeon_objects = dungeon_objects  # 5 lists, index = dungeon level (0-based)
-        self.actor_inventory = actor_inventory  # {actor_id: [objects]}, merged across all blocks
-        self.objlist_tail = objlist_tail  # raw bytes after LZDNGBLK's 5 blocks; see titan.u6.actor
+        self.surface_objects = (
+            surface_objects  # 64 lists, index = surface superchunk number
+        )
+        self.dungeon_objects = (
+            dungeon_objects  # 5 lists, index = dungeon level (0-based)
+        )
+        self.actor_inventory = (
+            actor_inventory  # {actor_id: [objects]}, merged across all blocks
+        )
+        self.objlist_tail = (
+            objlist_tail  # raw bytes after LZDNGBLK's 5 blocks; see titan.u6.actor
+        )
 
     @classmethod
     def from_directory(
@@ -352,6 +375,7 @@ class U6WorldObjects:
         state differs from the fresh-install baseline exactly where
         expected for a save taken mid-playthrough.
         """
+
         def p(name: str) -> str:
             return os.path.join(savegame_dir, name)
 
@@ -408,7 +432,9 @@ class U6WorldObjects:
             for actor_id, items in inv.items():
                 actor_inventory.setdefault(actor_id, []).extend(items)
 
-        return cls(surface_objects, dungeon_objects, actor_inventory, dungeon_data[pos:])
+        return cls(
+            surface_objects, dungeon_objects, actor_inventory, dungeon_data[pos:]
+        )
 
     def iter_surface(self):
         """Yield every top-level (on-map) surface object, across all 64 blocks."""

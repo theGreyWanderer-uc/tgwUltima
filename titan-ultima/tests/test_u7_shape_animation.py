@@ -116,7 +116,9 @@ class SimulateFrameSequenceTests(unittest.TestCase):
         # replaying only the last `recycle` frames from then on.
         from titan.u7.shape_animation import AnimationInfo
 
-        anim = AnimationInfo(AniType.LOOPING, nframes=6, recycle=2, freeze_first_chance=100)
+        anim = AnimationInfo(
+            AniType.LOOPING, nframes=6, recycle=2, freeze_first_chance=100
+        )
         seq = simulate_frame_sequence(anim, 0, 10)
         self.assertEqual(seq, [1, 2, 3, 4, 5, 4, 5, 4, 5, 4])
 

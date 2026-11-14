@@ -43,7 +43,12 @@ from titan._config import get_config
 
 _SOURCE_CHOICES = ("auto", "uop", "mul")
 # Emulator references an install may override from [uo.reference].
-_REFERENCE_KEYS = ("server_profile", "house_placement_tool", "regions_xml", "emulator_scripts")
+_REFERENCE_KEYS = (
+    "server_profile",
+    "house_placement_tool",
+    "regions_xml",
+    "emulator_scripts",
+)
 
 
 @dataclass(frozen=True)

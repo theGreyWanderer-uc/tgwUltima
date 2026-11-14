@@ -103,8 +103,13 @@ class StandardOperandTests(unittest.TestCase):
 
     def test_size_prefixed_operands(self):
         # 0xd3 -> 1-byte value, 0xd4 -> 2-byte value, 0xd2 -> 4-byte value.
-        data = bytes([OP_IF, 0xD3, 0x07, 0xD4]) + (300).to_bytes(2, "little") \
-            + bytes([0xD2]) + (70000).to_bytes(4, "little") + bytes([OP_ENDIF])
+        data = (
+            bytes([OP_IF, 0xD3, 0x07, 0xD4])
+            + (300).to_bytes(2, "little")
+            + bytes([0xD2])
+            + (70000).to_bytes(4, "little")
+            + bytes([OP_ENDIF])
+        )
         out = disassemble(data)
         values = [o.value for o in out[0].operands]
         self.assertEqual(values, [7, 300, 70000])
@@ -205,7 +210,9 @@ class KnownVariableAnnotationTests(unittest.TestCase):
         self.assertIn("VAR 25 ; HP", text)
 
     def test_unknown_variable_number_is_not_annotated(self):
-        data = bytes([OP_IF, OP_VAR, 0x02, OP_ENDIF])  # a per-script local, no known name
+        data = bytes(
+            [OP_IF, OP_VAR, 0x02, OP_ENDIF]
+        )  # a per-script local, no known name
         text = format_instructions(disassemble(data))
         self.assertIn("VAR 2", text)
         self.assertNotIn(";", text)

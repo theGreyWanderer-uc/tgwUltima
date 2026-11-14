@@ -21,8 +21,8 @@ def _build_flx(comment: bytes, entries_data: list[bytes | None]) -> bytes:
     count = len(entries_data)
     dir_size = count * 8
     header = bytearray(DIR_OFFSET)
-    header[:0x52] = b"\x1A" * 0x52
-    header[0:len(comment)] = comment
+    header[:0x52] = b"\x1a" * 0x52
+    header[0 : len(comment)] = comment
     struct.pack_into("<I", header, 0x54, count)
     struct.pack_into("<I", header, 0x58, 1)
 
@@ -67,7 +67,9 @@ class U8MusicExportNamingTests(unittest.TestCase):
         with patch("titan.u8.cli.audio.XMIDIConverter.convert", return_value=b"MThd"):
             rc = cmd_music_export(SimpleNamespace(file=self.music_path, output=outdir))
         self.assertEqual(rc, 0)
-        self.assertEqual(sorted(os.listdir(outdir)), ["0001_intro.mid", "0002_battle.mid"])
+        self.assertEqual(
+            sorted(os.listdir(outdir)), ["0001_intro.mid", "0002_battle.mid"]
+        )
 
 
 class U8SoundExportNamingTests(unittest.TestCase):
@@ -93,9 +95,13 @@ class U8SoundExportNamingTests(unittest.TestCase):
             ),
             patch("titan.u8.cli.audio.SonarcDecoder.pcm_to_wav", return_value=b"RIFF"),
         ):
-            rc = cmd_sound_export_all(SimpleNamespace(file=self.sound_path, output=outdir))
+            rc = cmd_sound_export_all(
+                SimpleNamespace(file=self.sound_path, output=outdir)
+            )
         self.assertEqual(rc, 0)
-        self.assertEqual(sorted(os.listdir(outdir)), ["0001_GRUNT7A.wav", "0002_WHOA3A.wav"])
+        self.assertEqual(
+            sorted(os.listdir(outdir)), ["0001_GRUNT7A.wav", "0002_WHOA3A.wav"]
+        )
 
 
 class U8ShapeExportNamingTests(unittest.TestCase):
@@ -122,7 +128,9 @@ class U8ShapeExportNamingTests(unittest.TestCase):
         )()
 
         with patch("titan.u8.cli.shapes.U8Shape.from_file", return_value=fake_shape):
-            rc = cmd_shape_export(SimpleNamespace(file=shp_path, palette=None, output=outdir))
+            rc = cmd_shape_export(
+                SimpleNamespace(file=shp_path, palette=None, output=outdir)
+            )
 
         self.assertEqual(rc, 0)
         self.assertEqual(sorted(os.listdir(outdir)), ["0068_DOOR_NS_f0000.png"])
@@ -134,7 +142,9 @@ class U8ShapeExportNamingTests(unittest.TestCase):
 
         outdir = os.path.join(self.tmpdir.name, "png")
         image = Image.new("RGBA", (2, 2), (0, 255, 0, 255))
-        fake_archive = type("FakeArchive", (), {"records": [b"", b"", b"", b"", b"", b"\x01"]})()
+        fake_archive = type(
+            "FakeArchive", (), {"records": [b"", b"", b"", b"", b"", b"\x01"]}
+        )()
         fake_shape = type(
             "FakeShape",
             (),
@@ -145,10 +155,14 @@ class U8ShapeExportNamingTests(unittest.TestCase):
         )()
 
         with (
-            patch("titan.u8.cli.shapes.FlexArchive.from_file", return_value=fake_archive),
+            patch(
+                "titan.u8.cli.shapes.FlexArchive.from_file", return_value=fake_archive
+            ),
             patch("titan.u8.cli.shapes.U8Shape.from_data", return_value=fake_shape),
         ):
-            rc = cmd_shape_batch(SimpleNamespace(directory=flx_path, palette=None, output=outdir))
+            rc = cmd_shape_batch(
+                SimpleNamespace(directory=flx_path, palette=None, output=outdir)
+            )
 
         self.assertEqual(rc, 0)
         self.assertEqual(sorted(os.listdir(outdir)), ["0005_FLOATORS_f0000.png"])

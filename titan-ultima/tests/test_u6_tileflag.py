@@ -19,7 +19,9 @@ WEIGHT_SIZE = 0x400
 EXTRA_SIZE = 0x800
 
 
-def _make_tileflag_bytes(terrain: dict, flags: dict, weight: dict, extra: dict) -> bytes:
+def _make_tileflag_bytes(
+    terrain: dict, flags: dict, weight: dict, extra: dict
+) -> bytes:
     t = bytearray(TERRAIN_SIZE)
     f = bytearray(FLAGS_SIZE)
     w = bytearray(WEIGHT_SIZE)

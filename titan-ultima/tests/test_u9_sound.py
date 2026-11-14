@@ -51,7 +51,15 @@ def _build_record(
 
 class SoundRecordParseTests(unittest.TestCase):
     def test_parses_all_fields(self) -> None:
-        data = _build_record(42, "Avatar_03920.umt", 22050, 16, 1, ENCODING_EA_MICROTALK, b"\x01\x02\x03\x04")
+        data = _build_record(
+            42,
+            "Avatar_03920.umt",
+            22050,
+            16,
+            1,
+            ENCODING_EA_MICROTALK,
+            b"\x01\x02\x03\x04",
+        )
         record = U9SoundRecord.parse(data)
         self.assertEqual(record.sound_id, 42)
         self.assertEqual(record.description, "Avatar_03920.umt")
@@ -104,7 +112,9 @@ class SoundRecordEncodingTests(unittest.TestCase):
             self.assertFalse(U9SoundRecord.parse(data).is_pcm)
 
     def test_encoding_name_known_and_unknown(self) -> None:
-        pcm = U9SoundRecord.parse(_build_record(1, "x", 11025, 8, 1, ENCODING_PCM, b"\x01"))
+        pcm = U9SoundRecord.parse(
+            _build_record(1, "x", 11025, 8, 1, ENCODING_PCM, b"\x01")
+        )
         self.assertEqual(pcm.encoding_name, "PCM")
         weird = U9SoundRecord.parse(_build_record(1, "x", 11025, 8, 1, 99, b"\x01"))
         self.assertIn("99", weird.encoding_name)
@@ -176,7 +186,7 @@ class ToWavBytesTests(unittest.TestCase):
             self.assertEqual(wf.getnchannels(), 2)
             self.assertEqual(wf.getframerate(), 22050)
             pcm = wf.readframes(wf.getnframes())
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertTrue(all(s == 4096 for s in samples))
 
 

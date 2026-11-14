@@ -54,7 +54,9 @@ class Lib32ConverseShapedTests(unittest.TestCase):
         item2_data = b"HELLO"
         item3_data = _lzw_encode(b"WORLD!")
 
-        table = _entry(0) + _entry(0) + _entry(16) + _entry(16 + len(item2_data), flag=0x01)
+        table = (
+            _entry(0) + _entry(0) + _entry(16) + _entry(16 + len(item2_data), flag=0x01)
+        )
         self.buf = table + item2_data + item3_data
 
     def test_infers_four_items_despite_leading_nulls(self):

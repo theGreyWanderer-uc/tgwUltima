@@ -21,7 +21,9 @@ def _archive(*, maps: tuple[tuple[int, bytes], ...] = ((9, b"map-nine"),)) -> by
 
 class StartDatTests(unittest.TestCase):
     def test_reads_selected_slot(self) -> None:
-        self.assertEqual(U9StartDat.from_bytes(b"U9.008" + struct.pack("<i", 631)).slot, 631)
+        self.assertEqual(
+            U9StartDat.from_bytes(b"U9.008" + struct.pack("<i", 631)).slot, 631
+        )
 
     def test_rejects_wrong_size_or_magic(self) -> None:
         with self.assertRaises(U9SaveError):

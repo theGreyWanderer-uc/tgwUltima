@@ -87,10 +87,21 @@ class SdInfoRecordTests(unittest.TestCase):
         self.assertEqual(len(_record()), 48)
 
     def test_decodes_every_field(self) -> None:
-        info = U9SdInfo(_archive({1: _record(
-            width=32, height=16, max_width=64, max_height=64,
-            frame_count=9, mip_levels=5, log2=(5, 4),
-        )}))
+        info = U9SdInfo(
+            _archive(
+                {
+                    1: _record(
+                        width=32,
+                        height=16,
+                        max_width=64,
+                        max_height=64,
+                        frame_count=9,
+                        mip_levels=5,
+                        log2=(5, 4),
+                    )
+                }
+            )
+        )
         r = info.record(1)
         assert r is not None
         self.assertEqual((r.width, r.height), (32, 16))
@@ -138,10 +149,14 @@ class SdInfoHighHalfTests(unittest.TestCase):
 
 class SdInfoArchiveTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.info = U9SdInfo(_archive({
-            1: _record(width=64, height=64, frame_count=1),
-            3: _record(width=128, height=128, frame_count=9),
-        }))
+        self.info = U9SdInfo(
+            _archive(
+                {
+                    1: _record(width=64, height=64, frame_count=1),
+                    3: _record(width=128, height=128, frame_count=9),
+                }
+            )
+        )
 
     def test_used_indices_and_len(self) -> None:
         self.assertEqual(self.info.used_indices(), [1, 3])
@@ -168,15 +183,27 @@ class SdInfoArchiveTests(unittest.TestCase):
 
 class SdInfoCrossCheckTests(unittest.TestCase):
     def test_agreeing_pair_scores_full_marks(self) -> None:
-        info = U9SdInfo(_archive({
-            1: _record(width=64, height=64, mip_levels=4, frame_count=1),
-            3: _record(width=32, height=32, max_width=128, max_height=64,
-                       mip_levels=5, frame_count=9),
-        }))
-        textures = _archive({
-            1: _texture_entry(64, 64, 4, 1),
-            3: _texture_entry(128, 64, 5, 9),
-        })
+        info = U9SdInfo(
+            _archive(
+                {
+                    1: _record(width=64, height=64, mip_levels=4, frame_count=1),
+                    3: _record(
+                        width=32,
+                        height=32,
+                        max_width=128,
+                        max_height=64,
+                        mip_levels=5,
+                        frame_count=9,
+                    ),
+                }
+            )
+        )
+        textures = _archive(
+            {
+                1: _texture_entry(64, 64, 4, 1),
+                3: _texture_entry(128, 64, 5, 9),
+            }
+        )
         counts = info.cross_check(textures)
         self.assertEqual(counts["same_index_set"], 1)
         self.assertEqual(counts["compared"], 2)
@@ -194,7 +221,9 @@ class SdInfoCrossCheckTests(unittest.TestCase):
 
     def test_mismatched_index_sets_are_flagged(self) -> None:
         info = U9SdInfo(_archive({1: _record()}))
-        textures = _archive({1: _texture_entry(64, 64, 4, 1), 2: _texture_entry(8, 8, 1, 1)})
+        textures = _archive(
+            {1: _texture_entry(64, 64, 4, 1), 2: _texture_entry(8, 8, 1, 1)}
+        )
         self.assertEqual(info.cross_check(textures)["same_index_set"], 0)
 
 

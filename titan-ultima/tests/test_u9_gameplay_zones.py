@@ -64,7 +64,9 @@ def _encounter_table(
     slots.extend([(0, 0)] * (12 - len(slots)))
     return (
         struct.pack(
-            "<ii", reserved_prefix, len(choices) if declared_count is None else declared_count
+            "<ii",
+            reserved_prefix,
+            len(choices) if declared_count is None else declared_count,
         )
         + b"".join(struct.pack("<HH", *choice) for choice in slots)
         + struct.pack("<iH", reserved_suffix, flags)
@@ -145,7 +147,9 @@ class GameplayZoneTests(unittest.TestCase):
 
         self.assertEqual(encounter.declared_choice_count, 2)
         self.assertEqual(len(encounter.choice_slots), 12)
-        self.assertEqual([choice.object_type_id for choice in encounter.active_choices], [192, 198])
+        self.assertEqual(
+            [choice.object_type_id for choice in encounter.active_choices], [192, 198]
+        )
         self.assertEqual(encounter.choice_slots[2].object_type_id, 777)
         self.assertEqual(encounter.active_weight_total, 3)
         self.assertEqual(encounter.reserved_prefix, 0x12345678)
@@ -155,14 +159,17 @@ class GameplayZoneTests(unittest.TestCase):
 
     def test_reports_counts_and_totals_without_rewriting(self) -> None:
         table = _encounter_table(((100, 4),), declared_count=13)
-        entry = _zone(
-            1,
-            (),
-            flags=2,
-            chance=101,
-            table=table,
-            total_weight=99,
-        ) + b"tail"
+        entry = (
+            _zone(
+                1,
+                (),
+                flags=2,
+                chance=101,
+                table=table,
+                total_weight=99,
+            )
+            + b"tail"
+        )
         record = U9Areas(_archive({1: entry})).record(1)
         assert isinstance(record, U9GameplayZone)
 

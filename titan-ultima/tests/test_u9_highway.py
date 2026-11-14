@@ -18,7 +18,9 @@ def _points(points: list[tuple[int, int, int]]) -> bytes:
     return b"".join(struct.pack("<3I", *p) for p in points)
 
 
-def _route(start: int, last: int, distance: int, path: list[int], unknown: int = 0) -> bytes:
+def _route(
+    start: int, last: int, distance: int, path: list[int], unknown: int = 0
+) -> bytes:
     return struct.pack("<5H", start, last, len(path), distance, unknown) + struct.pack(
         f"<{len(path)}H", *path
     )
@@ -44,7 +46,9 @@ POINTS = [
 
 class HighwayHeaderTests(unittest.TestCase):
     def test_parses_counts_and_points(self) -> None:
-        highway = U9Highway(_build(POINTS, [_route(50000, 50003, 42, [50000, 50001, 50003])]))
+        highway = U9Highway(
+            _build(POINTS, [_route(50000, 50003, 42, [50000, 50001, 50003])])
+        )
         self.assertEqual(len(highway.points), 4)
         self.assertEqual(highway.declared_point_count, 4)
         self.assertEqual(highway.points[0].link, 50000)
@@ -127,7 +131,9 @@ class HighwayRouteTests(unittest.TestCase):
 
 class HighwayLookupTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.highway = U9Highway(_build(POINTS, [_route(50000, 50001, 5, [50000, 50001])]))
+        self.highway = U9Highway(
+            _build(POINTS, [_route(50000, 50001, 5, [50000, 50001])])
+        )
 
     def test_point_lookup_by_link(self) -> None:
         point = self.highway.point(50002)

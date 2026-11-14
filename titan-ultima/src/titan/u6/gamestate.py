@@ -101,8 +101,19 @@ PARTY_MODE_SENTINEL = 0xFF
 WIND_DIRECTIONS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 MONTH_NAMES = (
-    "", "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
+    "",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
 )
 
 
@@ -137,7 +148,11 @@ class U6GameClock:
     timers: list[int]
 
     def date_string(self) -> str:
-        month_name = MONTH_NAMES[self.month] if 0 < self.month < len(MONTH_NAMES) else str(self.month)
+        month_name = (
+            MONTH_NAMES[self.month]
+            if 0 < self.month < len(MONTH_NAMES)
+            else str(self.month)
+        )
         return f"{month_name} {self.day}, year {self.year}"
 
     def time_string(self) -> str:
@@ -151,7 +166,9 @@ class U6PlayerState:
     alcohol: int
     knows_gargish: bool
     solo_mode: bool
-    solo_member_index: int | None  # 0-based party-roster index; None if in full party mode
+    solo_member_index: (
+        int | None
+    )  # 0-based party-roster index; None if in full party mode
     gender: int  # 0=male, 1=female
 
     @property
@@ -169,7 +186,9 @@ class U6GameState:
     @classmethod
     def parse(cls, data: bytes) -> U6GameState:
         if len(data) < REQUIRED_SIZE:
-            raise U6GameStateError(f"objlist data too short: {len(data)} bytes, need at least {REQUIRED_SIZE}")
+            raise U6GameStateError(
+                f"objlist data too short: {len(data)} bytes, need at least {REQUIRED_SIZE}"
+            )
 
         num_in_party = data[OFFSET_NUM_IN_PARTY]
         names_needed = OFFSET_PARTY_NAMES + num_in_party * PARTY_NAME_SLOT_SIZE
@@ -182,18 +201,25 @@ class U6GameState:
         members: list[U6PartyMember] = []
         for i in range(num_in_party):
             off = OFFSET_PARTY_NAMES + i * PARTY_NAME_SLOT_SIZE
-            raw_name = data[off:off + PARTY_NAME_SLOT_SIZE]
+            raw_name = data[off : off + PARTY_NAME_SLOT_SIZE]
             name = raw_name.split(b"\x00", 1)[0].decode("latin-1")
             actor_id = data[OFFSET_PARTY_ROSTER + i]
             members.append(U6PartyMember(name=name, actor_id=actor_id))
-        party = U6Party(members=members, in_combat_mode=bool(data[OFFSET_PARTY_COMBAT_MODE]))
+        party = U6Party(
+            members=members, in_combat_mode=bool(data[OFFSET_PARTY_COMBAT_MODE])
+        )
 
-        minute, hour, day, month = data[OFFSET_GAMETIME:OFFSET_GAMETIME + 4]
+        minute, hour, day, month = data[OFFSET_GAMETIME : OFFSET_GAMETIME + 4]
         year = struct.unpack_from("<H", data, OFFSET_GAMETIME + 4)[0]
-        timers = list(data[OFFSET_TIMERS:OFFSET_TIMERS + NUM_TIMERS])
+        timers = list(data[OFFSET_TIMERS : OFFSET_TIMERS + NUM_TIMERS])
         clock = U6GameClock(
-            minute=minute, hour=hour, day=day, month=month, year=year,
-            rest_counter=data[OFFSET_REST_COUNTER], timers=timers,
+            minute=minute,
+            hour=hour,
+            day=day,
+            month=month,
+            year=year,
+            rest_counter=data[OFFSET_REST_COUNTER],
+            timers=timers,
         )
 
         solo_raw = data[OFFSET_SOLO_MODE]
@@ -211,4 +237,6 @@ class U6GameState:
         wind_raw = data[OFFSET_WIND_DIR]
         wind_direction = WIND_DIRECTIONS[wind_raw] if wind_raw <= 7 else None
 
-        return cls(party=party, clock=clock, player=player, wind_direction=wind_direction)
+        return cls(
+            party=party, clock=clock, player=player, wind_direction=wind_direction
+        )

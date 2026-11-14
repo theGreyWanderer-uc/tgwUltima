@@ -213,9 +213,12 @@ def build_facet_tiles(
     started = time.monotonic()
     tiles_written = 0
     if chunks:
-        with ProcessPoolExecutor(
-            max_workers=workers, initializer=_init_worker, initargs=(job,)
-        ) as pool, done_path.open("a", encoding="utf-8") as done_log:
+        with (
+            ProcessPoolExecutor(
+                max_workers=workers, initializer=_init_worker, initargs=(job,)
+            ) as pool,
+            done_path.open("a", encoding="utf-8") as done_log,
+        ):
             futures = [pool.submit(_render_chunk, chunk, max_level) for chunk in chunks]
             for count, future in enumerate(as_completed(futures), 1):
                 (cx, cy), written = future.result()
@@ -234,12 +237,16 @@ def build_facet_tiles(
     with ProcessPoolExecutor(max_workers=workers) as pool:
         for level in range(max_level - 1, -1, -1):
             child_dir = out / str(level + 1)
-            parents = {
-                (int(col.name) // 2, int(tile.stem) // 2)
-                for col in child_dir.iterdir()
-                if col.is_dir()
-                for tile in col.glob("*.jpg")
-            } if child_dir.is_dir() else set()
+            parents = (
+                {
+                    (int(col.name) // 2, int(tile.stem) // 2)
+                    for col in child_dir.iterdir()
+                    if col.is_dir()
+                    for tile in col.glob("*.jpg")
+                }
+                if child_dir.is_dir()
+                else set()
+            )
             futures = [pool.submit(_reduce_tile, job, level, p) for p in parents]
             built = sum(1 for f in as_completed(futures) if f.result())
             progress(f"  level {level}: {built} tiles")
@@ -256,8 +263,16 @@ def _viewer_html(meta: dict[str, object]) -> str:
         {
             key: meta[key]
             for key in (
-                "name", "facet", "cells_wide", "cells_high", "width", "height",
-                "tile_size", "max_level", "half_tile", "top_pad",
+                "name",
+                "facet",
+                "cells_wide",
+                "cells_high",
+                "width",
+                "height",
+                "tile_size",
+                "max_level",
+                "half_tile",
+                "top_pad",
             )
         }
     )

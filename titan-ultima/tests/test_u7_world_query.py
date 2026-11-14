@@ -49,7 +49,9 @@ def world(tmp_path, monkeypatch):
     write_ifix(static, 0, [(150, 0, 1, 2), (150, 1, 3, 4), (151, 0, 5, 6)])
     write_ifix(static, 1, [(151, 2, 7, 8)])
 
-    monkeypatch.setattr(u7_install, "resolve_u7_static_and_palette", lambda game: (None, None))
+    monkeypatch.setattr(
+        u7_install, "resolve_u7_static_and_palette", lambda game: (None, None)
+    )
     monkeypatch.setattr(u7_install, "resolve_u7_gamedat", lambda game: None)
     monkeypatch.setattr(u7_install, "resolve_u7_text_flx", lambda game, static: None)
     monkeypatch.setattr(u7_install, "resolve_u7_exult_flx", lambda game: None)

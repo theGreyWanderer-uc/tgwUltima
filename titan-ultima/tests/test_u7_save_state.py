@@ -262,7 +262,9 @@ def test_exult_bg_si_archive_and_cli_report_same_runtime_layouts(
 ) -> None:
     from titan.u7 import cli
 
-    monkeypatch.setattr(cli._common, "_load_container_shapes", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        cli._common, "_load_container_shapes", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(cli._common, "_load_shape_count", lambda *args, **kwargs: None)
     members = {
         "identity": identity,

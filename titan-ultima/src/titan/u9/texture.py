@@ -715,9 +715,7 @@ def _decode_monochrome(
     for i in range(count):
         v = data[start + i]
         alpha = (
-            0
-            if transparency_test_enabled and v == PALETTE_TRANSPARENCY_INDEX
-            else 255
+            0 if transparency_test_enabled and v == PALETTE_TRANSPARENCY_INDEX else 255
         )
         out[i * 4 : i * 4 + 4] = (v, v, v, alpha)
     return bytes(out)

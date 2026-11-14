@@ -45,6 +45,6 @@ def decrypt_credit_text(data: bytes) -> str:
             x += (i % 0x40) * ((i & 0xC0) >> 6) * 0x40
         d = (c ^ x) & 0xFF
         if d == 0:
-            d = ord('\n')
+            d = ord("\n")
         result.append(chr(d))
-    return ''.join(result)
+    return "".join(result)

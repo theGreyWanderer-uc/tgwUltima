@@ -72,8 +72,8 @@ class U8Shape:
             self.compressed: int = 0
             self.pixels: Optional[np.ndarray] = None  # height x width, uint8
             # Preserved for round-trip fidelity:
-            self.frame_unknown: bytes = b'\x00' * 8   # 8 bytes at frame start
-            self.table_unknown: int = 0                # 1 byte in frame table
+            self.frame_unknown: bytes = b"\x00" * 8  # 8 bytes at frame start
+            self.table_unknown: int = 0  # 1 byte in frame table
 
     def __init__(self) -> None:
         self.header0: int = 0
@@ -104,9 +104,11 @@ class U8Shape:
                 break
 
             # 3-byte offset (uint24 LE)
-            frame_offset = (data[table_off]
-                            | (data[table_off + 1] << 8)
-                            | (data[table_off + 2] << 16))
+            frame_offset = (
+                data[table_off]
+                | (data[table_off + 1] << 8)
+                | (data[table_off + 2] << 16)
+            )
             # 1 byte unknown
             table_unk = data[table_off + 3]
             # 2-byte size
@@ -204,7 +206,7 @@ class U8Shape:
                     # Literal: read dlen bytes of pixel data
                     if pos + actual_len <= len(rle_data):
                         pixels[row, xpos:end_x] = np.frombuffer(
-                            rle_data[pos:pos + actual_len], dtype=np.uint8
+                            rle_data[pos : pos + actual_len], dtype=np.uint8
                         )
                     pos += dlen
                 else:
@@ -222,8 +224,9 @@ class U8Shape:
     # Rendering
     # ------------------------------------------------------------------
 
-    def to_pngs(self, palette: U8Palette, transparent: bool = True
-                ) -> list[Image.Image]:
+    def to_pngs(
+        self, palette: U8Palette, transparent: bool = True
+    ) -> list[Image.Image]:
         """
         Render all frames to PIL Images using the given palette.
 
@@ -266,8 +269,7 @@ class U8Shape:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def quantize_to_palette(rgba_img: Image.Image,
-                            palette: U8Palette) -> np.ndarray:
+    def quantize_to_palette(rgba_img: Image.Image, palette: U8Palette) -> np.ndarray:
         """
         Convert an RGBA PIL Image to a palette-indexed uint8 pixel array.
 
@@ -284,20 +286,21 @@ class U8Shape:
         pixel: the nearest colour is taken from indices 0-254, otherwise a
         pixel painted in index 255's colour would silently vanish.
         """
-        arr = np.asarray(rgba_img)                       # (H, W, 4) uint8
+        arr = np.asarray(rgba_img)  # (H, W, 4) uint8
         h, w = arr.shape[:2]
-        rgb = arr[:, :, :3].astype(np.int32)             # (H, W, 3)
-        alpha = arr[:, :, 3]                              # (H, W)
+        rgb = arr[:, :, :3].astype(np.int32)  # (H, W, 3)
+        alpha = arr[:, :, 3]  # (H, W)
 
         # Palette lookup table, indices 0-254 (255 is reserved, see above)
-        pal_arr = np.array([palette.colors[i] for i in range(255)],
-                           dtype=np.int32)                # (255, 3)
+        pal_arr = np.array(
+            [palette.colors[i] for i in range(255)], dtype=np.int32
+        )  # (255, 3)
 
         # For every opaque pixel, find nearest palette entry (Euclidean RGB).
-        flat_rgb = rgb.reshape(-1, 1, 3)                  # (N, 1, 3)
-        diff = flat_rgb - pal_arr.reshape(1, 255, 3)      # (N, 255, 3)
-        dist_sq = (diff * diff).sum(axis=2)               # (N, 255)
-        nearest = dist_sq.argmin(axis=1).astype(np.uint8) # (N,)
+        flat_rgb = rgb.reshape(-1, 1, 3)  # (N, 1, 3)
+        diff = flat_rgb - pal_arr.reshape(1, 255, 3)  # (N, 255, 3)
+        dist_sq = (diff * diff).sum(axis=2)  # (N, 255)
+        nearest = dist_sq.argmin(axis=1).astype(np.uint8)  # (N,)
         result = nearest.reshape(h, w)
 
         # Transparent pixels -> 0xFF
@@ -338,7 +341,7 @@ class U8Shape:
                 if skip > 0:
                     while skip > 255:
                         out.append(255)
-                        out.append(0)   # dlen=0 -> zero-length run
+                        out.append(0)  # dlen=0 -> zero-length run
                         skip -= 255
                     out.append(skip)
                 break
@@ -364,7 +367,7 @@ class U8Shape:
                 else:
                     out.append(0)
 
-                rp = row[run_start + emitted:run_start + emitted + chunk]
+                rp = row[run_start + emitted : run_start + emitted + chunk]
 
                 # Check if chunk is all same value -> solid run
                 if chunk > 0 and np.all(rp == rp[0]):
@@ -400,7 +403,7 @@ class U8Shape:
 
         # --- Placeholder frame table (frame_count x 6 bytes) ---
         table_base = len(buf)
-        buf += b'\x00' * (frame_count * 6)
+        buf += b"\x00" * (frame_count * 6)
 
         # --- Frame data ---
         for f_idx, frame in enumerate(self.frames):
@@ -408,7 +411,7 @@ class U8Shape:
 
             # Frame header: 8 unknown, 2 compression, 2 width, 2 height,
             #               2 xoff, 2 yoff = 18 bytes
-            buf += frame.frame_unknown[:8].ljust(8, b'\x00')
+            buf += frame.frame_unknown[:8].ljust(8, b"\x00")
 
             # Always write compressed = 1
             buf += struct.pack("<h", 1)
@@ -421,9 +424,7 @@ class U8Shape:
                 # RLE-encode every line
                 line_bufs: list[bytes] = []
                 for row_idx in range(frame.height):
-                    line_bufs.append(
-                        self._encode_rle_line(frame.pixels[row_idx])
-                    )
+                    line_bufs.append(self._encode_rle_line(frame.pixels[row_idx]))
 
                 # Compute cumulative RLE offsets within the RLE block
                 rle_offsets: list[int] = []

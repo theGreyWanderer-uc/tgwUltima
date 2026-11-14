@@ -147,21 +147,35 @@ def build_uo_map_inventory(
     """
     client = Path(client)
     if facet_map is None:
-        facet_map = UOMap.from_client(client, facet, container=container, suffix=suffix, patches=patches)
+        facet_map = UOMap.from_client(
+            client, facet, container=container, suffix=suffix, patches=patches
+        )
     tiledata = tiledata or UOTileData.from_file(client / "tiledata.mul")
-    inv = UOMapInventory(facet, str(client), facet_map.width, facet_map.height, tiledata)
+    inv = UOMapInventory(
+        facet, str(client), facet_map.width, facet_map.height, tiledata
+    )
 
     statics = facet_map.static_records()
     inv.statics = _group_stats(
-        statics["tile_id"], statics["z"], statics["x"], statics["y"], statics["block"],
-        kind="static", hues=statics["hue"],
+        statics["tile_id"],
+        statics["z"],
+        statics["x"],
+        statics["y"],
+        statics["block"],
+        kind="static",
+        hues=statics["hue"],
     )
 
     land_ids, land_z = facet_map.land_arrays()
     ys, xs = np.indices(land_ids.shape, dtype=np.int32)
     land_blocks = (xs // 8) * facet_map.blocks_high + (ys // 8)
     inv.land = _group_stats(
-        land_ids.ravel(), land_z.ravel(), xs.ravel(), ys.ravel(), land_blocks.ravel(), kind="land"
+        land_ids.ravel(),
+        land_z.ravel(),
+        xs.ravel(),
+        ys.ravel(),
+        land_blocks.ravel(),
+        kind="land",
     )
 
     source = facet_map.source
@@ -178,7 +192,9 @@ def build_uo_map_inventory(
     return inv
 
 
-def _row_record(inv: UOMapInventory, row: UOInventoryRow, rank: int, total: int, cumulative: int):
+def _row_record(
+    inv: UOMapInventory, row: UOInventoryRow, rank: int, total: int, cumulative: int
+):
     flags = inv.flags(row)
     name = inv.name(row)
     record: dict[str, object] = {
@@ -205,7 +221,12 @@ def _row_record(inv: UOMapInventory, row: UOInventoryRow, rank: int, total: int,
     )
     if row.kind == "static":
         record.update(hued=row.hued, hues=row.hues)
-    record.update(sample_x=row.sample[0], sample_y=row.sample[1], sample_z=row.sample[2], preview="")
+    record.update(
+        sample_x=row.sample[0],
+        sample_y=row.sample[1],
+        sample_z=row.sample[2],
+        preview="",
+    )
     return record
 
 
@@ -225,18 +246,30 @@ def _name_records(records: list[dict]) -> list[dict]:
         key = r["name"] or "(unnamed)"
         g = groups.setdefault(
             key,
-            {"name": key, "categories": {}, "tile_ids": 0, "placements": 0, "z_min": r["z_min"],
-             "z_max": r["z_max"], "top_tile": r["tile_hex"], "ids": []},
+            {
+                "name": key,
+                "categories": {},
+                "tile_ids": 0,
+                "placements": 0,
+                "z_min": r["z_min"],
+                "z_max": r["z_max"],
+                "top_tile": r["tile_hex"],
+                "ids": [],
+            },
         )
         g["tile_ids"] += 1
         g["placements"] += r["placements"]
-        g["categories"][r["category"]] = g["categories"].get(r["category"], 0) + r["placements"]
+        g["categories"][r["category"]] = (
+            g["categories"].get(r["category"], 0) + r["placements"]
+        )
         g["z_min"] = min(g["z_min"], r["z_min"])
         g["z_max"] = max(g["z_max"], r["z_max"])
         g["ids"].append(r["tile_hex"])
     total = sum(g["placements"] for g in groups.values())
     out, cumulative = [], 0
-    for rank, g in enumerate(sorted(groups.values(), key=lambda g: (-g["placements"], g["name"])), 1):
+    for rank, g in enumerate(
+        sorted(groups.values(), key=lambda g: (-g["placements"], g["name"])), 1
+    ):
         cumulative += g["placements"]
         out.append(
             {
@@ -259,7 +292,9 @@ def _name_records(records: list[dict]) -> list[dict]:
 def _coverage(records: list[dict]) -> dict[str, float]:
     total = sum(r["placements"] for r in records)
     return {
-        f"top_{n}": round(100 * sum(r["placements"] for r in records[:n]) / total, 2) if total else 0
+        f"top_{n}": round(100 * sum(r["placements"] for r in records[:n]) / total, 2)
+        if total
+        else 0
         for n in COVERAGE_TOPS
     }
 
@@ -272,7 +307,11 @@ def _counts_by(records: list[dict], key: str) -> dict[str, int]:
 
 
 def write_uo_map_inventory(
-    inv: UOMapInventory, outdir: str | Path, *, previews: bool = True, art: UOArtSource | None = None
+    inv: UOMapInventory,
+    outdir: str | Path,
+    *,
+    previews: bool = True,
+    art: UOArtSource | None = None,
 ) -> dict[str, object]:
     """Write ``statics.csv``, ``land.csv``, ``names.csv``, ``summary.json``
     and, with ``previews``, art PNGs plus ``index.html``."""
@@ -286,7 +325,11 @@ def write_uo_map_inventory(
         art = art or UOArtSource.from_client(inv.client)
         _write_previews(art, statics, land, outdir / "sprites")
 
-    for name, records in (("statics.csv", statics), ("land.csv", land), ("names.csv", names)):
+    for name, records in (
+        ("statics.csv", statics),
+        ("land.csv", land),
+        ("names.csv", names),
+    ):
         _write_csv(outdir / name, records)
 
     summary = {
@@ -309,9 +352,13 @@ def write_uo_map_inventory(
             "coverage_by_top_tile_ids_pct": _coverage(land),
         },
     }
-    (outdir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (outdir / "summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
     if previews:
-        (outdir / "index.html").write_text(_html(inv, summary, statics, land, names), encoding="utf-8")
+        (outdir / "index.html").write_text(
+            _html(inv, summary, statics, land, names), encoding="utf-8"
+        )
     return summary
 
 
@@ -334,7 +381,10 @@ def _to_image(pixels: np.ndarray) -> Image.Image:
 
 def _write_previews(art: UOArtSource, statics, land, folder: Path) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    for records, prefix, decode in ((statics, "static", art.static), (land, "land", art.land)):
+    for records, prefix, decode in (
+        (statics, "static", art.static),
+        (land, "land", art.land),
+    ):
         for record in records:
             pixels = decode(record["tile_id"])
             if pixels is None or not pixels.any():
@@ -345,34 +395,45 @@ def _write_previews(art: UOArtSource, statics, land, folder: Path) -> None:
 
 
 def _z_range(r: dict) -> str:
-    return str(r["z_min"]) if r["z_min"] == r["z_max"] else f'{r["z_min"]} to {r["z_max"]}'
+    return (
+        str(r["z_min"]) if r["z_min"] == r["z_max"] else f"{r['z_min']} to {r['z_max']}"
+    )
 
 
 def _html(inv: UOMapInventory, summary: dict, statics, land, names) -> str:
     def tile_table(records: list[dict], kind: str) -> str:
         rows = []
         for r in records:
-            img = f'<img src="{html.escape(r["preview"])}" alt="" loading="lazy">' if r["preview"] else ""
+            img = (
+                f'<img src="{html.escape(r["preview"])}" alt="" loading="lazy">'
+                if r["preview"]
+                else ""
+            )
             z = _z_range(r)
             extra = (
                 f'<td class="n">{r["height"]}</td><td class="n">{r["hued"]:,}</td>'
-                if kind == "static" else f'<td class="n">{r["texture_id"]}</td>'
+                if kind == "static"
+                else f'<td class="n">{r["texture_id"]}</td>'
             )
             rows.append(
                 f'<tr data-text="{html.escape((r["tile_hex"] + " " + str(r["tile_id"]) + " " + r["name"] + " " + r["category"] + " " + r["flags"]).lower())}">'
                 f'<td class="n">{r["rank"]}</td><td class="pic">{img}</td>'
                 f'<td><b>{r["tile_hex"]}</b> <span class="muted">{r["tile_id"]}</span></td>'
-                f'<td>{html.escape(r["name"])}</td><td>{r["category"]}</td>'
+                f"<td>{html.escape(r['name'])}</td><td>{r['category']}</td>"
                 f'<td class="flags">{html.escape(r["flags"].replace("|", " "))}</td>{extra}'
                 f'<td class="n">{z}</td><td class="n">{r["placements"]:,}</td>'
                 f'<td class="n">{r["cumulative_pct"]}%</td><td class="n">{r["blocks"]:,}</td>'
                 f'<td class="n">{r["sample_x"]},{r["sample_y"]},{r["sample_z"]}</td></tr>'
             )
-        extra_head = "<th>Height</th><th>Hued</th>" if kind == "static" else "<th>Texture</th>"
+        extra_head = (
+            "<th>Height</th><th>Hued</th>" if kind == "static" else "<th>Texture</th>"
+        )
         return (
-            f'<table><thead><tr><th>#</th><th></th><th>Tile</th><th>Name</th><th>Category</th>'
+            f"<table><thead><tr><th>#</th><th></th><th>Tile</th><th>Name</th><th>Category</th>"
             f"<th>Flags</th>{extra_head}<th>Z</th><th>Placements</th><th>Cumulative</th>"
-            "<th>Blocks</th><th>Sample x,y,z</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
+            "<th>Blocks</th><th>Sample x,y,z</th></tr></thead><tbody>"
+            + "".join(rows)
+            + "</tbody></table>"
         )
 
     def name_table() -> str:
@@ -383,7 +444,9 @@ def _html(inv: UOMapInventory, summary: dict, statics, land, names) -> str:
             img = f'<img src="{html.escape(src)}" alt="" loading="lazy">' if src else ""
             z = _z_range(g)
             ids = g["ids"].split()
-            shown = " ".join(ids[:12]) + (f" +{len(ids) - 12} more" if len(ids) > 12 else "")
+            shown = " ".join(ids[:12]) + (
+                f" +{len(ids) - 12} more" if len(ids) > 12 else ""
+            )
             rows.append(
                 f'<tr data-text="{html.escape((g["name"] + " " + g["category"] + " " + g["ids"]).lower())}">'
                 f'<td class="n">{g["rank"]}</td><td class="pic">{img}</td><td><b>{html.escape(g["name"])}</b></td>'
@@ -394,12 +457,16 @@ def _html(inv: UOMapInventory, summary: dict, statics, land, names) -> str:
         return (
             "<table><thead><tr><th>#</th><th></th><th>Name</th><th>Category</th><th>Tile IDs</th>"
             "<th>Z</th><th>Placements</th><th>Cumulative</th><th>IDs (most placed first)</th></tr></thead><tbody>"
-            + "".join(rows) + "</tbody></table>"
+            + "".join(rows)
+            + "</tbody></table>"
         )
 
     s, land = summary["statics"], summary["land"]
     title = f"UO map inventory: facet {inv.facet}"
-    cov = ", ".join(f"{k.replace('top_', 'top ')} names {v}%" for k, v in s["coverage_by_top_names_pct"].items())
+    cov = ", ".join(
+        f"{k.replace('top_', 'top ')} names {v}%"
+        for k, v in s["coverage_by_top_names_pct"].items()
+    )
     cats = ", ".join(f"{k} {v:,}" for k, v in s["by_category"].items())
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

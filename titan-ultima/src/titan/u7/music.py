@@ -36,7 +36,7 @@ _MIDI_MAGIC = b"MThd"
 _XMIDI_FORM = b"FORM"
 
 # General MIDI reset SysEx.
-_GM_RESET = b"\xF0\x7E\x7F\x09\x01\xF7"
+_GM_RESET = b"\xf0\x7e\x7f\x09\x01\xf7"
 
 # Empirical U7 MT-32/AdLib -> SC-55/SC-88 friendly program remaps.
 # Keys and values are 0-based MIDI program numbers.
@@ -261,7 +261,7 @@ def convert_midi_mt32_to_gm(midi_bytes: bytes) -> bytes | None:
     tracks: list[bytes] = []
 
     for track_idx in range(ntrks):
-        if cursor + 8 > len(midi_bytes) or midi_bytes[cursor:cursor + 4] != b"MTrk":
+        if cursor + 8 > len(midi_bytes) or midi_bytes[cursor : cursor + 4] != b"MTrk":
             return None
         track_len = struct.unpack_from(">I", midi_bytes, cursor + 4)[0]
         start = cursor + 8
@@ -325,14 +325,18 @@ def _process_music_record(
     tag = f"{idx:04d}"
 
     if rec[:4] == _MIDI_MAGIC:
-        return 1 if _write_midi_export(
-            outdir,
-            base,
-            tag,
-            rec,
-            gm_mode=gm_mode,
-            out_ext=out_ext,
-        ) else 0
+        return (
+            1
+            if _write_midi_export(
+                outdir,
+                base,
+                tag,
+                rec,
+                gm_mode=gm_mode,
+                out_ext=out_ext,
+            )
+            else 0
+        )
 
     if rec[:4] != _XMIDI_FORM:
         return 0
@@ -347,14 +351,18 @@ def _process_music_record(
     if not midi_bytes:
         return 0
 
-    return 1 if _write_midi_export(
-        outdir,
-        base,
-        tag,
-        midi_bytes,
-        gm_mode=gm_mode,
-        out_ext=out_ext,
-    ) else 0
+    return (
+        1
+        if _write_midi_export(
+            outdir,
+            base,
+            tag,
+            midi_bytes,
+            gm_mode=gm_mode,
+            out_ext=out_ext,
+        )
+        else 0
+    )
 
 
 def extract_music(

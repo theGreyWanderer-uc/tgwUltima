@@ -207,7 +207,9 @@ def test_cycle_provider_rotates_only_ranges_and_reuses_images():
 def test_cycle_preview_fallback_and_step(monkeypatch, capsys):
     actions(monkeypatch, ["P", "N", "R", "Q"])
     monkeypatch.setattr(
-        browser_ui, "play_terminal", lambda *a, **k: pytest.fail("Playback must not run")
+        browser_ui,
+        "play_terminal",
+        lambda *a, **k: pytest.fail("Playback must not run"),
     )
     browser_ui.cycle_preview(U7Palette.default_palette())
     output = capsys.readouterr().out

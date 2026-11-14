@@ -51,7 +51,9 @@ class BooksTests(unittest.TestCase):
     def test_multiline_text_preserved(self):
         path = self._write(["Left: The mystery fountain.\n\nRight: The energy field."])
         books = U6Books.from_file(path)
-        self.assertEqual(books.get_text(0), "Left: The mystery fountain.\n\nRight: The energy field.")
+        self.assertEqual(
+            books.get_text(0), "Left: The mystery fountain.\n\nRight: The energy field."
+        )
 
 
 if __name__ == "__main__":

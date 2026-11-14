@@ -57,11 +57,11 @@ TICK_MS = 100
 class AniType(IntEnum):
     """Exult's ``Animation_info::AniType`` (aniinf.h:40-45)."""
 
-    TIMESYNCHED = 0     # Frame based on elapsed real time.
-    HOURLY = 1          # Frame based on the current in-game hour.
-    NON_LOOPING = 2     # Advances once per tick, stops at the last frame.
-    LOOPING = 3         # Generic loop, with optional freeze/recycle.
-    RANDOM_FRAMES = 4   # Frame chosen at random each tick.
+    TIMESYNCHED = 0  # Frame based on elapsed real time.
+    HOURLY = 1  # Frame based on the current in-game hour.
+    NON_LOOPING = 2  # Advances once per tick, stops at the last frame.
+    LOOPING = 3  # Generic loop, with optional freeze/recycle.
+    RANDOM_FRAMES = 4  # Frame chosen at random each tick.
 
 
 @dataclass(frozen=True)
@@ -87,7 +87,9 @@ def default_animation_for_tfa(tfa_type: int, nframes: int) -> Optional[Animation
     if tfa_type in (0, 1):
         return AnimationInfo(AniType.TIMESYNCHED, nframes)
     if tfa_type == 5:
-        return AnimationInfo(AniType.LOOPING, nframes, recycle=0, freeze_first_chance=20, frame_delay=1)
+        return AnimationInfo(
+            AniType.LOOPING, nframes, recycle=0, freeze_first_chance=20, frame_delay=1
+        )
     if tfa_type == 6:
         return AnimationInfo(AniType.RANDOM_FRAMES, nframes)
     if tfa_type == 8:
@@ -97,7 +99,9 @@ def default_animation_for_tfa(tfa_type: int, nframes: int) -> Optional[Animation
     if tfa_type == 10:
         return AnimationInfo(AniType.LOOPING, nframes, recycle=0, freeze_first_chance=6)
     if tfa_type == 11:
-        return AnimationInfo(AniType.LOOPING, nframes, recycle=nframes - 1, freeze_first_chance=0)
+        return AnimationInfo(
+            AniType.LOOPING, nframes, recycle=nframes - 1, freeze_first_chance=0
+        )
     if tfa_type in (12, 14):
         return AnimationInfo(AniType.TIMESYNCHED, nframes, frame_delay=4)
     if tfa_type == 13:
@@ -168,7 +172,9 @@ def has_cycle_pixels(pixels: np.ndarray) -> bool:
     return False
 
 
-def _flatten_partial_alpha(img: "Image.Image", background: tuple[int, int, int]) -> "Image.Image":
+def _flatten_partial_alpha(
+    img: "Image.Image", background: tuple[int, int, int]
+) -> "Image.Image":
     """Pre-composite genuinely translucent pixels (0 < alpha < 255) onto a
     solid background, then mark them fully opaque.
 

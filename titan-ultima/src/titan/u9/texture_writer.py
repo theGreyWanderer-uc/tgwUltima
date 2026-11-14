@@ -368,9 +368,7 @@ def frame_encoding(
         return ENCODING_ALPHA_INTENSITY88
     if pixel_format == FORMAT_P8:
         return ENCODING_RGB565
-    raise U9TextureWriteError(
-        f"unsupported two-byte pixel format code {pixel_format}"
-    )
+    raise U9TextureWriteError(f"unsupported two-byte pixel format code {pixel_format}")
 
 
 def _encode_level(

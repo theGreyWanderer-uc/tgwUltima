@@ -78,8 +78,15 @@ import struct
 import wave
 from dataclasses import dataclass
 
-from titan.u9.adpcm import AdpcmDecodeError, decode_mono as decode_adpcm_mono, decode_stereo
-from titan.u9.microtalk import MicroTalkDecodeError, decode_mono as decode_microtalk_mono
+from titan.u9.adpcm import (
+    AdpcmDecodeError,
+    decode_mono as decode_adpcm_mono,
+    decode_stereo,
+)
+from titan.u9.microtalk import (
+    MicroTalkDecodeError,
+    decode_mono as decode_microtalk_mono,
+)
 
 HEADER_SIZE = 0x3C
 DESCRIPTION_OFFSET = 0x04
@@ -194,7 +201,11 @@ class U9SoundRecord:
             pcm_bytes = self.payload
         elif self.is_decodable_adpcm:
             try:
-                pcm_bytes = decode_stereo(self.payload) if self.num_channels == 2 else decode_adpcm_mono(self.payload)
+                pcm_bytes = (
+                    decode_stereo(self.payload)
+                    if self.num_channels == 2
+                    else decode_adpcm_mono(self.payload)
+                )
             except AdpcmDecodeError as e:
                 raise U9SoundRecordError(f"ADPCM decode failed: {e}") from e
         elif self.is_decodable_microtalk:

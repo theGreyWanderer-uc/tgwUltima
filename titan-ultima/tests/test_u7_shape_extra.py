@@ -125,7 +125,9 @@ class BargeAndMountainTopParsingTests(unittest.TestCase):
 class FromDirTests(unittest.TestCase):
     def test_loose_static_dir_file_takes_priority(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with open(os.path.join(tmp, "shape_info.txt"), "w", encoding="latin-1") as f:
+            with open(
+                os.path.join(tmp, "shape_info.txt"), "w", encoding="latin-1"
+            ) as f:
                 f.write(_BG_FIELD_TYPE_SECTION)
             table = U7ShapeExtraTable.from_dir(tmp, game="bg")
             self.assertEqual(table.get(756).field_type, U7FieldType.CALTROPS)

@@ -73,38 +73,38 @@ class U7TypeFlags:
     """
 
     # TFA byte-0 flag bits
-    FLAG_HAS_SFX            = 0x01
-    FLAG_STRANGE_MOVEMENT   = 0x02
-    FLAG_ANIMATED           = 0x04
-    FLAG_SOLID              = 0x08
-    FLAG_WATER              = 0x10
+    FLAG_HAS_SFX = 0x01
+    FLAG_STRANGE_MOVEMENT = 0x02
+    FLAG_ANIMATED = 0x04
+    FLAG_SOLID = 0x08
+    FLAG_WATER = 0x10
 
     # TFA byte-1: shape class (bits 0–3)
-    SHAPE_CLASS_UNUSABLE   = 0
-    SHAPE_CLASS_QUALITY    = 2
-    SHAPE_CLASS_QUANTITY   = 3
-    SHAPE_CLASS_HAS_HP     = 4
+    SHAPE_CLASS_UNUSABLE = 0
+    SHAPE_CLASS_QUALITY = 2
+    SHAPE_CLASS_QUANTITY = 3
+    SHAPE_CLASS_HAS_HP = 4
     SHAPE_CLASS_QUALITY_FLAGS = 5
-    SHAPE_CLASS_CONTAINER  = 6
-    SHAPE_CLASS_EGG        = 7
-    SHAPE_CLASS_SPELLBOOK  = 8
-    SHAPE_CLASS_BARGE      = 9    # Barge / boat
-    SHAPE_CLASS_VIRTUE_STONE = 11 # Virtue stones
-    SHAPE_CLASS_MONSTER    = 12
-    SHAPE_CLASS_HUMAN      = 13
-    SHAPE_CLASS_BUILDING   = 14   # Roof, window, mountain top
+    SHAPE_CLASS_CONTAINER = 6
+    SHAPE_CLASS_EGG = 7
+    SHAPE_CLASS_SPELLBOOK = 8
+    SHAPE_CLASS_BARGE = 9  # Barge / boat
+    SHAPE_CLASS_VIRTUE_STONE = 11  # Virtue stones
+    SHAPE_CLASS_MONSTER = 12
+    SHAPE_CLASS_HUMAN = 13
+    SHAPE_CLASS_BUILDING = 14  # Roof, window, mountain top
 
     # Human-readable shape class names
     SHAPE_CLASS_NAMES: dict[int, str] = {
-        0:  "unusable",
-        2:  "quality",
-        3:  "quantity",
-        4:  "has_hp",
-        5:  "quality_flags",
-        6:  "container",
-        7:  "hatchable",
-        8:  "spellbook",
-        9:  "barge",
+        0: "unusable",
+        2: "quality",
+        3: "quantity",
+        4: "has_hp",
+        5: "quality_flags",
+        6: "container",
+        7: "hatchable",
+        8: "spellbook",
+        9: "barge",
         11: "virtue_stone",
         12: "monster",
         13: "human",
@@ -113,33 +113,33 @@ class U7TypeFlags:
 
     # TFA animation types (from aniinf.cc create_from_tfa)
     ANIM_TYPE_NAMES: dict[int, str] = {
-        0:  "timesynched",
-        1:  "timesynched",
-        2:  "random_advance",      # like 0/1 but frames advance randomly
-        3:  "unknown_pattern",     # unimplemented in Exult
-        4:  "random_pattern",      # unimplemented in Exult
-        5:  "looping",             # recycle=0, freeze=20, delay=1
-        6:  "random_frames",
-        7:  "toggle_bit0",         # frame ^= 1; unimplemented in Exult
-        8:  "hourly",
-        9:  "looping_r8",          # recycle=8
-        10: "looping_r6",          # recycle=6
-        11: "looping_end",         # recycle=nframes-1, freeze=0
-        12: "slow_advance",        # timesynched, freeze=100, delay=4
+        0: "timesynched",
+        1: "timesynched",
+        2: "random_advance",  # like 0/1 but frames advance randomly
+        3: "unknown_pattern",  # unimplemented in Exult
+        4: "random_pattern",  # unimplemented in Exult
+        5: "looping",  # recycle=0, freeze=20, delay=1
+        6: "random_frames",
+        7: "toggle_bit0",  # frame ^= 1; unimplemented in Exult
+        8: "hourly",
+        9: "looping_r8",  # recycle=8
+        10: "looping_r6",  # recycle=6
+        11: "looping_end",  # recycle=nframes-1, freeze=0
+        12: "slow_advance",  # timesynched, freeze=100, delay=4
         13: "non_looping",
-        14: "grandfather_clock",   # same timing as 12
-        15: "timesynched_sfx",     # 6 frames, freeze=100, delay=4, sfx=0
+        14: "grandfather_clock",  # same timing as 12
+        15: "timesynched_sfx",  # 6 frames, freeze=100, delay=4, sfx=0
     }
 
     # TFA byte-1 flag bits
-    FLAG_POISONOUS          = 0x10
-    FLAG_DOOR               = 0x20
-    FLAG_BARGE_PART         = 0x40
-    FLAG_TRANSPARENT        = 0x80
+    FLAG_POISONOUS = 0x10
+    FLAG_DOOR = 0x20
+    FLAG_BARGE_PART = 0x40
+    FLAG_TRANSPARENT = 0x80
 
     # TFA byte-2 flag bits
-    FLAG_LIGHT_SOURCE       = 0x40
-    FLAG_TRANSLUCENCY       = 0x80
+    FLAG_LIGHT_SOURCE = 0x40
+    FLAG_TRANSLUCENCY = 0x80
 
     # Human-readable names for byte-0 flags (bits 0–4)
     BYTE0_FLAG_NAMES: dict[int, str] = {
@@ -327,7 +327,8 @@ class U7TypeFlags:
         def shape_class_name(self) -> str:
             """Human-readable shape class name."""
             return U7TypeFlags.SHAPE_CLASS_NAMES.get(
-                self.shape_class, f"unknown({self.shape_class})")
+                self.shape_class, f"unknown({self.shape_class})"
+            )
 
         @property
         def anim_type_name(self) -> str:
@@ -335,7 +336,8 @@ class U7TypeFlags:
             if self.anim_type < 0:
                 return ""
             return U7TypeFlags.ANIM_TYPE_NAMES.get(
-                self.anim_type, f"unknown({self.anim_type})")
+                self.anim_type, f"unknown({self.anim_type})"
+            )
 
         def flag_names(self) -> list[str]:
             """Return list of all set flag names."""
@@ -479,7 +481,7 @@ class U7TypeFlags:
             # TFA
             if i < num_tfa:
                 off = i * 3
-                raw = tfa_data[off:off + 3]
+                raw = tfa_data[off : off + 3]
                 entry.tfa = bytes(raw)
                 entry.dims_x = 1 + (raw[2] & 0x07)
                 entry.dims_y = 1 + ((raw[2] >> 3) & 0x07)
@@ -576,22 +578,21 @@ class U7TypeFlags:
         """
         _flag_tests: dict[str, tuple[int, int]] = {
             # (byte_index, bit_mask)
-            "no_sfx":               (0, 0x01),
-            "no_strange_movement":  (0, 0x02),
-            "no_animated":          (0, 0x04),
-            "no_solid":             (0, 0x08),
-            "no_water":             (0, 0x10),
-            "no_poisonous":         (1, 0x10),
-            "no_door":              (1, 0x20),
-            "no_barge":             (1, 0x40),
-            "no_transparent":       (1, 0x80),
-            "no_light":             (2, 0x40),
-            "no_translucent":       (2, 0x80),
+            "no_sfx": (0, 0x01),
+            "no_strange_movement": (0, 0x02),
+            "no_animated": (0, 0x04),
+            "no_solid": (0, 0x08),
+            "no_water": (0, 0x10),
+            "no_poisonous": (1, 0x10),
+            "no_door": (1, 0x20),
+            "no_barge": (1, 0x40),
+            "no_transparent": (1, 0x80),
+            "no_light": (2, 0x40),
+            "no_translucent": (2, 0x80),
         }
 
         exclude_set: set[int] = set()
-        active = {k: v for k, v in _flag_tests.items()
-                  if exclude_flags.get(k, False)}
+        active = {k: v for k, v in _flag_tests.items() if exclude_flags.get(k, False)}
 
         want_no_building = exclude_flags.get("no_building", False)
 
@@ -637,7 +638,9 @@ class U7TypeFlags:
         lines.append("# Format: TFA.DAT (3 bytes/shape, 1024 shapes)")
         lines.append("#   Byte 0: bits 0-4 = flags, bits 5-7 = Z height")
         lines.append("#   Byte 1: bits 0-3 = shape class, bits 4-7 = flags")
-        lines.append("#   Byte 2: bits 0-2 = X dim-1, bits 3-5 = Y dim-1, bits 6-7 = flags")
+        lines.append(
+            "#   Byte 2: bits 0-2 = X dim-1, bits 3-5 = Y dim-1, bits 6-7 = flags"
+        )
         lines.append("#")
         lines.append("# Companion files:")
         lines.append("#   SHPDIMS.DAT — raw dimY/dimX + obstacle bits (shapes >= 150)")
@@ -657,10 +660,12 @@ class U7TypeFlags:
         # Per-shape detail
         lines.append("## Per-Shape Data")
         lines.append("")
-        hdr = (f"{'shape':>5s}  {'hex':>6s}  {'tfa_raw':8s}  "
-               f"{'dims':7s}  {'class':15s}  {'shpdims':12s}  "
-               f"{'wt':>3s}  {'vol':>3s}  {'occ':>3s}  "
-               f"{'anim':20s}  flags")
+        hdr = (
+            f"{'shape':>5s}  {'hex':>6s}  {'tfa_raw':8s}  "
+            f"{'dims':7s}  {'class':15s}  {'shpdims':12s}  "
+            f"{'wt':>3s}  {'vol':>3s}  {'occ':>3s}  "
+            f"{'anim':20s}  flags"
+        )
         lines.append(hdr)
         lines.append("-" * len(hdr))
 
@@ -671,7 +676,8 @@ class U7TypeFlags:
             shpdims = (
                 f"{e.shpdims_x}x{e.shpdims_y}"
                 f"/{e.shpdims_x_raw:02X}:{e.shpdims_y_raw:02X}"
-                if e.shpdims_x_raw or e.shpdims_y_raw else "-"
+                if e.shpdims_x_raw or e.shpdims_y_raw
+                else "-"
             )
             occ = "yes" if e.occludes else "-"
             anim = e.anim_type_name or "-"
@@ -688,52 +694,86 @@ class U7TypeFlags:
     def dump_csv(self) -> str:
         """Return CSV output of all shape entries."""
         buf = io.StringIO()
-        writer = csv.writer(buf, lineterminator='\n')
+        writer = csv.writer(buf, lineterminator="\n")
 
-        writer.writerow([
-            "shape", "hex", "tfa0", "tfa1", "tfa2",
-            "dims_x", "dims_y", "dims_z",
-            "shape_class", "shape_class_name",
-            "shpdims_x", "shpdims_y", "shpdims_x_raw", "shpdims_y_raw",
-            "x_obstacle", "y_obstacle", "pixel_w", "pixel_h",
-            "weight", "volume", "occludes",
-            "anim_type", "anim_type_name",
-            "has_sfx", "strange_movement", "animated", "solid", "water",
-            "poisonous", "door", "barge_part", "transparent",
-            "light_source", "translucency",
-        ])
+        writer.writerow(
+            [
+                "shape",
+                "hex",
+                "tfa0",
+                "tfa1",
+                "tfa2",
+                "dims_x",
+                "dims_y",
+                "dims_z",
+                "shape_class",
+                "shape_class_name",
+                "shpdims_x",
+                "shpdims_y",
+                "shpdims_x_raw",
+                "shpdims_y_raw",
+                "x_obstacle",
+                "y_obstacle",
+                "pixel_w",
+                "pixel_h",
+                "weight",
+                "volume",
+                "occludes",
+                "anim_type",
+                "anim_type_name",
+                "has_sfx",
+                "strange_movement",
+                "animated",
+                "solid",
+                "water",
+                "poisonous",
+                "door",
+                "barge_part",
+                "transparent",
+                "light_source",
+                "translucency",
+            ]
+        )
 
         for e in self.entries:
-            writer.writerow([
-                e.shape_num,
-                f"0x{e.shape_num:04X}",
-                f"0x{e.tfa[0]:02X}",
-                f"0x{e.tfa[1]:02X}",
-                f"0x{e.tfa[2]:02X}",
-                e.dims_x, e.dims_y, e.dims_z,
-                e.shape_class,
-                e.shape_class_name if e.shape_class != 0 else "",
-                e.shpdims_x, e.shpdims_y,
-                f"0x{e.shpdims_x_raw:02X}",
-                f"0x{e.shpdims_y_raw:02X}",
-                1 if e.is_x_obstacle else 0,
-                1 if e.is_y_obstacle else 0,
-                e.pixel_w, e.pixel_h, e.weight, e.volume,
-                1 if e.occludes else 0,
-                e.anim_type,
-                e.anim_type_name,
-                1 if e.has_sfx else 0,
-                1 if e.has_strange_movement else 0,
-                1 if e.is_animated else 0,
-                1 if e.is_solid else 0,
-                1 if e.is_water else 0,
-                1 if e.is_poisonous else 0,
-                1 if e.is_door else 0,
-                1 if e.is_barge_part else 0,
-                1 if e.is_transparent else 0,
-                1 if e.is_light_source else 0,
-                1 if e.has_translucency else 0,
-            ])
+            writer.writerow(
+                [
+                    e.shape_num,
+                    f"0x{e.shape_num:04X}",
+                    f"0x{e.tfa[0]:02X}",
+                    f"0x{e.tfa[1]:02X}",
+                    f"0x{e.tfa[2]:02X}",
+                    e.dims_x,
+                    e.dims_y,
+                    e.dims_z,
+                    e.shape_class,
+                    e.shape_class_name if e.shape_class != 0 else "",
+                    e.shpdims_x,
+                    e.shpdims_y,
+                    f"0x{e.shpdims_x_raw:02X}",
+                    f"0x{e.shpdims_y_raw:02X}",
+                    1 if e.is_x_obstacle else 0,
+                    1 if e.is_y_obstacle else 0,
+                    e.pixel_w,
+                    e.pixel_h,
+                    e.weight,
+                    e.volume,
+                    1 if e.occludes else 0,
+                    e.anim_type,
+                    e.anim_type_name,
+                    1 if e.has_sfx else 0,
+                    1 if e.has_strange_movement else 0,
+                    1 if e.is_animated else 0,
+                    1 if e.is_solid else 0,
+                    1 if e.is_water else 0,
+                    1 if e.is_poisonous else 0,
+                    1 if e.is_door else 0,
+                    1 if e.is_barge_part else 0,
+                    1 if e.is_transparent else 0,
+                    1 if e.is_light_source else 0,
+                    1 if e.has_translucency else 0,
+                ]
+            )
 
         return buf.getvalue()
 

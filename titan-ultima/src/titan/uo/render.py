@@ -305,7 +305,9 @@ class UOMapRenderer:
         self._land_blocks = np.frombuffer(facet.land, dtype=np.uint8).reshape(
             facet.block_count, BLOCK_BYTES
         )
-        self._quad_cache: dict[tuple, tuple[np.ndarray, np.ndarray, int, int] | None] = {}
+        self._quad_cache: dict[
+            tuple, tuple[np.ndarray, np.ndarray, int, int] | None
+        ] = {}
         self._land_cache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
         self._static_cache: dict[
             tuple[int, int, bool], tuple[np.ndarray, np.ndarray] | None
@@ -360,7 +362,10 @@ class UOMapRenderer:
             ).z
         origin_x = width // 2 - (center_x - center_y) * HALF_TILE
         origin_y = (
-            height // 2 + center_z * Z_STEP - HALF_TILE - (center_x + center_y) * HALF_TILE
+            height // 2
+            + center_z * Z_STEP
+            - HALF_TILE
+            - (center_x + center_y) * HALF_TILE
         )
         return self._render(origin_x, origin_y, width, height, statics, roofs, shading)
 
@@ -387,7 +392,9 @@ class UOMapRenderer:
 
     # -- core ------------------------------------------------------------
 
-    def _render(self, origin_x, origin_y, width, height, statics, roofs, shading) -> Image.Image:
+    def _render(
+        self, origin_x, origin_y, width, height, statics, roofs, shading
+    ) -> Image.Image:
         """Draw cells whose north vertex is ``(origin_x + (x-y)*22, origin_y + (x+y)*22)``."""
         facet = self.map
         # Diagonal bands (s = x + y, d = x - y) that can reach the window,
@@ -724,8 +731,12 @@ def _rasterize_quad(source, transparent, dz1, dz2, dz3, uv, lights=None):
         if not inside.any():
             continue
         (au, av), (bu, bv), (cu, cv) = uv[a], uv[b], uv[c]
-        u = np.clip(((w0 * au + w1 * bu + w2 * cu) / area + 0.5).astype(np.int64), 0, tex_w - 1)
-        v = np.clip(((w0 * av + w1 * bv + w2 * cv) / area + 0.5).astype(np.int64), 0, tex_h - 1)
+        u = np.clip(
+            ((w0 * au + w1 * bu + w2 * cu) / area + 0.5).astype(np.int64), 0, tex_w - 1
+        )
+        v = np.clip(
+            ((w0 * av + w1 * bv + w2 * cv) / area + 0.5).astype(np.int64), 0, tex_h - 1
+        )
         texels = source[v, u]
         hit = inside & (texels != 0) if transparent else inside
         pixels[hit] = texels[hit]

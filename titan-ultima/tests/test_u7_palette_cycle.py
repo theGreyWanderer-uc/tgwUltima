@@ -44,7 +44,7 @@ class ApplyAllCyclesTests(unittest.TestCase):
         colors = list(range(256))
         result = apply_all_cycles(colors, steps=1)
         for rng in CYCLE_RANGES:
-            window = result[rng.start:rng.start + rng.length]
+            window = result[rng.start : rng.start + rng.length]
             expected = [rng.start + rng.length - 1] + list(
                 range(rng.start, rng.start + rng.length - 1)
             )

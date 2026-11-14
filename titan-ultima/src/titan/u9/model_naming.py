@@ -50,7 +50,9 @@ MAX_LABEL_LENGTH = 64
 """Longest label :func:`label_for_model` will return -- see its docstring."""
 
 
-def names_for_model(model_id: int, types: U9TypesDat, typenames: U9TypeNames) -> list[str]:
+def names_for_model(
+    model_id: int, types: U9TypesDat, typenames: U9TypeNames
+) -> list[str]:
     """Every distinct display name claimed by a type whose ``default_model_id`` is ``model_id``."""
     seen: dict[str, None] = {}
     for type_id in types.type_ids_for_model(model_id):
@@ -67,7 +69,11 @@ def slugify(text: str) -> str:
 
 
 def label_for_model(
-    model_id: int, types: U9TypesDat, typenames: U9TypeNames, *, max_length: int = MAX_LABEL_LENGTH
+    model_id: int,
+    types: U9TypesDat,
+    typenames: U9TypeNames,
+    *,
+    max_length: int = MAX_LABEL_LENGTH,
 ) -> str | None:
     """A single filesystem-safe slug joining every name claimed for ``model_id``, or ``None`` if none.
 

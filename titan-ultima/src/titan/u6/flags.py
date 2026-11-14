@@ -74,7 +74,9 @@ def read_talk_flags(objlist: bytes) -> dict[int, int]:
     return {a.actor_id: a.talk_flags for a in actors}
 
 
-def set_talk_flag(objlist: bytearray, actor_id: int, index: int, value: bool) -> bytearray:
+def set_talk_flag(
+    objlist: bytearray, actor_id: int, index: int, value: bool
+) -> bytearray:
     """Set (``True``) or clear (``False``) one of an actor's 8 talk-flag bits, in place."""
     if not 0 <= actor_id < NUM_ACTORS:
         raise U6FlagsError(f"actor_id must be 0-{NUM_ACTORS - 1}, got {actor_id}")
@@ -82,9 +84,11 @@ def set_talk_flag(objlist: bytearray, actor_id: int, index: int, value: bool) ->
         raise U6FlagsError(f"talk flag index must be 0-7, got {index}")
     off = OFFSET_TALK_FLAGS + actor_id
     if off >= len(objlist):
-        raise U6FlagsError(f"objlist data too short to reach actor {actor_id}'s talk_flags")
+        raise U6FlagsError(
+            f"objlist data too short to reach actor {actor_id}'s talk_flags"
+        )
     if value:
-        objlist[off] |= (1 << index)
+        objlist[off] |= 1 << index
     else:
         objlist[off] &= ~(1 << index) & 0xFF
     return objlist
@@ -134,22 +138,36 @@ def compare_flags(a: bytes, b: bytes) -> list[U6FlagDiff]:
             continue
         for bit in range(8):
             if changed & (1 << bit):
-                diffs.append(U6FlagDiff(
-                    kind="talk_flag", actor_id=actor_id, bit=bit,
-                    before=(a_flags[actor_id] >> bit) & 1,
-                    after=(b_flags[actor_id] >> bit) & 1,
-                ))
+                diffs.append(
+                    U6FlagDiff(
+                        kind="talk_flag",
+                        actor_id=actor_id,
+                        bit=bit,
+                        before=(a_flags[actor_id] >> bit) & 1,
+                        after=(b_flags[actor_id] >> bit) & 1,
+                    )
+                )
 
     a_state = U6GameState.parse(a)
     b_state = U6GameState.parse(b)
     if a_state.player.quest_flag != b_state.player.quest_flag:
-        diffs.append(U6FlagDiff(
-            kind="quest_flag", actor_id=None, bit=None,
-            before=a_state.player.quest_flag, after=b_state.player.quest_flag,
-        ))
+        diffs.append(
+            U6FlagDiff(
+                kind="quest_flag",
+                actor_id=None,
+                bit=None,
+                before=a_state.player.quest_flag,
+                after=b_state.player.quest_flag,
+            )
+        )
     if a_state.player.knows_gargish != b_state.player.knows_gargish:
-        diffs.append(U6FlagDiff(
-            kind="gargish_flag", actor_id=None, bit=None,
-            before=int(a_state.player.knows_gargish), after=int(b_state.player.knows_gargish),
-        ))
+        diffs.append(
+            U6FlagDiff(
+                kind="gargish_flag",
+                actor_id=None,
+                bit=None,
+                before=int(a_state.player.knows_gargish),
+                after=int(b_state.player.knows_gargish),
+            )
+        )
     return diffs

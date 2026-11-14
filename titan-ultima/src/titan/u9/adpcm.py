@@ -107,7 +107,9 @@ def _sign_extend_nibble(n: int) -> int:
     return n - 0x10 if n & 0x8 else n
 
 
-def _decode_pair(osa: int, osb: int, a: int, b: int, shift: int, n1: int, n2: int) -> tuple[int, int]:
+def _decode_pair(
+    osa: int, osb: int, a: int, b: int, shift: int, n1: int, n2: int
+) -> tuple[int, int]:
     d1 = _sign_extend_nibble(n1)
     d2 = _sign_extend_nibble(n2)
     ua = _clamp16(((d1 << (20 - shift)) + osb * a + osa * b + 0x80) >> 8)
@@ -131,8 +133,18 @@ def _decode_block(block: bytes, state_l: list[int], state_r: list[int]) -> list[
     out: list[int] = []
     for i in range(2, BLOCK_SIZE_IN, 2):
         left_byte, right_byte = block[i], block[i + 1]
-        osa_l, osb_l = _decode_pair(osa_l, osb_l, a_l, b_l, sh_l, (left_byte >> 4) & 0xF, (right_byte >> 4) & 0xF)
-        osa_r, osb_r = _decode_pair(osa_r, osb_r, a_r, b_r, sh_r, left_byte & 0xF, right_byte & 0xF)
+        osa_l, osb_l = _decode_pair(
+            osa_l,
+            osb_l,
+            a_l,
+            b_l,
+            sh_l,
+            (left_byte >> 4) & 0xF,
+            (right_byte >> 4) & 0xF,
+        )
+        osa_r, osb_r = _decode_pair(
+            osa_r, osb_r, a_r, b_r, sh_r, left_byte & 0xF, right_byte & 0xF
+        )
         out.extend((osa_l, osa_r, osb_l, osb_r))
 
     state_l[0], state_l[1] = osa_l, osb_l

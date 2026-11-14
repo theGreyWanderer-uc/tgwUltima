@@ -53,6 +53,7 @@ NUM_TILE_BYTES = TILE_SIZE * TILE_SIZE  # 64
 # RLE encoding helpers (used by Frame.to_rle_bytes)
 # ---------------------------------------------------------------------------
 
+
 def _find_opaque_spans(row: np.ndarray) -> list[tuple[int, int]]:
     """Return (start, end) pairs of contiguous non-transparent pixel runs.
 
@@ -104,7 +105,7 @@ def _encode_rle_segment(segment: np.ndarray) -> bytes:
             lit_len = i - lit_start
             # Emit literal block: header bit0=0, then pixel bytes
             parts.append(bytes([lit_len << 1]))
-            parts.append(bytes(segment[lit_start:lit_start + lit_len]))
+            parts.append(bytes(segment[lit_start : lit_start + lit_len]))
 
     return b"".join(parts)
 
@@ -403,9 +404,11 @@ class U7Shape:
             frame.origin_x = -1
             frame.origin_y = -1
             start = i * NUM_TILE_BYTES
-            frame.pixels = np.frombuffer(
-                data[start:start + NUM_TILE_BYTES], dtype=np.uint8
-            ).reshape((TILE_SIZE, TILE_SIZE)).copy()
+            frame.pixels = (
+                np.frombuffer(data[start : start + NUM_TILE_BYTES], dtype=np.uint8)
+                .reshape((TILE_SIZE, TILE_SIZE))
+                .copy()
+            )
             shape.frames.append(frame)
         return shape
 
@@ -455,15 +458,14 @@ class U7Shape:
         return shape
 
     @classmethod
-    def _decode_rle_frame(cls, data: bytes, offset: int, length: int
-                          ) -> U7Shape.Frame:
+    def _decode_rle_frame(cls, data: bytes, offset: int, length: int) -> U7Shape.Frame:
         """Decode one RLE frame at *offset* with *length* bytes."""
         frame = cls.Frame()
         d = data[offset:]
         if len(d) < 8:
             return frame
 
-        xright = struct.unpack_from("<h", d, 0)[0]   # signed!
+        xright = struct.unpack_from("<h", d, 0)[0]  # signed!
         xleft = struct.unpack_from("<h", d, 2)[0]
         yabove = struct.unpack_from("<h", d, 4)[0]
         ybelow = struct.unpack_from("<h", d, 6)[0]
@@ -512,8 +514,8 @@ class U7Shape:
                 count = end - pos
                 if 0 <= py < frame.height and 0 <= px < frame.width:
                     put = min(count, frame.width - px)
-                    pixels[py, px:px + put] = np.frombuffer(
-                        d[pos:pos + put], dtype=np.uint8
+                    pixels[py, px : px + put] = np.frombuffer(
+                        d[pos : pos + put], dtype=np.uint8
                     )
                 pos += npixels
             else:
@@ -535,14 +537,14 @@ class U7Shape:
                         pos += 1
                         if 0 <= py < frame.height and 0 <= cx < frame.width:
                             put = min(bcnt, frame.width - cx)
-                            pixels[py, cx:cx + put] = pix
+                            pixels[py, cx : cx + put] = pix
                     else:
                         end = min(pos + bcnt, dlen)
                         count = end - pos
                         if 0 <= py < frame.height and 0 <= cx < frame.width:
                             put = min(count, frame.width - cx)
-                            pixels[py, cx:cx + put] = np.frombuffer(
-                                d[pos:pos + put], dtype=np.uint8
+                            pixels[py, cx : cx + put] = np.frombuffer(
+                                d[pos : pos + put], dtype=np.uint8
                             )
                         pos += bcnt
                     b += bcnt
@@ -693,7 +695,9 @@ class U7Shape:
 
         flat_rgb = palette.to_flat_rgb()
         tidx = getattr(palette, "transparent_index", 255)
-        colors_arr = np.array(palette.colors, dtype=np.uint8) if has_translucency else None
+        colors_arr = (
+            np.array(palette.colors, dtype=np.uint8) if has_translucency else None
+        )
 
         for frame_idx, frame in enumerate(self.frames):
             if frame.pixels is None or frame.width <= 0 or frame.height <= 0:
@@ -709,8 +713,14 @@ class U7Shape:
             bg = exact_background[frame_idx] if exact_background else None
             images.append(
                 self._render_frame_rgba(
-                    frame, flat_rgb, tidx, transparent, has_translucency,
-                    translucency, colors_arr, bg,
+                    frame,
+                    flat_rgb,
+                    tidx,
+                    transparent,
+                    has_translucency,
+                    translucency,
+                    colors_arr,
+                    bg,
                 )
             )
 

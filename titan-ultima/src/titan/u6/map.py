@@ -92,7 +92,9 @@ SURFACE_CHUNKS_PER_SIDE = 16  # 16x16 chunk-refs per surface superchunk
 DUNGEON_LEVELS = 5
 DUNGEON_CHUNKS_PER_SIDE = 32  # 32x32 chunk-refs per dungeon superchunk
 
-SURFACE_WORLD_TILES = SURFACE_SIDE_SUPERCHUNKS * SURFACE_CHUNKS_PER_SIDE * CHUNK_DIM  # 1024
+SURFACE_WORLD_TILES = (
+    SURFACE_SIDE_SUPERCHUNKS * SURFACE_CHUNKS_PER_SIDE * CHUNK_DIM
+)  # 1024
 DUNGEON_WORLD_TILES = DUNGEON_CHUNKS_PER_SIDE * CHUNK_DIM  # 256
 
 
@@ -119,7 +121,9 @@ class U6Chunks:
     @classmethod
     def parse(cls, data: bytes) -> U6Chunks:
         if len(data) % CHUNK_SIZE != 0:
-            raise U6ChunksError(f"CHUNKS data length {len(data)} is not a multiple of {CHUNK_SIZE}")
+            raise U6ChunksError(
+                f"CHUNKS data length {len(data)} is not a multiple of {CHUNK_SIZE}"
+            )
         return cls(data)
 
     @property
@@ -128,7 +132,7 @@ class U6Chunks:
 
     def get_chunk(self, chunk_num: int) -> bytes:
         """Return one chunk's 64 raw tile-number bytes (row-major 8x8)."""
-        return self._data[chunk_num * CHUNK_SIZE:(chunk_num + 1) * CHUNK_SIZE]
+        return self._data[chunk_num * CHUNK_SIZE : (chunk_num + 1) * CHUNK_SIZE]
 
     def get_chunk_array(self, chunk_num: int) -> np.ndarray:
         """Return one chunk as an 8x8 uint8 array of tile numbers."""
@@ -195,23 +199,34 @@ class U6Map:
         """
         surface_bytes = (surface_side * surface_side * 3) // 2
         dungeon_bytes = (dungeon_side * dungeon_side * 3) // 2
-        expected = num_surface_superchunks * surface_bytes + num_dungeon_levels * dungeon_bytes
+        expected = (
+            num_surface_superchunks * surface_bytes + num_dungeon_levels * dungeon_bytes
+        )
         if len(data) != expected:
             raise U6MapError(f"MAP data is {len(data)} bytes, expected {expected}")
 
         pos = 0
         surface: list[list[int]] = []
         for _ in range(num_surface_superchunks):
-            surface.append(_unpack_superchunk_refs(data[pos:pos + surface_bytes], surface_side))
+            surface.append(
+                _unpack_superchunk_refs(data[pos : pos + surface_bytes], surface_side)
+            )
             pos += surface_bytes
 
         dungeon: list[list[int]] = []
         for _ in range(num_dungeon_levels):
-            dungeon.append(_unpack_superchunk_refs(data[pos:pos + dungeon_bytes], dungeon_side))
+            dungeon.append(
+                _unpack_superchunk_refs(data[pos : pos + dungeon_bytes], dungeon_side)
+            )
             pos += dungeon_bytes
 
-        return cls(surface, dungeon, surface_side=surface_side, dungeon_side=dungeon_side,
-                   surface_arrangement=surface_arrangement)
+        return cls(
+            surface,
+            dungeon,
+            surface_side=surface_side,
+            dungeon_side=dungeon_side,
+            surface_arrangement=surface_arrangement,
+        )
 
     def build_surface_grid(self, chunks: U6Chunks) -> np.ndarray:
         """Composite the full surface into one tile-number grid."""
@@ -229,19 +244,26 @@ class U6Map:
         side = self.dungeon_side
         world_side = side * CHUNK_DIM
         grid = np.zeros((world_side, world_side), dtype=np.uint8)
-        self._paint_superchunk(grid, self.dungeon_superchunks[level], chunks, side, 0, 0)
+        self._paint_superchunk(
+            grid, self.dungeon_superchunks[level], chunks, side, 0, 0
+        )
         return grid
 
     @staticmethod
     def _paint_superchunk(
-        grid: np.ndarray, refs: list[int], chunks: U6Chunks, side: int, world_x: int, world_y: int
+        grid: np.ndarray,
+        refs: list[int],
+        chunks: U6Chunks,
+        side: int,
+        world_x: int,
+        world_y: int,
     ) -> None:
         for cy in range(side):
             for cx in range(side):
                 chunk_arr = chunks.get_chunk_array(refs[cx + cy * side])
                 y0 = world_y + cy * CHUNK_DIM
                 x0 = world_x + cx * CHUNK_DIM
-                grid[y0:y0 + CHUNK_DIM, x0:x0 + CHUNK_DIM] = chunk_arr
+                grid[y0 : y0 + CHUNK_DIM, x0 : x0 + CHUNK_DIM] = chunk_arr
 
 
 def render_tile_grid(
@@ -273,7 +295,7 @@ def render_tile_grid(
     """
     if region is not None:
         x, y, w, h = region
-        grid = grid[y:y + h, x:x + w]
+        grid = grid[y : y + h, x : x + w]
 
     if animdata is not None:
         grid = animdata.resolve_grid(grid, tick)

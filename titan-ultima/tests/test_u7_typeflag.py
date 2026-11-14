@@ -17,7 +17,9 @@ from titan.u7.typeflag import U7TypeFlags
 FLAG_IS_ANIMATED = 0x04
 
 
-def _make_tfa_bytes(flags_by_shape: dict, nibble_by_shape: dict, num_shapes: int = 4) -> bytes:
+def _make_tfa_bytes(
+    flags_by_shape: dict, nibble_by_shape: dict, num_shapes: int = 4
+) -> bytes:
     """Build synthetic TFA.DAT bytes matching the real fixed layout: the
     full 3072-byte shape-record block (1024 shapes x 3 bytes, zero-filled
     except the shapes under test) followed by the 512-byte packed
@@ -184,7 +186,9 @@ class ContactEffectAliasTests(unittest.TestCase):
         self.assertTrue(entry.is_field)
 
     def test_contact_effect_false_when_bit_unset(self):
-        tfa_bytes = _make_tfa_bytes_full({11: (0x00, 0x05, 0x00)})  # class=5, bit4 clear
+        tfa_bytes = _make_tfa_bytes_full(
+            {11: (0x00, 0x05, 0x00)}
+        )  # class=5, bit4 clear
         entry = U7TypeFlags.parse(tfa_bytes).get(11)
         self.assertFalse(entry.has_contact_effect)
         self.assertFalse(entry.is_poisonous)
@@ -216,7 +220,8 @@ class ShapeClassHelperTests(unittest.TestCase):
                 for other_prop in all_props:
                     expected = other_prop == prop_name
                     self.assertEqual(
-                        getattr(entry, other_prop), expected,
+                        getattr(entry, other_prop),
+                        expected,
                         f"{other_prop} for shape_class={shape_class}",
                     )
 

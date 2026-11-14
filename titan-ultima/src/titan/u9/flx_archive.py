@@ -113,7 +113,9 @@ class U9FlxArchive:
 
     def __init__(self, data: bytes) -> None:
         if len(data) < DIR_OFFSET:
-            raise U9FlxArchiveError(f"data too small to contain an FLX header: {len(data)} bytes")
+            raise U9FlxArchiveError(
+                f"data too small to contain an FLX header: {len(data)} bytes"
+            )
 
         version = struct.unpack_from("<I", data, VERSION_OFFSET)[0]
         if version != FORMAT_VERSION:
@@ -135,7 +137,9 @@ class U9FlxArchive:
             )
 
         self._data = data
-        self.comment = data[:COMMENT_SIZE].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+        self.comment = (
+            data[:COMMENT_SIZE].split(b"\x00", 1)[0].decode("ascii", errors="replace")
+        )
         self.count = count
         self.size = struct.unpack_from("<I", data, SIZE_OFFSET)[0]
         self.size2 = struct.unpack_from("<I", data, SIZE2_OFFSET)[0]
@@ -146,7 +150,9 @@ class U9FlxArchive:
             if pos + DIR_ENTRY_SIZE > len(data):
                 break
             offset, length = struct.unpack_from("<II", data, pos)
-            self.entries.append(U9FlxDirEntry(index=index, offset=offset, length=length))
+            self.entries.append(
+                U9FlxDirEntry(index=index, offset=offset, length=length)
+            )
 
     @classmethod
     def from_file(cls, filepath: str | os.PathLike[str]) -> U9FlxArchive:
@@ -166,7 +172,9 @@ class U9FlxArchive:
         """Return raw bytes for one entry; ``b""`` if that slot is unused."""
         entry = self.get_entry(index)
         if entry is None:
-            raise U9FlxArchiveError(f"entry index {index} out of range (0..{len(self.entries) - 1})")
+            raise U9FlxArchiveError(
+                f"entry index {index} out of range (0..{len(self.entries) - 1})"
+            )
         if not entry.is_used:
             return b""
         if entry.offset + entry.length > len(self._data):

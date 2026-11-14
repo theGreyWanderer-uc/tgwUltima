@@ -68,7 +68,14 @@ ROAD_LAND_RANGES = (
 )
 # Region types whose AllowHousing is false for players (RunUO Scripts/Regions).
 NO_HOUSING_REGION_TYPES = frozenset(
-    ("GuardedRegion", "TownRegion", "DungeonRegion", "Jail", "NoHousingRegion", "GreenAcres")
+    (
+        "GuardedRegion",
+        "TownRegion",
+        "DungeonRegion",
+        "Jail",
+        "NoHousingRegion",
+        "GreenAcres",
+    )
 )
 FELUCCA_T2A = (5120, 2304, 6144, 4096)  # SpellHelper.IsFeluccaT2A: x0, y0, x1, y1
 # Rejection reasons, in the order a centre is attributed to its first failure.
@@ -151,9 +158,13 @@ def no_housing_region_types(scripts_dir: str | Path) -> frozenset[str]:
                 if decl.start() < override.start():
                     owner = decl.group(1)
             body = _method_body(text, override.end() - 1)
-            if owner and owner != "BaseHouse" and (
-                re.search(r"return\s+false\s*;", body)
-                or re.search(r"return\s+(this\.)?m_\w+\s*;", body)
+            if (
+                owner
+                and owner != "BaseHouse"
+                and (
+                    re.search(r"return\s+false\s*;", body)
+                    or re.search(r"return\s+(this\.)?m_\w+\s*;", body)
+                )
             ):
                 roots.add(owner)
 
@@ -190,7 +201,11 @@ def _parse_region_rects(path, facet_name, forbidding_types):
     """
     root = ET.parse(path).getroot()
     facet = next(
-        (f for f in root.iter("Facet") if f.get("name", "").lower() == facet_name.lower()),
+        (
+            f
+            for f in root.iter("Facet")
+            if f.get("name", "").lower() == facet_name.lower()
+        ),
         None,
     )
     if facet is None:
@@ -200,7 +215,9 @@ def _parse_region_rects(path, facet_name, forbidding_types):
     counts: dict[str, int] = {}
     order = 0
 
-    def walk(element, parent_priority, level, parent_allow, parent_no_housing, parent_name):
+    def walk(
+        element, parent_priority, level, parent_allow, parent_no_housing, parent_name
+    ):
         nonlocal order
         for region in element.findall("region"):
             rtype = region.get("type", "")
@@ -217,18 +234,34 @@ def _parse_region_rects(path, facet_name, forbidding_types):
             if not allow:
                 counts[rtype] = counts.get(rtype, 0) + 1
             zrange = region.find("zrange")
-            rz1 = int(zrange.get("min", _REGION_MIN_Z)) if zrange is not None else _REGION_MIN_Z
-            rz2 = int(zrange.get("max", _REGION_MAX_Z)) if zrange is not None else _REGION_MAX_Z
+            rz1 = (
+                int(zrange.get("min", _REGION_MIN_Z))
+                if zrange is not None
+                else _REGION_MIN_Z
+            )
+            rz2 = (
+                int(zrange.get("max", _REGION_MAX_Z))
+                if zrange is not None
+                else _REGION_MAX_Z
+            )
             key = (priority, level, -order)
             order += 1
             for r in region.findall("rect"):
-                rects.append((
-                    key, allow, no_housing,
-                    int(r.get("x", 0)), int(r.get("y", 0)),
-                    int(r.get("width", 0)), int(r.get("height", 0)),
-                    int(r.get("zmin", rz1)), int(r.get("zmax", rz2)),
-                    name, rtype,
-                ))
+                rects.append(
+                    (
+                        key,
+                        allow,
+                        no_housing,
+                        int(r.get("x", 0)),
+                        int(r.get("y", 0)),
+                        int(r.get("width", 0)),
+                        int(r.get("height", 0)),
+                        int(r.get("zmin", rz1)),
+                        int(r.get("zmax", rz2)),
+                        name,
+                        rtype,
+                    )
+                )
             walk(region, priority, level + 1, allow, no_housing, name)
 
     walk(facet, 50, 0, True, False, "")
@@ -260,8 +293,15 @@ def region_outlines_from_rects(rects, *, z: int = 0) -> list[dict[str, object]]:
     """
     return [
         {
-            "name": name, "type": rtype, "allow": allow, "no_housing": no_housing,
-            "priority": key[0], "x": x, "y": y, "w": w, "h": h,
+            "name": name,
+            "type": rtype,
+            "allow": allow,
+            "no_housing": no_housing,
+            "priority": key[0],
+            "x": x,
+            "y": y,
+            "w": w,
+            "h": h,
         }
         for key, allow, no_housing, x, y, w, h, z1, z2, name, rtype in rects
         if z1 <= z < z2
@@ -363,7 +403,9 @@ def _static_tables(tiledata: UOTileData):
         flags[tile.tile_id] = tile.flags
         height[tile.tile_id] = tile.height
     calc_height = np.where(flags & _BRIDGE, height // 2, height).astype(np.int16)
-    blocking = ((flags & _IMPASSABLE) != 0) | (((flags & _SURFACE) != 0) & ((flags & _BACKGROUND) == 0))
+    blocking = ((flags & _IMPASSABLE) != 0) | (
+        ((flags & _SURFACE) != 0) & ((flags & _BACKGROUND) == 0)
+    )
     impassable = (flags & _IMPASSABLE) != 0
     surface_fg = ((flags & _SURFACE) != 0) & ((flags & _BACKGROUND) == 0)
     return calc_height, blocking, impassable, surface_fg
@@ -412,14 +454,20 @@ def build_placement_grids(
     ``reach`` is the largest footprint or border offset from a house centre
     that will be checked (a castle's border reaches 17).
     """
-    if region_layers is None and (region_blocked is not None or region_centre is not None):
+    if region_layers is None and (
+        region_blocked is not None or region_centre is not None
+    ):
         shape = (facet.height, facet.width)
         region_layers = [
             RegionLayer(
                 _REGION_MIN_Z,
                 _REGION_MAX_Z,
-                region_blocked if region_blocked is not None else np.zeros(shape, dtype=bool),
-                region_centre if region_centre is not None else np.zeros(shape, dtype=bool),
+                region_blocked
+                if region_blocked is not None
+                else np.zeros(shape, dtype=bool),
+                region_centre
+                if region_centre is not None
+                else np.zeros(shape, dtype=bool),
             )
         ]
     x0, y0, x1, y1 = window or (0, 0, facet.width, facet.height)
@@ -438,7 +486,9 @@ def build_placement_grids(
     land_start = np.minimum(np.minimum(z_top, z_left), np.minimum(z_right, z_bottom))
     use_lr = np.abs(z_top - z_bottom) > np.abs(z_left - z_right)
     land_avg = np.where(
-        use_lr, np.floor_divide(z_left + z_right, 2), np.floor_divide(z_top + z_bottom, 2)
+        use_lr,
+        np.floor_divide(z_left + z_right, 2),
+        np.floor_divide(z_top + z_bottom, 2),
     ).astype(np.int16)
     ids = land_ids[:-1, :-1]
 
@@ -468,7 +518,10 @@ def build_placement_grids(
         static_starts=[padded(s, _INF) for s in blk_s],
         static_ends=[padded(e, -_INF) for e in blk_e],
         region_layers=layers,
-        region_padded=[padded(layer.blocked[gy0 : gy0 + gh, gx0 : gx0 + gw], True) for layer in layers],
+        region_padded=[
+            padded(layer.blocked[gy0 : gy0 + gh, gx0 : gx0 + gw], True)
+            for layer in layers
+        ],
         t2a=t2a,
     )
 
@@ -479,7 +532,11 @@ def _house_tiles(multi: UOMulti, tiledata: UOTileData, footprint: HouseFootprint
     for comp in multi.components:
         if comp.item_id == 0x1:
             continue
-        info = tiledata.statics[comp.item_id] if comp.item_id < len(tiledata.statics) else None
+        info = (
+            tiledata.statics[comp.item_id]
+            if comp.item_id < len(tiledata.statics)
+            else None
+        )
         flags = info.flags if info else 0
         top = comp.z + (info.height if info else 0) + (16 if flags & _SURFACE else 0)
         tiles.setdefault((comp.x, comp.y), []).append(
@@ -512,7 +569,9 @@ def evaluate_placement(
         raise ValueError(f"multi 0x{multi.multi_id:X} has no foundation tiles")
     ex0, ex1, ey0, ey1 = HouseFootprint.extent(footprint.occupied | footprint.border)
     if max(abs(ex0), abs(ex1), abs(ey0), abs(ey1)) > grids.pad - 2:
-        raise ValueError(f"multi 0x{multi.multi_id:X} reaches beyond the prepared grids")
+        raise ValueError(
+            f"multi 0x{multi.multi_id:X} reaches beyond the prepared grids"
+        )
 
     x0, y0, x1, y1 = grids.window
     gx0, gy0 = grids.origin
@@ -561,13 +620,13 @@ def evaluate_placement(
             if not in_band.any():
                 continue
             band_bad = np.zeros(shape, dtype=bool)
-            for (dx, dy) in footprint.occupied:
+            for dx, dy in footprint.occupied:
                 band_bad |= at(reg, dx, dy)
             region_bad |= in_band & band_bad
             centre_bad |= in_band & centre_cells(layer.centre)
         fail("region", region_bad)
 
-    for (dx, dy) in footprint.occupied:
+    for dx, dy in footprint.occupied:
         fail("road", at(C["road"], dx, dy))
         fail("dense_statics", at(C["overflow"], dx, dy))
         avg, start = at(C["avg"], dx, dy), at(C["start"], dx, dy)
@@ -582,9 +641,12 @@ def evaluate_placement(
                 hit |= (at(s_arr, dx, dy) < b) & (at(e_arr, dx, dy) > a)
             fail("static", hit)
 
-    for (dx, dy) in footprint.border:
+    for dx, dy in footprint.border:
         fail("border_land", at(C["imp"], dx, dy) | at(C["road"], dx, dy))
-        fail("border_static", at(C["bimp"], dx, dy) | (at(C["bsurf"], dx, dy) > house_z + 2))
+        fail(
+            "border_static",
+            at(C["bimp"], dx, dy) | (at(C["bsurf"], dx, dy) > house_z + 2),
+        )
 
     if grids.t2a:
         tx0, ty0, tx1, ty1 = FELUCCA_T2A
@@ -722,7 +784,7 @@ def level_foundation_centres(
     f0 = min(footprint.foundation)
     house_z = at(grids.cells["avg"], *f0)
     ok = np.ones((rows, cols), dtype=bool)
-    for (dx, dy) in footprint.foundation:
+    for dx, dy in footprint.foundation:
         ok &= ~at(grids.cells["imp"], dx, dy)
         ok &= at(grids.cells["avg"], dx, dy) == house_z
     return np.nonzero(ok)
@@ -785,8 +847,10 @@ def _static_grids(facet, gx0, gy0, gh, gw, calc_h, blocking_tab, imp_tab, surf_t
     """
     records = facet.static_records()
     keep = (
-        (records["x"] >= gx0) & (records["x"] < gx0 + gw)
-        & (records["y"] >= gy0) & (records["y"] < gy0 + gh)
+        (records["x"] >= gx0)
+        & (records["x"] < gx0 + gw)
+        & (records["y"] >= gy0)
+        & (records["y"] < gy0 + gh)
     )
     rec = records[keep]
     ids = rec["tile_id"].astype(np.int64)
@@ -822,7 +886,9 @@ def _static_grids(facet, gx0, gy0, gh, gw, calc_h, blocking_tab, imp_tab, surf_t
     return starts, ends, overflow.reshape(gh, gw), border_imp, surf_top
 
 
-def pack_houses(result: PlacementResult, *, order: str = "row") -> list[tuple[int, int]]:
+def pack_houses(
+    result: PlacementResult, *, order: str = "row"
+) -> list[tuple[int, int]]:
     """Greedily place houses at legal centres, scanning ``row`` or ``column`` first.
 
     A centre is rejected once its tiles or yard would touch tiles of a house

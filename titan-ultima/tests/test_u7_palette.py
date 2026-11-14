@@ -13,7 +13,11 @@ import shutil
 import tempfile
 import unittest
 
-from titan.u7.palette import PaletteRecordEmptyError, PaletteRecordInvalidError, U7Palette
+from titan.u7.palette import (
+    PaletteRecordEmptyError,
+    PaletteRecordInvalidError,
+    U7Palette,
+)
 
 from tests._fixtures import (
     make_6bit_palette_bytes,
@@ -107,6 +111,7 @@ class EmptyVsInvalidTests(_TempDirCase):
         header = bytearray(128)
         header[0x50:0x54] = b"\x00\x1a\xff\xff"
         import struct
+
         struct.pack_into("<I", header, 0x54, 5)  # declares 5 slots
         path = os.path.join(self.tmpdir, "short.flx")
         with open(path, "wb") as f:
@@ -126,7 +131,9 @@ class RoundTripTests(_TempDirCase):
         path = make_bg_shaped_archive(os.path.join(self.tmpdir, "bg.flx"))
         pal = U7Palette.from_file(path, palette_index=0)
         raw = pal.to_raw_bytes()
-        self.assertEqual((raw[255 * 3], raw[255 * 3 + 1], raw[255 * 3 + 2]), (250, 64, 1))
+        self.assertEqual(
+            (raw[255 * 3], raw[255 * 3 + 1], raw[255 * 3 + 2]), (250, 64, 1)
+        )
 
     def test_flex_index_and_source_recorded(self):
         path = make_bg_shaped_archive(os.path.join(self.tmpdir, "bg.flx"))

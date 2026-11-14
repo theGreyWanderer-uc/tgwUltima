@@ -26,7 +26,7 @@ from typing import Optional
 # VOC header constants
 # ---------------------------------------------------------------------------
 VOC_MAGIC = b"Creative Voice File"
-VOC_DATA_OFFSET = 0x1A        # blocks start at offset 26
+VOC_DATA_OFFSET = 0x1A  # blocks start at offset 26
 
 # Block types
 _BLOCK_TERM = 0x00
@@ -123,9 +123,8 @@ class VocDecoder:
         if not data or len(data) < VOC_DATA_OFFSET:
             raise ValueError("Data too short for a VOC file")
 
-        if not data[:len(VOC_MAGIC)] == VOC_MAGIC:
-            raise ValueError(
-                "Not a Creative Voice File (missing magic header)")
+        if not data[: len(VOC_MAGIC)] == VOC_MAGIC:
+            raise ValueError("Not a Creative Voice File (missing magic header)")
 
         pcm = bytearray()
         pos = VOC_DATA_OFFSET
@@ -157,7 +156,7 @@ class VocDecoder:
                 compression = data[pos + 1]
                 raw_rate = 1000000 // (256 - rate_byte) if rate_byte < 256 else 11025
                 sample_rate = _fudge_rate(raw_rate)
-                audio_data = data[pos + 2:pos + block_len]
+                audio_data = data[pos + 2 : pos + block_len]
 
                 # Reset ADPCM state for new sound block
                 adpcm_ref = -1
@@ -174,14 +173,14 @@ class VocDecoder:
                     pcm.extend(decoded)
                 else:
                     # Unknown compression — output silence
-                    pcm.extend(b'\x80' * len(audio_data))
+                    pcm.extend(b"\x80" * len(audio_data))
 
                 pos += block_len
 
             elif block_type == _BLOCK_CONTINUE:
                 if pos + block_len > len(data):
                     break
-                audio_data = data[pos:pos + block_len]
+                audio_data = data[pos : pos + block_len]
 
                 if compression == 0:
                     pcm.extend(audio_data)
@@ -199,7 +198,7 @@ class VocDecoder:
                 duration = (data[pos] | (data[pos + 1] << 8)) + 1
                 # Byte 3 is sample rate byte for this silence period
                 pos += 3
-                pcm.extend(b'\x80' * duration)
+                pcm.extend(b"\x80" * duration)
 
             else:
                 # Unknown block type — skip
@@ -220,10 +219,7 @@ class VocDecoder:
     @classmethod
     def is_voc(cls, data: bytes) -> bool:
         """Return ``True`` if *data* begins with the VOC magic string."""
-        return (
-            len(data) >= VOC_DATA_OFFSET
-            and data[:len(VOC_MAGIC)] == VOC_MAGIC
-        )
+        return len(data) >= VOC_DATA_OFFSET and data[: len(VOC_MAGIC)] == VOC_MAGIC
 
     # ------------------------------------------------------------------
     # WAV output
@@ -270,21 +266,21 @@ class VocDecoder:
 
         header = bytearray(44)
         # RIFF header
-        header[0:4] = b'RIFF'
-        struct.pack_into('<I', header, 4, file_size)
-        header[8:12] = b'WAVE'
+        header[0:4] = b"RIFF"
+        struct.pack_into("<I", header, 4, file_size)
+        header[8:12] = b"WAVE"
         # fmt chunk
-        header[12:16] = b'fmt '
-        struct.pack_into('<I', header, 16, 16)          # chunk size
-        struct.pack_into('<H', header, 20, 1)            # PCM format
-        struct.pack_into('<H', header, 22, 1)            # mono
-        struct.pack_into('<I', header, 24, sample_rate)  # sample rate
-        struct.pack_into('<I', header, 28, sample_rate)  # byte rate (8-bit mono)
-        struct.pack_into('<H', header, 32, 1)            # block align
-        struct.pack_into('<H', header, 34, 8)            # bits per sample
+        header[12:16] = b"fmt "
+        struct.pack_into("<I", header, 16, 16)  # chunk size
+        struct.pack_into("<H", header, 20, 1)  # PCM format
+        struct.pack_into("<H", header, 22, 1)  # mono
+        struct.pack_into("<I", header, 24, sample_rate)  # sample rate
+        struct.pack_into("<I", header, 28, sample_rate)  # byte rate (8-bit mono)
+        struct.pack_into("<H", header, 32, 1)  # block align
+        struct.pack_into("<H", header, 34, 8)  # bits per sample
         # data chunk
-        header[36:40] = b'data'
-        struct.pack_into('<I', header, 40, data_size)
+        header[36:40] = b"data"
+        struct.pack_into("<I", header, 40, data_size)
 
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "wb") as f:

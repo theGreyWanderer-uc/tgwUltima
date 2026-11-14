@@ -35,17 +35,22 @@ def _build_ireg_stream() -> bytes:
     caltrops = bytes([6, 0x01, 0x02, shape_lo, shape_hi, 0x00, 0x01])
 
     c_shape_lo, c_shape_hi = _shape_frame_bytes(522)
-    container_payload = bytes([
-        0x01, 0x02,       # tile
-        c_shape_lo, c_shape_hi,
-        0x01, 0x00,       # type_val (has children)
-        0x00,             # unused
-        0x05,             # quality
-        0x00,             # unused
-        0x30,             # lift byte (lift=3)
-        0x00,             # unused
-        0x01,             # flag byte: invisible
-    ])
+    container_payload = bytes(
+        [
+            0x01,
+            0x02,  # tile
+            c_shape_lo,
+            c_shape_hi,
+            0x01,
+            0x00,  # type_val (has children)
+            0x00,  # unused
+            0x05,  # quality
+            0x00,  # unused
+            0x30,  # lift byte (lift=3)
+            0x00,  # unused
+            0x01,  # flag byte: invisible
+        ]
+    )
     container_entry = bytes([12]) + container_payload
 
     child_shape_lo, child_shape_hi = _shape_frame_bytes(100)

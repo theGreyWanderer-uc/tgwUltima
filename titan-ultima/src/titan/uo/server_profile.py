@@ -39,7 +39,11 @@ from datetime import date
 import json
 from pathlib import Path
 
-from titan.uo.housing import HousePlacementEntry, house_footprint, parse_house_placement_tool
+from titan.uo.housing import (
+    HousePlacementEntry,
+    house_footprint,
+    parse_house_placement_tool,
+)
 from titan.uo.placement import _parse_region_rects, no_housing_region_types
 
 PROFILE_FORMAT = "titan-uo-server-profile"
@@ -91,7 +95,9 @@ class ServerProfile:
         if data.get("format") != PROFILE_FORMAT:
             raise ValueError(f"{path} is not a {PROFILE_FORMAT} file")
         if data.get("version") != PROFILE_VERSION:
-            raise ValueError(f"{path}: unsupported profile version {data.get('version')}")
+            raise ValueError(
+                f"{path}: unsupported profile version {data.get('version')}"
+            )
         houses = [
             HousePlacementEntry(
                 category=h["category"],
@@ -124,7 +130,8 @@ class ServerProfile:
         Items match :func:`titan.uo.placement.region_layers_from_rects`.
         """
         regions = next(
-            (v for k, v in self.regions.items() if k.lower() == facet_name.lower()), None
+            (v for k, v in self.regions.items() if k.lower() == facet_name.lower()),
+            None,
         )
         if regions is None:
             return None
@@ -132,10 +139,21 @@ class ServerProfile:
         for region in regions:
             key = (int(region["priority"]), int(region["level"]), -int(region["order"]))
             for x, y, w, h, z1, z2 in region["rects"]:
-                rects.append((
-                    key, bool(region["allow"]), bool(region["no_housing"]),
-                    x, y, w, h, z1, z2, region["name"], region["type"],
-                ))
+                rects.append(
+                    (
+                        key,
+                        bool(region["allow"]),
+                        bool(region["no_housing"]),
+                        x,
+                        y,
+                        w,
+                        h,
+                        z1,
+                        z2,
+                        region["name"],
+                        region["type"],
+                    )
+                )
         rects.sort(key=lambda r: r[0])
         return rects
 
@@ -198,16 +216,19 @@ def build_server_profile(
             continue  # facet absent from this emulator's file
         grouped: dict[tuple, dict[str, object]] = {}
         for key, allow, no_housing, x, y, w, h, z1, z2, region_name, rtype in rects:
-            record = grouped.setdefault(key, {
-                "name": region_name,
-                "type": rtype,
-                "priority": key[0],
-                "level": key[1],
-                "order": -key[2],
-                "allow": allow,
-                "no_housing": no_housing,
-                "rects": [],
-            })
+            record = grouped.setdefault(
+                key,
+                {
+                    "name": region_name,
+                    "type": rtype,
+                    "priority": key[0],
+                    "level": key[1],
+                    "order": -key[2],
+                    "allow": allow,
+                    "no_housing": no_housing,
+                    "rects": [],
+                },
+            )
             record["rects"].append([x, y, w, h, z1, z2])
         regions[facet] = sorted(grouped.values(), key=lambda r: r["order"])
     used = {r["type"] for facet in regions.values() for r in facet}
@@ -229,7 +250,9 @@ def builtin_house_entries(multis, tiledata) -> list[HousePlacementEntry]:
     and storage are unknown and left at 0.
     """
     entries = [
-        HousePlacementEntry("ClassicHouses", type_name, cliloc, 0, 0, 0, 0, 0, 0, (0, 0, 0), multi_id)
+        HousePlacementEntry(
+            "ClassicHouses", type_name, cliloc, 0, 0, 0, 0, 0, 0, (0, 0, 0), multi_id
+        )
         for multi_id, cliloc, type_name in _CLASSIC_HOUSES
         if multi_id in multis.multis
     ]
@@ -244,7 +267,15 @@ def builtin_house_entries(multis, tiledata) -> list[HousePlacementEntry]:
             HousePlacementEntry(
                 "CustomizableFoundations",
                 f"{width}x{depth} customizable plot",
-                0, 0, 0, 0, 0, 0, 0, (0, 0, 0), multi_id,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                (0, 0, 0),
+                multi_id,
             )
         )
     return entries

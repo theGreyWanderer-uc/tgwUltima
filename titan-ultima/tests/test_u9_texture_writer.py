@@ -50,9 +50,16 @@ def _palette() -> U9Palette:
     return U9Palette(bytes(raw))
 
 
-def _entry(width: int, height: int, payload: bytes, *, compression: int = 0,
-           mip_count: int = 0, flags: int = 0,
-           transparency_test_enabled: bool = False) -> bytes:
+def _entry(
+    width: int,
+    height: int,
+    payload: bytes,
+    *,
+    compression: int = 0,
+    mip_count: int = 0,
+    flags: int = 0,
+    transparency_test_enabled: bool = False,
+) -> bytes:
     """One-frame texture set wrapping ``payload``."""
     header = struct.pack("<HBBHHII", width, mip_count, 0, height, compression, 1, 0)
     frame_offset = 0x18
@@ -126,9 +133,7 @@ class EncoderTests(unittest.TestCase):
         raw = bytearray(1024)
         raw[247 * 4 : 247 * 4 + 3] = bytes((128, 128, 128))
         raw[254 * 4 : 254 * 4 + 3] = bytes((128, 128, 128))
-        out = encode_paletted(
-            bytes((128, 128, 128, 255)), U9Palette(bytes(raw))
-        )
+        out = encode_paletted(bytes((128, 128, 128, 255)), U9Palette(bytes(raw)))
         self.assertEqual(out, bytes((247,)))
 
     def test_alpha8_uses_the_alpha_channel(self) -> None:
@@ -146,7 +151,9 @@ class EncoderTests(unittest.TestCase):
     def test_bc1_block_size_is_eight_bytes_per_4x4(self) -> None:
         self.assertEqual(len(encode_bc1(_solid(4, 4, (10, 20, 30, 255)), 4, 4)), 8)
         self.assertEqual(len(encode_bc1(_solid(8, 8, (10, 20, 30, 255)), 8, 8)), 32)
-        self.assertEqual(len(encode_bc1(_solid(8, 8, (0, 0, 0, 255)), 8, 8)), bc1_size(8, 8))
+        self.assertEqual(
+            len(encode_bc1(_solid(8, 8, (0, 0, 0, 255)), 8, 8)), bc1_size(8, 8)
+        )
 
     def test_bc1_round_trips_a_flat_block(self) -> None:
         # a solid block must survive exactly: both endpoints land on the colour
@@ -166,8 +173,12 @@ class EncoderTests(unittest.TestCase):
 
 class FrameEncodingTests(unittest.TestCase):
     def test_detects_bc1(self) -> None:
-        entry = _entry(4, 4, encode_bc1(_solid(4, 4, (1, 2, 3, 255)), 4, 4),
-                       compression=COMPRESSION_BC1)
+        entry = _entry(
+            4,
+            4,
+            encode_bc1(_solid(4, 4, (1, 2, 3, 255)), 4, 4),
+            compression=COMPRESSION_BC1,
+        )
         self.assertEqual(frame_encoding(entry), "bc1")
 
     def test_detects_paletted_from_stored_depth_and_format(self) -> None:
@@ -187,13 +198,13 @@ class FrameEncodingTests(unittest.TestCase):
     def test_selector_overrides_16_bit_frame_format_code(self) -> None:
         entry = _entry(4, 4, bytes(32), flags=0x100)
         self.assertEqual(frame_encoding(entry, selector=FORMAT_P8), "rgb565")
-        self.assertEqual(
-            frame_encoding(entry, selector=SELECTOR_ARGB_1555), "rgba5551"
-        )
+        self.assertEqual(frame_encoding(entry, selector=SELECTOR_ARGB_1555), "rgba5551")
 
     def test_detects_rgb565_and_rgba5551_by_the_format_code(self) -> None:
         self.assertEqual(frame_encoding(_entry(4, 4, bytes(32))), "rgb565")
-        self.assertEqual(frame_encoding(_entry(4, 4, bytes(32), flags=0x100)), "rgba5551")
+        self.assertEqual(
+            frame_encoding(_entry(4, 4, bytes(32), flags=0x100)), "rgba5551"
+        )
 
     def test_detects_two_byte_alpha_intensity(self) -> None:
         self.assertEqual(

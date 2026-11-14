@@ -95,9 +95,7 @@ class TerrainHeaderTests(unittest.TestCase):
         self.assertEqual((region.world_width, region.world_height), (32, 16))
 
     def test_region_name_is_read(self) -> None:
-        region = U9Terrain(
-            _build(16, 16, [0], [_chunk()], name="Avatar’s House")
-        )
+        region = U9Terrain(_build(16, 16, [0], [_chunk()], name="Avatar’s House"))
         self.assertEqual(region.name, "Avatar’s House")
 
     def test_environment_header_fields_are_typed(self) -> None:
@@ -208,12 +206,8 @@ class TerrainPointTests(unittest.TestCase):
 
     def test_uv_flag_combinations_encode_quarter_turns(self) -> None:
         self.assertEqual(U9TerrainPoint.build().uv_rotation_degrees, 0)
-        self.assertEqual(
-            U9TerrainPoint.build(swap_uv=True).uv_rotation_degrees, 90
-        )
-        self.assertEqual(
-            U9TerrainPoint.build(mirror_uv=True).uv_rotation_degrees, 180
-        )
+        self.assertEqual(U9TerrainPoint.build(swap_uv=True).uv_rotation_degrees, 90)
+        self.assertEqual(U9TerrainPoint.build(mirror_uv=True).uv_rotation_degrees, 180)
         self.assertEqual(
             U9TerrainPoint.build(swap_uv=True, mirror_uv=True).uv_rotation_degrees,
             270,

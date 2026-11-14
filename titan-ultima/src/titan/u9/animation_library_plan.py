@@ -65,9 +65,7 @@ def _animation_category(row: dict[str, Any]) -> str:
 
 def _actor_hint(row: dict[str, Any]) -> str:
     return str(
-        row.get("source_actor_hint")
-        or row.get("source_family")
-        or "unassigned"
+        row.get("source_actor_hint") or row.get("source_family") or "unassigned"
     ).casefold()
 
 

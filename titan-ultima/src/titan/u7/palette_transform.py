@@ -135,7 +135,11 @@ def generate_remap_xformtable(ramps: Sequence[Ramp], remaps: Dict[int, int]) -> 
     valid = range(len(ramps))
 
     for source_ramp, target_ramp in remaps.items():
-        if source_ramp == target_ramp or source_ramp not in valid or target_ramp not in valid:
+        if (
+            source_ramp == target_ramp
+            or source_ramp not in valid
+            or target_ramp not in valid
+        ):
             continue
         source, target = ramps[source_ramp], ramps[target_ramp]
         if source.start == 0:

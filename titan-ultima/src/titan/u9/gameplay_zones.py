@@ -165,7 +165,9 @@ class U9GameplayZone:
 
     @property
     def stored_zone_id_status(self) -> str:
-        return "matches_entry_index" if self.stored_zone_id == self.zone_id else "mismatch"
+        return (
+            "matches_entry_index" if self.stored_zone_id == self.zone_id else "mismatch"
+        )
 
     @property
     def path_marker_position_status(self) -> str:
@@ -227,9 +229,7 @@ class U9Areas:
         self.archive = archive
         self._records: dict[int, U9ZoneRecord] = {}
         for zone_id in archive.used_entry_indices():
-            self._records[zone_id] = _parse_record(
-                zone_id, archive.read_entry(zone_id)
-            )
+            self._records[zone_id] = _parse_record(zone_id, archive.read_entry(zone_id))
 
     @classmethod
     def from_file(cls, filepath: str | os.PathLike[str]) -> U9Areas:
@@ -281,7 +281,9 @@ def _take(data: bytes, offset: int, size: int, label: str, zone_id: int) -> byte
     return data[offset:end]
 
 
-def _parse_position(data: bytes, offset: int, label: str, zone_id: int) -> U9StoredPosition:
+def _parse_position(
+    data: bytes, offset: int, label: str, zone_id: int
+) -> U9StoredPosition:
     raw = _take(data, offset, _POSITION.size, label, zone_id)
     x, y, z, padding = _POSITION.unpack(raw)
     return U9StoredPosition(x=x, y=y, z=z, padding=padding, raw_data=raw)
@@ -345,7 +347,9 @@ def _parse_known_zone(zone_id: int, data: bytes) -> U9GameplayZone:
         encounter_table, offset = _parse_encounter_table(data, offset, zone_id)
 
     suffix = _take(data, offset, _ZONE_SUFFIX_SIZE, "zone suffix", zone_id)
-    stored_total_weight, world_map_id, declared_box_count = struct.unpack("<iii", suffix)
+    stored_total_weight, world_map_id, declared_box_count = struct.unpack(
+        "<iii", suffix
+    )
     offset += _ZONE_SUFFIX_SIZE
     if declared_box_count < 0:
         raise U9AreasError(
@@ -382,7 +386,5 @@ def _parse_record(zone_id: int, data: bytes) -> U9ZoneRecord:
         )
     record_kind = struct.unpack_from("<i", data, 0)[0]
     if record_kind != BOX_ZONE_KIND:
-        return U9UnknownZone(
-            zone_id=zone_id, record_kind=record_kind, raw_data=data
-        )
+        return U9UnknownZone(zone_id=zone_id, record_kind=record_kind, raw_data=data)
     return _parse_known_zone(zone_id, data)

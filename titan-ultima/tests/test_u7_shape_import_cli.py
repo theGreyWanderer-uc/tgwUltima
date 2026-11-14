@@ -379,7 +379,9 @@ class ShapeImportCliTests(unittest.TestCase):
     def test_rejects_missing_explicit_and_configured_palette(self) -> None:
         _write_rgba_frame(self.frames_dir / "frame.png", (255, 0, 0, 255))
 
-        with patch("titan.u7.install.resolve_u7_static_and_palette", return_value=(None, None)):
+        with patch(
+            "titan.u7.install.resolve_u7_static_and_palette", return_value=(None, None)
+        ):
             result = cmd_shape_import(
                 SimpleNamespace(
                     directory=str(self.frames_dir),
