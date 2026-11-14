@@ -24,7 +24,9 @@ QUANTITY = U7TypeFlags.SHAPE_CLASS_QUANTITY  # 3
 CONTAINER = U7TypeFlags.SHAPE_CLASS_CONTAINER  # 6
 
 
-def _simple_payload(quality_byte: int, lift_nibble: int = 0, shape: int = 756, frame: int = 0) -> bytes:
+def _simple_payload(
+    quality_byte: int, lift_nibble: int = 0, shape: int = 756, frame: int = 0
+) -> bytes:
     """Build a 6-byte simple IREG entry payload (testlen=6, no extension)."""
     b2 = shape & 0xFF
     b3 = ((shape >> 8) & 0x03) | ((frame & 0x3F) << 2)
@@ -32,7 +34,9 @@ def _simple_payload(quality_byte: int, lift_nibble: int = 0, shape: int = 756, f
     return bytes([0x00, 0x00, b2, b3, lift_byte, quality_byte])
 
 
-def _ten_byte_payload(quality_byte: int, temp_bit: int, shape: int = 756, frame: int = 0) -> bytes:
+def _ten_byte_payload(
+    quality_byte: int, temp_bit: int, shape: int = 756, frame: int = 0
+) -> bytes:
     """Build a 10-byte simple IREG entry payload (testlen=10)."""
     base = bytearray(_simple_payload(quality_byte, shape=shape, frame=frame))
     base += bytearray(4)
@@ -40,7 +44,13 @@ def _ten_byte_payload(quality_byte: int, temp_bit: int, shape: int = 756, frame:
     return bytes(base)
 
 
-def _container_payload(quality: int, flag_byte: int, lift_nibble: int = 0, shape: int = 522, has_children: bool = True) -> bytes:
+def _container_payload(
+    quality: int,
+    flag_byte: int,
+    lift_nibble: int = 0,
+    shape: int = 522,
+    has_children: bool = True,
+) -> bytes:
     """Build a 12-byte container IREG entry payload (testlen=12)."""
     buf = bytearray(12)
     buf[2] = shape & 0xFF
@@ -54,7 +64,9 @@ def _container_payload(quality: int, flag_byte: int, lift_nibble: int = 0, shape
     return bytes(buf)
 
 
-def _body_payload(testlen: int, quality: int, flag_byte: int, lift_nibble: int = 0, shape: int = 415) -> bytes:
+def _body_payload(
+    testlen: int, quality: int, flag_byte: int, lift_nibble: int = 0, shape: int = 415
+) -> bytes:
     """Build a 13-byte (extbody=1) or 14-byte (extbody=0) body payload."""
     extbody = 1 if testlen == 13 else 0
     buf = bytearray(testlen)
@@ -84,7 +96,8 @@ class GetQualityFlagsTests(unittest.TestCase):
         self.assertEqual(get_quality_flags(0x01), U7ObjectFlags.INVISIBLE)
         self.assertEqual(get_quality_flags(0x08), U7ObjectFlags.OKAY_TO_TAKE)
         self.assertEqual(
-            get_quality_flags(0x09), U7ObjectFlags.INVISIBLE | U7ObjectFlags.OKAY_TO_TAKE
+            get_quality_flags(0x09),
+            U7ObjectFlags.INVISIBLE | U7ObjectFlags.OKAY_TO_TAKE,
         )
         self.assertEqual(get_quality_flags(0x00), U7ObjectFlags.NONE)
 
@@ -98,7 +111,10 @@ class InvisibleCaltropsTests(unittest.TestCase):
     def test_invisible_caltrops(self):
         payload = _simple_payload(quality_byte=0x01, shape=756)
         result = decode_ireg_payload(
-            payload, entlen=6, extended=False, extended_lift=False,
+            payload,
+            entlen=6,
+            extended=False,
+            extended_lift=False,
             shape_class=QUALITY_FLAGS,
         )
         self.assertEqual(result.shape, 756)
@@ -109,7 +125,10 @@ class InvisibleCaltropsTests(unittest.TestCase):
     def test_normal_placement_same_shape_byte_0x00(self):
         payload = _simple_payload(quality_byte=0x00, shape=756)
         result = decode_ireg_payload(
-            payload, entlen=6, extended=False, extended_lift=False,
+            payload,
+            entlen=6,
+            extended=False,
+            extended_lift=False,
             shape_class=QUALITY_FLAGS,
         )
         self.assertFalse(result.object_flags & U7ObjectFlags.INVISIBLE)
@@ -122,7 +141,10 @@ class ContainerFlagTests(unittest.TestCase):
     def test_invisible_container(self):
         payload = _container_payload(quality=5, flag_byte=0x01)
         result = decode_ireg_payload(
-            payload, entlen=12, extended=False, extended_lift=False,
+            payload,
+            entlen=12,
+            extended=False,
+            extended_lift=False,
             shape_class=CONTAINER,
         )
         self.assertTrue(result.object_flags & U7ObjectFlags.INVISIBLE)
@@ -132,7 +154,10 @@ class ContainerFlagTests(unittest.TestCase):
     def test_okay_to_take_container(self):
         payload = _container_payload(quality=0, flag_byte=0x08)
         result = decode_ireg_payload(
-            payload, entlen=12, extended=False, extended_lift=False,
+            payload,
+            entlen=12,
+            extended=False,
+            extended_lift=False,
             shape_class=CONTAINER,
         )
         self.assertTrue(result.object_flags & U7ObjectFlags.OKAY_TO_TAKE)
@@ -141,7 +166,10 @@ class ContainerFlagTests(unittest.TestCase):
     def test_container_lift_decodes(self):
         payload = _container_payload(quality=0, flag_byte=0x00, lift_nibble=7)
         result = decode_ireg_payload(
-            payload, entlen=12, extended=False, extended_lift=False,
+            payload,
+            entlen=12,
+            extended=False,
+            extended_lift=False,
             shape_class=CONTAINER,
         )
         self.assertEqual(result.lift, 7)
@@ -153,7 +181,10 @@ class QuantityMaskingTests(unittest.TestCase):
     def test_bit7_set_gives_okay_to_take_and_masks_quality(self):
         payload = _simple_payload(quality_byte=0x80 | 20)  # 20 arrows, okay_to_take
         result = decode_ireg_payload(
-            payload, entlen=6, extended=False, extended_lift=False,
+            payload,
+            entlen=6,
+            extended=False,
+            extended_lift=False,
             shape_class=QUANTITY,
         )
         self.assertTrue(result.object_flags & U7ObjectFlags.OKAY_TO_TAKE)
@@ -163,7 +194,10 @@ class QuantityMaskingTests(unittest.TestCase):
     def test_bit7_clear_no_okay_to_take_quality_unmasked(self):
         payload = _simple_payload(quality_byte=20)
         result = decode_ireg_payload(
-            payload, entlen=6, extended=False, extended_lift=False,
+            payload,
+            entlen=6,
+            extended=False,
+            extended_lift=False,
             shape_class=QUANTITY,
         )
         self.assertFalse(result.object_flags & U7ObjectFlags.OKAY_TO_TAKE)
@@ -174,7 +208,10 @@ class QuantityMaskingTests(unittest.TestCase):
         # quantity-class only ever inspects bit7 -- never sets invisible.
         payload = _simple_payload(quality_byte=0x81)
         result = decode_ireg_payload(
-            payload, entlen=6, extended=False, extended_lift=False,
+            payload,
+            entlen=6,
+            extended=False,
+            extended_lift=False,
             shape_class=QUANTITY,
         )
         self.assertFalse(result.object_flags & U7ObjectFlags.INVISIBLE)
@@ -188,7 +225,10 @@ class TemporaryTenByteTests(unittest.TestCase):
     def test_temporary_bit_set(self):
         payload = _ten_byte_payload(quality_byte=0, temp_bit=1)
         result = decode_ireg_payload(
-            payload, entlen=10, extended=False, extended_lift=False,
+            payload,
+            entlen=10,
+            extended=False,
+            extended_lift=False,
             shape_class=None,
         )
         self.assertTrue(result.object_flags & U7ObjectFlags.TEMPORARY)
@@ -196,7 +236,10 @@ class TemporaryTenByteTests(unittest.TestCase):
     def test_temporary_bit_clear(self):
         payload = _ten_byte_payload(quality_byte=0, temp_bit=0)
         result = decode_ireg_payload(
-            payload, entlen=10, extended=False, extended_lift=False,
+            payload,
+            entlen=10,
+            extended=False,
+            extended_lift=False,
             shape_class=None,
         )
         self.assertFalse(result.object_flags & U7ObjectFlags.TEMPORARY)
@@ -204,7 +247,10 @@ class TemporaryTenByteTests(unittest.TestCase):
     def test_quality_flags_class_discards_temporary_bit(self):
         payload = _ten_byte_payload(quality_byte=0x00, temp_bit=1)
         result = decode_ireg_payload(
-            payload, entlen=10, extended=False, extended_lift=False,
+            payload,
+            entlen=10,
+            extended=False,
+            extended_lift=False,
             shape_class=QUALITY_FLAGS,
         )
         self.assertFalse(result.object_flags & U7ObjectFlags.TEMPORARY)
@@ -217,7 +263,10 @@ class BodyFlagOffsetTests(unittest.TestCase):
     def test_13_byte_body_offsets(self):
         payload = _body_payload(13, quality=3, flag_byte=0x09, lift_nibble=2)
         result = decode_ireg_payload(
-            payload, entlen=13, extended=False, extended_lift=False,
+            payload,
+            entlen=13,
+            extended=False,
+            extended_lift=False,
             shape_class=None,
         )
         self.assertEqual(result.quality, 3)
@@ -229,7 +278,10 @@ class BodyFlagOffsetTests(unittest.TestCase):
     def test_14_byte_body_offsets(self):
         payload = _body_payload(14, quality=3, flag_byte=0x08, lift_nibble=2)
         result = decode_ireg_payload(
-            payload, entlen=14, extended=False, extended_lift=False,
+            payload,
+            entlen=14,
+            extended=False,
+            extended_lift=False,
             shape_class=None,
         )
         self.assertEqual(result.quality, 3)
@@ -244,8 +296,12 @@ class BodyFlagOffsetTests(unittest.TestCase):
         payload13 = _body_payload(13, quality=0, flag_byte=0x01)
         payload14 = bytearray(_body_payload(14, quality=0, flag_byte=0x00))
         payload14[11] = 0x01  # legacy 14-byte offset (extbody=0)
-        r13 = decode_ireg_payload(payload13, entlen=13, extended=False, extended_lift=False)
-        r14 = decode_ireg_payload(bytes(payload14), entlen=14, extended=False, extended_lift=False)
+        r13 = decode_ireg_payload(
+            payload13, entlen=13, extended=False, extended_lift=False
+        )
+        r14 = decode_ireg_payload(
+            bytes(payload14), entlen=14, extended=False, extended_lift=False
+        )
         self.assertTrue(r13.object_flags & U7ObjectFlags.INVISIBLE)
         self.assertTrue(r14.object_flags & U7ObjectFlags.INVISIBLE)
 
@@ -254,9 +310,14 @@ class NestedContainerInheritanceTests(unittest.TestCase):
     """Scenario 8: invisibility must not be inherited by container contents."""
 
     def test_invisible_container_child_inherit_flags_strips_invisible(self):
-        payload = _container_payload(quality=0, flag_byte=0x09)  # invisible + okay_to_take
+        payload = _container_payload(
+            quality=0, flag_byte=0x09
+        )  # invisible + okay_to_take
         result = decode_ireg_payload(
-            payload, entlen=12, extended=False, extended_lift=False,
+            payload,
+            entlen=12,
+            extended=False,
+            extended_lift=False,
             shape_class=CONTAINER,
         )
         self.assertTrue(result.object_flags & U7ObjectFlags.INVISIBLE)
@@ -268,12 +329,18 @@ class NestedContainerInheritanceTests(unittest.TestCase):
         # container inherits whatever flags the parent passed down.
         parent_payload = _container_payload(quality=0, flag_byte=0x08)
         parent = decode_ireg_payload(
-            parent_payload, entlen=12, extended=False, extended_lift=False,
+            parent_payload,
+            entlen=12,
+            extended=False,
+            extended_lift=False,
             shape_class=CONTAINER,
         )
         child_payload = _simple_payload(quality_byte=0)
         child = decode_ireg_payload(
-            child_payload, entlen=6, extended=False, extended_lift=False,
+            child_payload,
+            entlen=6,
+            extended=False,
+            extended_lift=False,
             inherited_flags=parent.child_inherit_flags,
             shape_class=None,  # plain/unusable class -- no override
         )
@@ -288,7 +355,10 @@ class ExtendedRecordTests(unittest.TestCase):
         shape = 1500
         payload = bytes([0, 0, shape & 0xFF, (shape >> 8) & 0xFF, 3, 0x50, 0x02])
         result = decode_ireg_payload(
-            payload, entlen=7, extended=True, extended_lift=False,
+            payload,
+            entlen=7,
+            extended=True,
+            extended_lift=False,
             shape_class=None,
         )
         self.assertEqual(result.shape, 1500)
@@ -302,7 +372,10 @@ class ExtendedRecordTests(unittest.TestCase):
         buf = bytearray(payload)
         buf[4] = 0x53  # nibble_swap(0x53) = 0x35, unmasked under extended_lift
         result = decode_ireg_payload(
-            bytes(buf), entlen=6, extended=False, extended_lift=True,
+            bytes(buf),
+            entlen=6,
+            extended=False,
+            extended_lift=True,
             shape_class=None,
         )
         self.assertEqual(result.lift, 0x35)
@@ -314,7 +387,10 @@ class LosslessPreservationTests(unittest.TestCase):
     def test_raw_quality_and_flag_byte_preserved(self):
         payload = _container_payload(quality=42, flag_byte=0x0D)
         result = decode_ireg_payload(
-            payload, entlen=12, extended=False, extended_lift=False,
+            payload,
+            entlen=12,
+            extended=False,
+            extended_lift=False,
             shape_class=CONTAINER,
         )
         self.assertEqual(result.raw_quality, 42)
@@ -325,7 +401,10 @@ class LosslessPreservationTests(unittest.TestCase):
     def test_simple_entry_has_no_raw_flag_byte(self):
         payload = _simple_payload(quality_byte=9)
         result = decode_ireg_payload(
-            payload, entlen=6, extended=False, extended_lift=False,
+            payload,
+            entlen=6,
+            extended=False,
+            extended_lift=False,
             shape_class=None,
         )
         self.assertIsNone(result.raw_flag_byte)
@@ -335,7 +414,9 @@ class LosslessPreservationTests(unittest.TestCase):
 class InvalidPayloadTests(unittest.TestCase):
     def test_too_short_payload_returns_none(self):
         self.assertIsNone(
-            decode_ireg_payload(b"\x00\x00", entlen=6, extended=False, extended_lift=False)
+            decode_ireg_payload(
+                b"\x00\x00", entlen=6, extended=False, extended_lift=False
+            )
         )
 
     def test_unknown_testlen_returns_none(self):

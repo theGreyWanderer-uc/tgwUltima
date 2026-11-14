@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw
 from titan._config import cfg
 from titan._terminal_image import FrameProvider, checkerboard
 from titan.flex import FlexArchive
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.anim import DIRECTION_NAMES, U8AnimAction, U8AnimData
 from titan.u8.anim_report import format_u8_anim_report
 from titan.u8.shape import U8Shape

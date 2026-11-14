@@ -17,7 +17,7 @@ from __future__ import annotations
 import struct
 import unittest
 
-from titan.u9.books import OLE2_MAGIC, U9Book, U9Books, U9BooksError
+from titan.u9.books import OLE2_MAGIC, U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive
 
 FLX_DIR_OFFSET = 0x80
@@ -59,10 +59,16 @@ def _archive(entries: dict[int, bytes], count: int = 8) -> U9FlxArchive:
 
 class BookRecordTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.books = U9Books(_archive({
-            0: _record("1: History of Britannia", "`f2Heading\r\n`f1The tale began."),
-            2: _record("3: signtest", "Beware."),
-        }))
+        self.books = U9Books(
+            _archive(
+                {
+                    0: _record(
+                        "1: History of Britannia", "`f2Heading\r\n`f1The tale began."
+                    ),
+                    2: _record("3: signtest", "Beware."),
+                }
+            )
+        )
 
     def test_title_and_body_decode(self) -> None:
         book = self.books.book(0)
@@ -154,10 +160,14 @@ class BookDefectTests(unittest.TestCase):
 
     def test_search_skips_embedded_documents(self) -> None:
         blob = OLE2_MAGIC + b"secret prose"
-        books = U9Books(_archive({
-            0: _record("1: DestardSecret", blob),
-            1: _record("2: real", "secret prose"),
-        }))
+        books = U9Books(
+            _archive(
+                {
+                    0: _record("1: DestardSecret", blob),
+                    1: _record("2: real", "secret prose"),
+                }
+            )
+        )
         self.assertEqual([b.index for b in books.search("secret prose")], [1])
 
 
@@ -181,10 +191,14 @@ class BookValidationTests(unittest.TestCase):
 
 class BookLookupTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.books = U9Books(_archive({
-            0: _record("1: History of Britannia", "The Guardian came."),
-            1: _record("2: bestiary", "Archers are proficient."),
-        }))
+        self.books = U9Books(
+            _archive(
+                {
+                    0: _record("1: History of Britannia", "The Guardian came."),
+                    1: _record("2: bestiary", "Archers are proficient."),
+                }
+            )
+        )
 
     def test_by_name_ignores_case_and_the_number(self) -> None:
         for probe in ("bestiary", "BESTIARY", "2: bestiary"):

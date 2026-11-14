@@ -19,7 +19,6 @@ from titan.u7.shapeinfo import U7Ammos
 from titan.u7.usecode import U7UsecodeFile
 from titan.u7.usecode_analysis import U7UsecodeWorld
 from tests.test_u7_advanced_gumps import section
-from tests.test_u7_remaining_followups import actor_record
 from tests.test_u7_usecode_validation import _function_record, _scope, _symbol
 
 
@@ -387,3 +386,64 @@ def test_paperdoll_cli_resolves_custom_imports(tmp_path):
     assert "characters,2048," in result.stdout and "unresolved," not in result.stdout
     help_result = CliRunner().invoke(u7_app, ["npc-browse", "--help"])
     assert help_result.exit_code == 0 and "--avatar-skin" in help_result.stdout
+
+
+def actor_record(*, flags=0, flags2=0, iflag=0, poly=0, intel=10, health=20):
+    raw = bytearray(117)
+    raw[10], raw[18], raw[20] = health & 255, 30, intel
+    struct.pack_into("<HH", raw, 2, 100, iflag)
+    struct.pack_into("<H", raw, 14, 1)
+    struct.pack_into("<HhI", raw, 64, 100, poly, flags)
+    struct.pack_into("<I", raw, 74, flags2)
+    return bytes(raw)
+
+
+def test_npc_extended_death_health_correction_and_original_boundary():
+    raw = actor_record(flags=16)
+    runtime = U7NPCData.from_bytes(
+        struct.pack("<HH", 2, 0) + raw * 2, npc_flavor="runtime"
+    )
+    original = U7NPCData.from_bytes(
+        struct.pack("<HH", 2, 0) + raw * 2, npc_flavor="original"
+    )
+    assert all(n.is_dead for n in runtime.npcs) and all(
+        not n.is_dead for n in original.npcs
+    )
+    dying = U7NPCData.from_bytes(
+        struct.pack("<HH", 2, 0) + actor_record(health=-11) * 2
+    )
+    assert not dying.npcs[0].is_dead and dying.npcs[1].is_dead
+    assert dying.npcs[1].metadata.health_death_correction
+
+
+def test_named_usecode_and_extended_skin_remain_explicit_and_json_safe():
+    raw = actor_record(iflag=8 | 16)
+    raw = raw[:78] + bytes([4]) + b"test" + bytes([9]) + raw[79:]
+    parsed = U7NPCData.from_bytes(struct.pack("<HH", 1, 0) + raw).npcs[0]
+    assert parsed.metadata.usecode_name == "test" and parsed.metadata.skin == 9
+    assert parsed.metadata.resolve_usecode() is None
+    assert parsed.metadata.resolve_usecode({"test": 0x12345}) == 0x12345
+    assert "test" in U7NPCData([parsed]).dump_csv()
+
+
+def test_polymorph_flag_correction_and_avatar_appearance_context():
+    raw = actor_record(flags2=1)
+    extension = U7ActorMetadata.from_bytes(
+        raw, game="si", original_new_game=False, npc_num=1, health=20, strength=30
+    )
+    assert not extension.effective_flags & (1 << 32)
+    raw = actor_record(intel=128 | 10, poly=900)
+    extension = U7ActorMetadata.from_bytes(
+        raw, game="si", original_new_game=False, npc_num=1, health=20, strength=30
+    )
+    assert extension.appearance(100)["shape"] == 900
+    avatar = U7ActorMetadata.from_bytes(
+        actor_record(),
+        game="bg",
+        original_new_game=False,
+        npc_num=0,
+        health=20,
+        strength=30,
+    )
+    assert avatar.appearance(100)["avatar_context_required"]
+    assert avatar.appearance(100, avatar_shape=721)["shape"] == 721

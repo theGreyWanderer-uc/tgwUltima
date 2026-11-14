@@ -51,5 +51,8 @@ class U6Books:
     @classmethod
     def from_file(cls, filepath: str | os.PathLike[str]) -> U6Books:
         lib = U6Library.from_file(filepath, entry_size=BOOK_ENTRY_SIZE)
-        texts = [lib.get_item(i).split(b"\x00", 1)[0].decode("latin-1") for i in range(lib.num_items)]
+        texts = [
+            lib.get_item(i).split(b"\x00", 1)[0].decode("latin-1")
+            for i in range(lib.num_items)
+        ]
         return cls(texts)

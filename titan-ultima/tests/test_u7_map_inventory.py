@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map_inventory import build_u7_map_inventory, write_u7_map_inventory
+from titan.u7 import install as u7_install
 
 
 def _cell(shape: int, frame: int) -> bytes:
@@ -45,7 +46,9 @@ def _write_world(static):
     # Fixed objects: two walls in superchunk 1.
     ifix = U7FlexArchive()
     ifix.records = [b""] * 256
-    ifix.records[0] = bytes([(2 << 4) | 3, 5, 150, 2 << 2]) + bytes([(4 << 4) | 4, 0, 150, 7 << 2])
+    ifix.records[0] = bytes([(2 << 4) | 3, 5, 150, 2 << 2]) + bytes(
+        [(4 << 4) | 4, 0, 150, 7 << 2]
+    )
     for sc in range(144):
         archive = ifix if sc == 1 else U7FlexArchive()
         if sc != 1:
@@ -74,10 +77,21 @@ def test_inventory_counts_templates_fixed_objects_and_coverage(tmp_path):
     assert summary["objects"]["placements"] == 5
     assert summary["objects"]["by_source"] == {"chunk": 3, "ifix": 2, "ireg": 0}
     assert summary["flats"]["cells"] == 192 * 192 * 256 - 3
-    rows = list(csv.DictReader(open(tmp_path / "out" / "objects.csv", encoding="utf-8")))
-    assert [(r["shape"], r["frame"], r["placements"]) for r in rows] == [("150", "2", "4"), ("150", "7", "1")]
-    assert rows[0]["dims_y"] == "4" and rows[0]["dims_z"] == "5" and rows[-1]["cumulative_pct"] == "100.0"
-    shapes = list(csv.DictReader(open(tmp_path / "out" / "shapes.csv", encoding="utf-8")))
+    rows = list(
+        csv.DictReader(open(tmp_path / "out" / "objects.csv", encoding="utf-8"))
+    )
+    assert [(r["shape"], r["frame"], r["placements"]) for r in rows] == [
+        ("150", "2", "4"),
+        ("150", "7", "1"),
+    ]
+    assert (
+        rows[0]["dims_y"] == "4"
+        and rows[0]["dims_z"] == "5"
+        and rows[-1]["cumulative_pct"] == "100.0"
+    )
+    shapes = list(
+        csv.DictReader(open(tmp_path / "out" / "shapes.csv", encoding="utf-8"))
+    )
     wall_shape = next(s for s in shapes if s["shape"] == "150")
     assert wall_shape["frames_used"] == "2" and wall_shape["placements"] == "5"
 
@@ -98,11 +112,15 @@ def test_inventory_reads_movable_objects_from_initgame(tmp_path):
 
 def test_cli_writes_inventory(tmp_path, monkeypatch):
     static = _write_world(tmp_path / "STATIC")
-    import titan.u7.cli as cli
 
-    monkeypatch.setattr(cli, "_resolve_u7_paths", lambda game: (None, None))
+    monkeypatch.setattr(
+        u7_install, "resolve_u7_static_and_palette", lambda game: (None, None)
+    )
     out = tmp_path / "inv"
-    result = CliRunner().invoke(u7_app, ["map-inventory", str(static), "--no-ireg", "--no-previews", "-o", str(out)])
+    result = CliRunner().invoke(
+        u7_app,
+        ["map-inventory", str(static), "--no-ireg", "--no-previews", "-o", str(out)],
+    )
     assert result.exit_code == 0, result.output
     assert "Objects: 5 placements" in result.output
     summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
@@ -113,21 +131,35 @@ def test_area_limits_counts_and_lists_placements(tmp_path):
     from titan.u7.map_inventory import chunk_rect, superchunk_rect
 
     static = _write_world(tmp_path / "STATIC")
-    inv = build_u7_map_inventory(str(static), include_ireg=False, area=[chunk_rect(0, 0, 0, 0)])
+    inv = build_u7_map_inventory(
+        str(static), include_ireg=False, area=[chunk_rect(0, 0, 0, 0)]
+    )
     # Chunk (0, 0) uses template 1: one wall at (3, 4), the rest ground.
     assert inv.rows[(150, 2)].placements == 1
-    assert inv.rows[(5, 0)].counts["terrain"] == 256 - 2 and inv.rows[(6, 1)].counts["terrain"] == 1
+    assert (
+        inv.rows[(5, 0)].counts["terrain"] == 256 - 2
+        and inv.rows[(6, 1)].counts["terrain"] == 1
+    )
     assert (150, 7) not in inv.rows  # fixed walls are in superchunk 1
     assert len(inv.placements) == 256
 
     summary = write_u7_map_inventory(inv, tmp_path / "out", previews=False)
     assert summary["area"] == [[0, 0, 15, 15]]
-    listed = list(csv.DictReader(open(tmp_path / "out" / "placements.csv", encoding="utf-8")))
+    listed = list(
+        csv.DictReader(open(tmp_path / "out" / "placements.csv", encoding="utf-8"))
+    )
     wall = [r for r in listed if r["kind"] == "object"]
-    assert [(r["source"], r["shape"], r["tx"], r["ty"], r["dims_y"]) for r in wall] == [("chunk", "150", "3", "4", "4")]
+    assert [(r["source"], r["shape"], r["tx"], r["ty"], r["dims_y"]) for r in wall] == [
+        ("chunk", "150", "3", "4", "4")
+    ]
 
-    fixed = build_u7_map_inventory(str(static), include_ireg=False, area=[superchunk_rect(1)])
-    assert fixed.rows[(150, 2)].counts["ifix"] == 1 and fixed.rows[(150, 7)].counts["ifix"] == 1
+    fixed = build_u7_map_inventory(
+        str(static), include_ireg=False, area=[superchunk_rect(1)]
+    )
+    assert (
+        fixed.rows[(150, 2)].counts["ifix"] == 1
+        and fixed.rows[(150, 7)].counts["ifix"] == 1
+    )
 
 
 def test_area_counts_objects_whose_footprint_reaches_in(tmp_path):
@@ -141,14 +173,27 @@ def test_area_counts_objects_whose_footprint_reaches_in(tmp_path):
 
 def test_cli_area_options_name_the_output(tmp_path, monkeypatch):
     static = _write_world(tmp_path / "STATIC")
-    import titan.u7.cli as cli
 
-    monkeypatch.setattr(cli, "_resolve_u7_paths", lambda game: (None, None))
+    monkeypatch.setattr(
+        u7_install, "resolve_u7_static_and_palette", lambda game: (None, None)
+    )
     monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(
-        u7_app, ["map-inventory", str(static), "--no-ireg", "--no-previews", "--cx0", "0", "--cy0", "0"]
+        u7_app,
+        [
+            "map-inventory",
+            str(static),
+            "--no-ireg",
+            "--no-previews",
+            "--cx0",
+            "0",
+            "--cy0",
+            "0",
+        ],
     )
     assert result.exit_code == 0, result.output
-    assert (tmp_path / "u7data" / "map-inventory" / "bg-map00-c0_0_0_0" / "placements.csv").is_file()
+    assert (
+        tmp_path / "u7data" / "map-inventory" / "bg-map00-c0_0_0_0" / "placements.csv"
+    ).is_file()
     bad = CliRunner().invoke(u7_app, ["map-inventory", str(static), "--sc", "0x90"])
     assert bad.exit_code == 1

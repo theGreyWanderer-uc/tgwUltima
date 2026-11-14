@@ -9,7 +9,7 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8 import U8MapRenderer, U8MapSampler, U8Shape
 from titan.u8.cli import u8_app
 

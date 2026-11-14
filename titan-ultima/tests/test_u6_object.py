@@ -32,11 +32,22 @@ from titan.u6.object import (
 )
 
 
-def _make_record(status: int, x: int, y: int, z: int, obj_n: int, frame_n: int, qty: int, quality: int) -> bytes:
+def _make_record(
+    status: int,
+    x: int,
+    y: int,
+    z: int,
+    obj_n: int,
+    frame_n: int,
+    qty: int,
+    quality: int,
+) -> bytes:
     b0, b1, b2 = pack_position(x, y, z)
     obj_n_lo = obj_n & 0xFF
     obj_n_hi = ((obj_n >> 8) & 0x03) | ((frame_n << 2) & 0xFC)
-    return struct.pack("<BBBBBBBB", status, b0, b1, b2, obj_n_lo, obj_n_hi, qty, quality)
+    return struct.pack(
+        "<BBBBBBBB", status, b0, b1, b2, obj_n_lo, obj_n_hi, qty, quality
+    )
 
 
 def _make_block(records: list[bytes]) -> bytes:
@@ -82,7 +93,9 @@ class BlockParsingTests(unittest.TestCase):
         c0 = _make_record(STATUS_ON_MAP, 1, 1, 0, 100, 0, 0, 0)
         c1 = _make_record(STATUS_ON_MAP, 2, 2, 0, 101, 0, 0, 0)
         c2 = _make_record(STATUS_ON_MAP, 3, 3, 0, 102, 0, 0, 0)
-        contained = _make_record(STATUS_IN_CONTAINER, 2, 0, 0, 999, 0, 0, 0)  # idx=2 -> c2
+        contained = _make_record(
+            STATUS_IN_CONTAINER, 2, 0, 0, 999, 0, 0, 0
+        )  # idx=2 -> c2
         data = _make_block([c0, c1, c2, contained])
         world = U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0)
         objs = world.surface_objects[0]
@@ -98,7 +111,9 @@ class BlockParsingTests(unittest.TestCase):
             U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0)
 
     def test_inventory_object_goes_to_actor_inventory(self):
-        item = _make_record(STATUS_IN_INVENTORY, 7, 0, 0, 55, 0, 1, 0)  # x=7 -> actor id
+        item = _make_record(
+            STATUS_IN_INVENTORY, 7, 0, 0, 55, 0, 1, 0
+        )  # x=7 -> actor id
         data = _make_block([item])
         world = U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0)
         self.assertEqual(world.surface_objects[0], [])
@@ -118,15 +133,19 @@ class BlockParsingTests(unittest.TestCase):
         item_b = _make_record(STATUS_IN_INVENTORY, 3, 0, 0, 2, 0, 0, 0)
         data_a = _make_block([item_a])
         data_b = _make_block([item_b])
-        world = U6WorldObjects.from_parts(data_a + data_b, b"", num_surface=2, num_dungeon=0)
+        world = U6WorldObjects.from_parts(
+            data_a + data_b, b"", num_surface=2, num_dungeon=0
+        )
         self.assertEqual(len(world.actor_inventory[3]), 2)
 
     def test_multiple_blocks_offsets_advance_correctly(self):
         block0 = _make_block([_make_record(STATUS_ON_MAP, 1, 1, 0, 1, 0, 0, 0)])
-        block1 = _make_block([
-            _make_record(STATUS_ON_MAP, 2, 2, 0, 2, 0, 0, 0),
-            _make_record(STATUS_ON_MAP, 3, 3, 0, 3, 0, 0, 0),
-        ])
+        block1 = _make_block(
+            [
+                _make_record(STATUS_ON_MAP, 2, 2, 0, 2, 0, 0, 0),
+                _make_record(STATUS_ON_MAP, 3, 3, 0, 3, 0, 0, 0),
+            ]
+        )
         data = block0 + block1
         world = U6WorldObjects.from_parts(data, b"", num_surface=2, num_dungeon=0)
         self.assertEqual(len(world.surface_objects[0]), 1)
@@ -135,7 +154,9 @@ class BlockParsingTests(unittest.TestCase):
     def test_dungeon_blocks_and_objlist_tail(self):
         dblock = _make_block([_make_record(STATUS_ON_MAP, 5, 5, 1, 9, 0, 0, 0)])
         tail = b"OBJLISTDATA"
-        world = U6WorldObjects.from_parts(b"", dblock + tail, num_surface=0, num_dungeon=1)
+        world = U6WorldObjects.from_parts(
+            b"", dblock + tail, num_surface=0, num_dungeon=1
+        )
         self.assertEqual(len(world.dungeon_objects[0]), 1)
         self.assertEqual(world.objlist_tail, tail)
 
@@ -144,16 +165,29 @@ class BlockParsingTests(unittest.TestCase):
             U6WorldObjects.from_parts(b"\x01", b"", num_surface=1, num_dungeon=0)
 
     def test_truncated_record_raises(self):
-        data = struct.pack("<H", 1) + b"\x00" * 3  # claims 1 object, only 3 bytes follow
+        data = (
+            struct.pack("<H", 1) + b"\x00" * 3
+        )  # claims 1 object, only 3 bytes follow
         with self.assertRaises(U6ObjectError):
             U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0)
 
 
 class StatusFlagTests(unittest.TestCase):
     def test_independent_flags(self):
-        record = _make_record(STATUS_ON_MAP | STATUS_OK_TO_TAKE | STATUS_INVISIBLE | STATUS_LIT, 0, 0, 0, 1, 0, 0, 0)
+        record = _make_record(
+            STATUS_ON_MAP | STATUS_OK_TO_TAKE | STATUS_INVISIBLE | STATUS_LIT,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+        )
         data = _make_block([record])
-        obj = U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0).surface_objects[0][0]
+        obj = U6WorldObjects.from_parts(
+            data, b"", num_surface=1, num_dungeon=0
+        ).surface_objects[0][0]
         self.assertTrue(obj.is_ok_to_take)
         self.assertTrue(obj.is_invisible)
         self.assertTrue(obj.is_lit)
@@ -165,7 +199,9 @@ class TileNumTests(unittest.TestCase):
     def test_tile_num_uses_basetile_plus_frame(self):
         record = _make_record(STATUS_ON_MAP, 0, 0, 0, 5, 2, 0, 0)
         data = _make_block([record])
-        obj = U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0).surface_objects[0][0]
+        obj = U6WorldObjects.from_parts(
+            data, b"", num_surface=1, num_dungeon=0
+        ).surface_objects[0][0]
         basetile = [0] * 5 + [1000]  # BASETILE[5] = 1000
         self.assertEqual(obj.tile_num(tuple(basetile)), 1002)
 
@@ -174,16 +210,24 @@ class EggTests(unittest.TestCase):
     def test_non_egg_object_reports_no_egg_semantics(self):
         record = _make_record(STATUS_ON_MAP, 10, 10, 0, 42, 0, 1, 0)
         data = _make_block([record])
-        obj = U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0).surface_objects[0][0]
+        obj = U6WorldObjects.from_parts(
+            data, b"", num_surface=1, num_dungeon=0
+        ).surface_objects[0][0]
         self.assertFalse(obj.is_egg)
         self.assertIsNone(obj.spawn_probability)
         self.assertIsNone(obj.spawn_target)
 
     def test_egg_exposes_spawn_probability_and_target(self):
-        egg = _make_record(STATUS_ON_MAP, 5, 5, 0, EGG_OBJ_N, 0, 75, 4)  # qty=75 -> 75% chance
-        spawn = _make_record(STATUS_IN_CONTAINER, 0, 0, 0, 351, 0, 8, 8)  # wolf template, max 8
+        egg = _make_record(
+            STATUS_ON_MAP, 5, 5, 0, EGG_OBJ_N, 0, 75, 4
+        )  # qty=75 -> 75% chance
+        spawn = _make_record(
+            STATUS_IN_CONTAINER, 0, 0, 0, 351, 0, 8, 8
+        )  # wolf template, max 8
         data = _make_block([egg, spawn])
-        obj = U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0).surface_objects[0][0]
+        obj = U6WorldObjects.from_parts(
+            data, b"", num_surface=1, num_dungeon=0
+        ).surface_objects[0][0]
         self.assertTrue(obj.is_egg)
         self.assertEqual(obj.spawn_probability, 75)
         target = obj.spawn_target
@@ -195,7 +239,9 @@ class EggTests(unittest.TestCase):
     def test_egg_with_no_contained_object_has_no_spawn_target(self):
         egg = _make_record(STATUS_ON_MAP, 5, 5, 0, EGG_OBJ_N, 0, 100, 0)
         data = _make_block([egg])
-        obj = U6WorldObjects.from_parts(data, b"", num_surface=1, num_dungeon=0).surface_objects[0][0]
+        obj = U6WorldObjects.from_parts(
+            data, b"", num_surface=1, num_dungeon=0
+        ).surface_objects[0][0]
         self.assertTrue(obj.is_egg)
         self.assertIsNone(obj.spawn_target)
 
@@ -230,11 +276,16 @@ class SavegameLoadingTests(unittest.TestCase):
             world = U6WorldObjects.from_savegame(tmp)
 
         # block index = row * 8 + col (matches titan.u6.map's superchunk numbering)
-        self.assertEqual(len(world.surface_objects), SURFACE_SIDE_SUPERCHUNKS ** 2)
+        self.assertEqual(len(world.surface_objects), SURFACE_SIDE_SUPERCHUNKS**2)
         seeded_index = 2 * SURFACE_SIDE_SUPERCHUNKS + 3
         self.assertEqual(len(world.surface_objects[seeded_index]), 1)
         self.assertEqual(world.surface_objects[seeded_index][0].obj_n, 7)
-        self.assertEqual(sum(len(b) for i, b in enumerate(world.surface_objects) if i != seeded_index), 0)
+        self.assertEqual(
+            sum(
+                len(b) for i, b in enumerate(world.surface_objects) if i != seeded_index
+            ),
+            0,
+        )
 
         self.assertEqual(len(world.dungeon_objects), DUNGEON_LEVELS)
         self.assertEqual(len(world.dungeon_objects[1]), 1)

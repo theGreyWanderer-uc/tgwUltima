@@ -112,7 +112,9 @@ class U9ExtraData:
     @property
     def args(self) -> list[tuple[int, int]]:
         """Return the ``(type, value)`` pairs in use."""
-        return [(self.arg_types[i], self.values[i]) for i in range(min(self.arg_count, 3))]
+        return [
+            (self.arg_types[i], self.values[i]) for i in range(min(self.arg_count, 3))
+        ]
 
 
 @dataclass(frozen=True)
@@ -245,7 +247,9 @@ class U9Chunk:
     @property
     def allocated_entities(self) -> tuple[U9Entity, ...]:
         """All allocated entities, whether or not the spatial index links them."""
-        return tuple(sorted((*self.entities, *self.unlinked_entities), key=lambda e: e.offset))
+        return tuple(
+            sorted((*self.entities, *self.unlinked_entities), key=lambda e: e.offset)
+        )
 
     @property
     def declared_entity_count(self) -> int:
@@ -282,7 +286,9 @@ class U9Nonfixed:
 
     def __init__(self, data: bytes) -> None:
         if len(data) < TABLE_OFFSET + TRAILER_SIZE:
-            raise U9NonfixedError(f"data too small to contain a nonfixed header: {len(data)} bytes")
+            raise U9NonfixedError(
+                f"data too small to contain a nonfixed header: {len(data)} bytes"
+            )
 
         self.width, self.height = struct.unpack_from("<II", data, WIDTH_OFFSET)
         if not (1 <= self.width <= MAX_GRID_DIM and 1 <= self.height <= MAX_GRID_DIM):
@@ -302,7 +308,9 @@ class U9Nonfixed:
         self.chunk_table = struct.unpack_from(
             f"<{self.width * self.height}I", data, TABLE_OFFSET
         )
-        self.trailer = struct.unpack_from("<I", data, self.header_size - TRAILER_SIZE)[0]
+        self.trailer = struct.unpack_from("<I", data, self.header_size - TRAILER_SIZE)[
+            0
+        ]
         self.declared_payload_size = self.unknown[3]
 
     @classmethod
@@ -333,7 +341,9 @@ class U9Nonfixed:
     def pages(self, index: int) -> list[U9Page]:
         """Return one chunk's page chain, first page first."""
         if index < 0 or index >= self.num_chunks:
-            raise U9NonfixedError(f"chunk index {index} out of range (0..{self.num_chunks - 1})")
+            raise U9NonfixedError(
+                f"chunk index {index} out of range (0..{self.num_chunks - 1})"
+            )
 
         result: list[U9Page] = []
         seen: set[int] = set()
@@ -347,7 +357,9 @@ class U9Nonfixed:
             next_page, free_entity, free_extra, base_x, base_y, entities, extras = (
                 struct.unpack_from(PAGE_HEADER_STRUCT, self._data, base)
             )
-            heads = struct.unpack_from(f"<{BUCKET_COUNT}I", self._data, base + BUCKET_OFFSET)
+            heads = struct.unpack_from(
+                f"<{BUCKET_COUNT}I", self._data, base + BUCKET_OFFSET
+            )
             result.append(
                 U9Page(
                     offset=rel,
@@ -415,7 +427,9 @@ class U9Nonfixed:
             "<4B", self._data, self.header_size + rel
         )
         arg_types = (type_0, type_1, type_2)
-        return 1 <= arg_count <= 3 and all(value == 0 for value in arg_types[arg_count:])
+        return 1 <= arg_count <= 3 and all(
+            value == 0 for value in arg_types[arg_count:]
+        )
 
     def _walk_free_list(
         self, page: U9Page, head: int, *, size: int, link_offset: int
@@ -437,7 +451,9 @@ class U9Nonfixed:
                 return tuple(offsets), False
             seen.add(rel)
             offsets.append(rel)
-            rel = struct.unpack_from("<I", self._data, self.header_size + rel + link_offset)[0]
+            rel = struct.unpack_from(
+                "<I", self._data, self.header_size + rel + link_offset
+            )[0]
         return tuple(offsets), True
 
     def _page_allocations(
@@ -478,11 +494,14 @@ class U9Nonfixed:
                 continue
             halves = (rel, rel + EXTRA_SIZE)
             half_is_extra = tuple(
-                half in free_extra_set or self._looks_like_extra_data(half) for half in halves
+                half in free_extra_set or self._looks_like_extra_data(half)
+                for half in halves
             )
             if all(half_is_extra):
                 extras.extend(
-                    self._read_extra_data(half) for half in halves if half not in free_extra_set
+                    self._read_extra_data(half)
+                    for half in halves
+                    if half not in free_extra_set
                 )
             else:
                 entities.append(self._read_entity(rel, base_x, base_y))
@@ -568,7 +587,9 @@ class U9Nonfixed:
             scanned_offsets = {entity.offset for entity in page_entities}
             if valid and indexed_offsets_on_page <= scanned_offsets:
                 allocator_pages.add(page.offset)
-                allocated_by_offset.update((entity.offset, entity) for entity in page_entities)
+                allocated_by_offset.update(
+                    (entity.offset, entity) for entity in page_entities
+                )
                 extra_by_offset.update((extra.offset, extra) for extra in page_extras)
             else:
                 # Older savegame pages may retain correct spatial lists and
@@ -587,9 +608,7 @@ class U9Nonfixed:
         def effective_stored_count(field: str, known_legacy_records: int) -> int:
             """Combine exact pages with cumulative headers from older saves."""
             exact = sum(
-                getattr(page, field)
-                for page in pages
-                if page.offset in allocator_pages
+                getattr(page, field) for page in pages if page.offset in allocator_pages
             )
             legacy_values = [
                 getattr(page, field)
@@ -645,7 +664,9 @@ class U9Nonfixed:
             pages=tuple(pages),
             entities=tuple(indexed),
             unlinked_entities=unlinked,
-            extra_data_records=tuple(extra for _, extra in sorted(extra_by_offset.items())),
+            extra_data_records=tuple(
+                extra for _, extra in sorted(extra_by_offset.items())
+            ),
             free_entity_offsets=tuple(sorted(free_entities)),
             free_extra_data_offsets=tuple(sorted(free_extras)),
             entity_slots_complete=entity_slots_complete,
@@ -669,7 +690,9 @@ class U9Nonfixed:
 
     def allocated_entities(self) -> list[U9Entity]:
         """Return every allocated entity, including unlinked records."""
-        return [entity for chunk in self.chunks() for entity in chunk.allocated_entities]
+        return [
+            entity for chunk in self.chunks() for entity in chunk.allocated_entities
+        ]
 
     def extra_data_records(self) -> list[U9ExtraData]:
         """Return every allocated 16-byte extra-data record."""

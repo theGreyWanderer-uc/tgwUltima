@@ -135,14 +135,16 @@ def read_tile_index(filepath: str | os.PathLike[str]) -> tuple[int, ...]:
     with open(filepath, "rb") as f:
         data = f.read()
     count = len(data) // 2
-    return struct.unpack(f"<{count}H", data[:count * 2])
+    return struct.unpack(f"<{count}H", data[: count * 2])
 
 
 class U6Tiles:
     """Decoder for U6's 16x16 tile graphics (MAPTILES.VGA + OBJTILES.VGA)."""
 
     def __init__(self, tiles: list[bytes]) -> None:
-        self.tiles = tiles  # each: 256 bytes, row-major palette indices, 0xFF = transparent
+        self.tiles = (
+            tiles  # each: 256 bytes, row-major palette indices, 0xFF = transparent
+        )
 
     @property
     def num_tiles(self) -> int:
@@ -160,7 +162,11 @@ class U6Tiles:
 
     @classmethod
     def from_parts(
-        cls, masktype_raw: bytes, maptiles: bytes, objtiles: bytes, num_tiles: int = NUM_TILES
+        cls,
+        masktype_raw: bytes,
+        maptiles: bytes,
+        objtiles: bytes,
+        num_tiles: int = NUM_TILES,
     ) -> U6Tiles:
         """
         Build from already-decoded MASKTYPE.VGA, MAPTILES.VGA (LZW-decoded),
@@ -172,7 +178,9 @@ class U6Tiles:
         needless bulk.
         """
         if len(masktype_raw) < num_tiles:
-            raise U6TilesError(f"masktype data too short: {len(masktype_raw)} bytes, need {num_tiles}")
+            raise U6TilesError(
+                f"masktype data too short: {len(masktype_raw)} bytes, need {num_tiles}"
+            )
         masktypes = masktype_raw[:num_tiles]
         alltiles = maptiles + objtiles
 
@@ -182,8 +190,10 @@ class U6Tiles:
             mt = masktypes[i]
             if mt in (MASKTYPE_PLAIN, MASKTYPE_TRANSPARENT):
                 if pos + TILE_PIXELS > len(alltiles):
-                    raise U6TilesError(f"tile {i}: fixed-format tile runs past end of data")
-                tiles.append(alltiles[pos:pos + TILE_PIXELS])
+                    raise U6TilesError(
+                        f"tile {i}: fixed-format tile runs past end of data"
+                    )
+                tiles.append(alltiles[pos : pos + TILE_PIXELS])
                 pos += TILE_PIXELS
             elif mt == MASKTYPE_PIXELBLOCKS:
                 tile, consumed = cls._decode_pixelblock_tile(alltiles, pos, i)
@@ -194,7 +204,9 @@ class U6Tiles:
         return cls(tiles)
 
     @staticmethod
-    def _decode_pixelblock_tile(alltiles: bytes, start: int, tile_num: int) -> tuple[bytes, int]:
+    def _decode_pixelblock_tile(
+        alltiles: bytes, start: int, tile_num: int
+    ) -> tuple[bytes, int]:
         """
         Decode one variable-length "pixel blocks" tile.
 
@@ -209,7 +221,9 @@ class U6Tiles:
         body_start = start + 1
         body_end = body_start + body_len
         if body_end > len(alltiles):
-            raise U6TilesError(f"tile {tile_num}: pixel-block body runs past end of data")
+            raise U6TilesError(
+                f"tile {tile_num}: pixel-block body runs past end of data"
+            )
 
         tile = bytearray([TRANSPARENT] * TILE_PIXELS)
         p = body_start
@@ -228,9 +242,11 @@ class U6Tiles:
             cursor += actual_add
             end = cursor + run_length
             if cursor < 0 or end > TILE_PIXELS:
-                raise U6TilesError(f"tile {tile_num}: pixel run [{cursor}:{end}] out of bounds")
+                raise U6TilesError(
+                    f"tile {tile_num}: pixel run [{cursor}:{end}] out of bounds"
+                )
 
-            tile[cursor:end] = alltiles[p:p + run_length]
+            tile[cursor:end] = alltiles[p : p + run_length]
             p += run_length
             cursor = end
 
@@ -242,9 +258,13 @@ class U6Tiles:
 
     def to_array(self, tile_num: int) -> np.ndarray:
         """Return one tile as a 16x16 uint8 array of palette indices (0xFF = transparent)."""
-        return np.frombuffer(self.tiles[tile_num], dtype=np.uint8).reshape(TILE_DIM, TILE_DIM)
+        return np.frombuffer(self.tiles[tile_num], dtype=np.uint8).reshape(
+            TILE_DIM, TILE_DIM
+        )
 
-    def to_pil_image(self, tile_num: int, palette, transparent: bool = True) -> Image.Image:
+    def to_pil_image(
+        self, tile_num: int, palette, transparent: bool = True
+    ) -> Image.Image:
         """
         Render one tile to a PIL Image using ``palette``
         (e.g. :class:`titan.u6.palette.U6Palette`).

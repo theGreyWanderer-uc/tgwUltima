@@ -114,7 +114,9 @@ def export_avatar_animation_library(
     candidate_ids = {
         animation.animation_id
         for animation in animations
-        if _AVATAR_TOKEN.search(parse_animation_source_hints(animation.source_name).stem)
+        if _AVATAR_TOKEN.search(
+            parse_animation_source_hints(animation.source_name).stem
+        )
     }
     if wanted_categories:
         candidate_ids = {

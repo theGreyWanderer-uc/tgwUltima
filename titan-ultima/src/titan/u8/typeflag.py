@@ -18,8 +18,6 @@ from __future__ import annotations
 
 __all__ = ["U8TypeFlags"]
 
-import os
-import struct
 from dataclasses import dataclass
 
 
@@ -96,8 +94,9 @@ class U8TypeFlags:
 
         def flag_names(self) -> list[str]:
             """Return list of set flag names."""
-            return [name for bit, name in U8TypeFlags.FLAG_NAMES.items()
-                    if self.flags & bit]
+            return [
+                name for bit, name in U8TypeFlags.FLAG_NAMES.items() if self.flags & bit
+            ]
 
         def family_name(self) -> str:
             """Return the human-readable family name."""
@@ -155,7 +154,7 @@ class U8TypeFlags:
 
         for i in range(count):
             off = i * block
-            d = data[off:off + 8]
+            d = data[off : off + 8]
 
             # Byte 0: low flags
             flags = d[0]
@@ -185,18 +184,22 @@ class U8TypeFlags:
             weight = d[6]
             volume = d[7]
 
-            entries.append(cls.ShapeEntry(
-                shape_num=i,
-                flags=flags,
-                family=family,
-                equiptype=equiptype,
-                x=x, y=y, z=z,
-                animtype=animtype,
-                animdata=animdata,
-                unknown=unknown,
-                weight=weight,
-                volume=volume,
-            ))
+            entries.append(
+                cls.ShapeEntry(
+                    shape_num=i,
+                    flags=flags,
+                    family=family,
+                    equiptype=equiptype,
+                    x=x,
+                    y=y,
+                    z=z,
+                    animtype=animtype,
+                    animdata=animdata,
+                    unknown=unknown,
+                    weight=weight,
+                    volume=volume,
+                )
+            )
 
         return entries
 

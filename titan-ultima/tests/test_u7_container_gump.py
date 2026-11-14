@@ -12,6 +12,7 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from titan.u7 import container_browser as browser
+from titan.u7 import container_browser_ui as browser_ui
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.container_gump import (
     U7GumpArea,
@@ -339,9 +340,9 @@ def test_browser_g_h_l_and_fresh_reports_keep_game_inputs_and_old_reports(
     monkeypatch.setattr("titan._inventory_browser.ui.text", lambda *a, **k: str(root))
     opened = []
     monkeypatch.setattr(
-        browser, "open_preview", lambda path: opened.append(path) or True
+        browser_ui, "open_preview", lambda path: opened.append(path) or True
     )
-    browser.browse_u7_container_session(native_session, output=output)
+    browser_ui.browse_u7_container_session(native_session, output=output)
     assert len(opened) == 4 and len(set(opened)) == 4
     assert native_session.layout == "saved"
     report = next(output.glob("*/inventory.json"))

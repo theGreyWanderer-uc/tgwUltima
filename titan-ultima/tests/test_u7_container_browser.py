@@ -8,6 +8,7 @@ from PIL import Image
 
 from titan._inventory_browser import inventory_descendants
 from titan.u7 import container_browser as browser
+from titan.u7 import container_browser_ui as browser_ui
 from titan.u7.container import browse_containers, ContainerQueryParams, format_tree
 from titan.u7.flex import U7FlexArchive
 from titan.u7.world import WorldQueryParams
@@ -68,7 +69,7 @@ def test_captured_ireg_browsing_does_not_reread_save(
     monkeypatch.setattr(
         "titan._inventory_browser.ui.choice", lambda *args, **kwargs: next(answers)
     )
-    browser.browse_u7_container_session(data, output=tmp_path / "exports")
+    browser_ui.browse_u7_container_session(data, output=tmp_path / "exports")
     assert "Coins" in capsys.readouterr().out
 
 
@@ -89,6 +90,11 @@ def test_fresh_u7_reports_have_native_sprite_links_paths_and_preserve_inputs(
     before = {path: path.read_bytes() for path in data.source_files}
     monkeypatch.setattr(
         browser,
+        "u7_container_item_image",
+        lambda *args, **kwargs: Image.new("RGBA", (4, 3), "red"),
+    )
+    monkeypatch.setattr(
+        browser_ui,
         "u7_container_item_image",
         lambda *args, **kwargs: Image.new("RGBA", (4, 3), "red"),
     )

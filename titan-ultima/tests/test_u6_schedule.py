@@ -17,7 +17,9 @@ from titan.u6.object import pack_position
 from titan.u6.schedule import U6ScheduleError, U6Schedules
 
 
-def _make_entry(hour: int, day_of_week: int, worktype: int, x: int, y: int, z: int) -> bytes:
+def _make_entry(
+    hour: int, day_of_week: int, worktype: int, x: int, y: int, z: int
+) -> bytes:
     b0 = (hour & 0x1F) | ((day_of_week & 0x07) << 5)
     h, p1, p2 = pack_position(x, y, z)
     return bytes([b0, worktype, h, p1, p2])
@@ -31,14 +33,18 @@ def _make_schedule(num_actors: int, per_actor_entries: dict[int, list[bytes]]) -
     for actor_id in range(num_actors):
         entries = per_actor_entries.get(actor_id, [])
         if not entries:
-            offsets[actor_id] = 0xFFFF  # sentinel: no schedule (matches Nuvie's out-of-range check)
+            offsets[actor_id] = (
+                0xFFFF  # sentinel: no schedule (matches Nuvie's out-of-range check)
+            )
             continue
         offsets[actor_id] = cursor
         for e in entries:
             all_entries += e
             cursor += 1
     total = cursor
-    header = b"".join(o.to_bytes(2, "little") for o in offsets) + struct.pack("<H", total)
+    header = b"".join(o.to_bytes(2, "little") for o in offsets) + struct.pack(
+        "<H", total
+    )
     return header + bytes(all_entries)
 
 

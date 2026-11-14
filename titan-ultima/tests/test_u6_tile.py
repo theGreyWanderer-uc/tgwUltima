@@ -38,7 +38,9 @@ def _pixelblock_body(records: list[tuple[int, int, list[int]]], body_len: int) -
     return bytes(body)
 
 
-def _pixelblock_tile(records: list[tuple[int, int, list[int]]], paragraphs: int = 1) -> bytes:
+def _pixelblock_tile(
+    records: list[tuple[int, int, list[int]]], paragraphs: int = 1
+) -> bytes:
     body_len = paragraphs * 16 - 1
     return bytes([paragraphs]) + _pixelblock_body(records, body_len)
 
@@ -90,7 +92,9 @@ class PixelBlockTests(unittest.TestCase):
         plain_tile = bytes([9] * 256)
         pb_tile = _pixelblock_tile([(0, 1, [42])])
         trans_tile = bytes([0xFF] * 256)
-        tiles = U6Tiles.from_parts(masktypes, plain_tile + pb_tile, trans_tile, num_tiles=3)
+        tiles = U6Tiles.from_parts(
+            masktypes, plain_tile + pb_tile, trans_tile, num_tiles=3
+        )
         self.assertEqual(tiles.get_tile(0), plain_tile)
         self.assertEqual(tiles.get_tile(1)[0], 42)
         self.assertEqual(tiles.get_tile(2), trans_tile)
@@ -106,7 +110,9 @@ class ErrorHandlingTests(unittest.TestCase):
         # short to hold even one full (displacement, run_length) header.
         tile_bytes = bytes([1]) + b"\x00\x00"
         with self.assertRaises(U6TilesError):
-            U6Tiles.from_parts(bytes([MASKTYPE_PIXELBLOCKS]), tile_bytes, b"", num_tiles=1)
+            U6Tiles.from_parts(
+                bytes([MASKTYPE_PIXELBLOCKS]), tile_bytes, b"", num_tiles=1
+            )
 
     def test_out_of_bounds_pixel_run_raises(self):
         # displacement 1919 is past the 1760 wraparound threshold:
@@ -115,7 +121,9 @@ class ErrorHandlingTests(unittest.TestCase):
         # [319:329], well past the 256-byte tile bound.
         tile_bytes = _pixelblock_tile([(1919, 10, list(range(10)))], paragraphs=2)
         with self.assertRaises(U6TilesError):
-            U6Tiles.from_parts(bytes([MASKTYPE_PIXELBLOCKS]), tile_bytes, b"", num_tiles=1)
+            U6Tiles.from_parts(
+                bytes([MASKTYPE_PIXELBLOCKS]), tile_bytes, b"", num_tiles=1
+            )
 
 
 class TileIndexTests(unittest.TestCase):
@@ -135,7 +143,9 @@ class TileIndexTests(unittest.TestCase):
 
 class RenderingTests(unittest.TestCase):
     def test_to_array_shape(self):
-        tiles = U6Tiles.from_parts(bytes([MASKTYPE_PLAIN]), bytes(range(256)), b"", num_tiles=1)
+        tiles = U6Tiles.from_parts(
+            bytes([MASKTYPE_PLAIN]), bytes(range(256)), b"", num_tiles=1
+        )
         arr = tiles.to_array(0)
         self.assertEqual(arr.shape, (16, 16))
         self.assertEqual(arr[0, 0], 0)
@@ -153,7 +163,9 @@ class RenderingTests(unittest.TestCase):
         self.assertEqual(alpha[128:], [0] * 128)
 
     def test_to_pil_image_opaque_mode(self):
-        tiles = U6Tiles.from_parts(bytes([MASKTYPE_PLAIN]), bytes(256), b"", num_tiles=1)
+        tiles = U6Tiles.from_parts(
+            bytes([MASKTYPE_PLAIN]), bytes(256), b"", num_tiles=1
+        )
         palette = U6Palette.parse(bytes(1024))
         img = tiles.to_pil_image(0, palette, transparent=False)
         self.assertEqual(img.mode, "RGB")

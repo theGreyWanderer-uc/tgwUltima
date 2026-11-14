@@ -6,6 +6,19 @@ work for the next release.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Ultima 9 Steam installs:** `titan setup` now also looks for Ultima 9 in
+  Steam libraries (`Program Files (x86)/Steam/steamapps/common` and
+  `SteamLibrary/steamapps/common`) on drives C to G.
+
+### Changed
+
+- **Python 3.10 is now the minimum.** Titan already used Python 3.10
+  features, so it did not run on 3.9 despite saying it did.
+
 ## [0.7.9]
 
 ### Added

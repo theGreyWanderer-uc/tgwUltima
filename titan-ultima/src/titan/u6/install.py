@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -104,3 +105,17 @@ def u6_resource_paths(root: Path) -> dict[str, Path]:
         for key, name in U6_RESOURCE_NAMES.items()
         if ((root / name).is_dir() if key == "savegame" else (root / name).is_file())
     }
+
+
+def u6_setup_lines(root: Path) -> list[str]:
+    """Render ``[u6.game]`` and ``[u6.paths]`` for a new ``titan.toml``."""
+    lines = [
+        "",
+        "[u6.game]",
+        f"base = {json.dumps(root.as_posix())}",
+        "",
+        "[u6.paths]",
+    ]
+    for key, resource in u6_resource_paths(root).items():
+        lines.append(f"{key} = {json.dumps(resource.relative_to(root).as_posix())}")
+    return lines

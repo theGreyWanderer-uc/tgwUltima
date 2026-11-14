@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 from titan import _wizard_ui as ui
 from titan.fonts.exult_cfg import ExultGamePaths
 from titan.u7 import npc_browser as browser
+from titan.u7 import npc_browser_ui as browser_ui
 from titan.u7.archive_targets import ArchiveTarget, base_target, discover_targets
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
@@ -107,12 +108,12 @@ def owner(tmp_path, monkeypatch):
     target = ArchiveTarget(
         "SI mod", static, patch, root=tmp_path, gamedat=gamedat, save_root=saves
     )
-    monkeypatch.setattr(browser, "game_targets", lambda game: (target, []))
+    monkeypatch.setattr(browser_ui, "game_targets", lambda game: (target, []))
     # Keep the tests independent of any Exult bundle installed on this machine.
-    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     # Keep sessions independent of any Exult data bundle installed on this machine.
-    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
     return target
 
 
@@ -373,7 +374,7 @@ def test_inventory_browser_distinguishes_identical_container_paths(
         U7NPCInventoryItem(7, 0, 0, 0, 0, 2, 1, "5:0/7:0"),
     ]
     answers(monkeypatch, ["0", "C", "1", "B", "U", "2", "C", "3", "Q"])
-    browser._inventory(session, npc)
+    browser_ui._inventory(session, npc)
     output = capsys.readouterr().out
     first_scope = output.split("Contents of item 0:")[1].split(
         "Inventory and nested contents"
@@ -419,7 +420,7 @@ def test_paged_search_can_have_no_results_and_return_to_all(owner, monkeypatch, 
         replace(session.npcs.npcs[2], npc_num=i, name=f"Npc {i}") for i in range(5, 33)
     ]
     answers(monkeypatch, ["N", "B", "S", "missing", "S", "", "Q"])
-    assert browser._browse_npcs(session) == "Q"
+    assert browser_ui._browse_npcs(session) == "Q"
     output = capsys.readouterr().out
     assert "page 2/3" in output and "NPCs: 0 matches" in output
 
@@ -431,9 +432,9 @@ def test_change_world_resets_source_and_npc_selection(owner, monkeypatch, capsys
         games.append(game)
         return owner, []
 
-    monkeypatch.setattr(browser, "game_targets", targets)
+    monkeypatch.setattr(browser_ui, "game_targets", targets)
     answers(monkeypatch, ["2", "1", "W", "1", "1", "G", "Q"])
-    assert browser.run_browser(source=str(owner.gamedat), npc=1) == 0
+    assert browser_ui.run_browser(source=str(owner.gamedat), npc=1) == 0
     assert games == ["si", "bg"]
     assert capsys.readouterr().out.count("NPC 1: Iolo") == 1
 
@@ -449,7 +450,7 @@ def test_next_npc_after_single_search_result_moves_to_adjacent_record(
         for i, name in [(233, "Total"), (234, "Devon"), (235, "Malchir"), (236, "Kith")]
     ]
     answers(monkeypatch, ["S", query, "234", "N", "B", "B", "Q"])
-    assert browser._browse_npcs(session) == "Q"
+    assert browser_ui._browse_npcs(session) == "Q"
     output = capsys.readouterr().out
     assert "NPC 235: Malchir" in output
     assert "NPC 233: Total" in output
@@ -464,7 +465,7 @@ def test_next_npc_respects_filter_but_not_the_search(owner, monkeypatch, capsys)
     session.npcs.npcs[1].name = "Chosen"
     session.npcs.npcs[2].name = "Chosen Other"
     answers(monkeypatch, ["F", "P", "S", "Chosen", "1", "N", "Q"])
-    assert browser._browse_npcs(session) == "Q"
+    assert browser_ui._browse_npcs(session) == "Q"
     output = capsys.readouterr().out
     assert "NPC 0: Avatar" in output and "NPC 2: Chosen Other" not in output
 
@@ -472,7 +473,7 @@ def test_next_npc_respects_filter_but_not_the_search(owner, monkeypatch, capsys)
 def test_single_npc_filter_explains_why_next_cannot_move(owner, monkeypatch, capsys):
     session = browser.load_session(owner, browser.Source(owner.gamedat, "live"), "si")
     answers(monkeypatch, ["F", "D", "3", "N", "Q"])
-    assert browser._browse_npcs(session) == "Q"
+    assert browser_ui._browse_npcs(session) == "Q"
     assert "Only one NPC matches the current filter" in capsys.readouterr().out
 
 
@@ -492,7 +493,7 @@ def test_all_npc_selection_menus_request_hotkeys(owner, monkeypatch):
         ("Inventory", {"10": "bag", "U": "Up", "N": "Next page"}),
         ("Export", {"J": "JSON", "T": "Text"}),
     ]:
-        browser._menu(prompt, labels, next(iter(labels)))
+        browser_ui._menu(prompt, labels, next(iter(labels)))
     assert all(item["hotkeys"] for item in seen)
 
 
@@ -535,10 +536,10 @@ def npc_art(owner, monkeypatch):
     images = []
     # Scope the TTY stub to this module; capsys may replace global stdout.
     monkeypatch.setattr(
-        browser, "sys", SimpleNamespace(stdout=SimpleNamespace(isatty=lambda: True))
+        browser_ui, "sys", SimpleNamespace(stdout=SimpleNamespace(isatty=lambda: True))
     )
     monkeypatch.setattr(
-        browser,
+        browser_ui,
         "terminal_image",
         lambda image, **kwargs: images.append((image, kwargs)),
     )
@@ -551,7 +552,7 @@ def test_npc_preview_uses_shape_frame_16_and_main_palette_with_transparency(
     session, images = npc_art
     npc = session.npcs.npcs[0]
     npc.frame = 3  # The requested pose is frame 16, independent of saved frame.
-    browser.npc_preview(session, npc)
+    browser_ui.npc_preview(session, npc)
     image, kwargs = images[0]
     assert image.mode == "RGBA"
     assert image.getpixel((1, 0)) == (255, 0, 0, 255)
@@ -570,8 +571,8 @@ def test_npc_preview_inherits_empty_exult_patch_shapes_and_palette_slots(npc_art
         for path in directory.iterdir()
     }
     npc = session.npcs.npcs[0]
-    browser.npc_preview(session, npc)
-    browser.npc_preview(session, replace(npc, shape=151))
+    browser_ui.npc_preview(session, npc)
+    browser_ui.npc_preview(session, replace(npc, shape=151))
     assert images[0][0].getpixel((1, 0)) == (255, 0, 0, 255)
     assert images[1][0].getpixel((1, 0)) == (0, 0, 255, 255)
     assert (
@@ -585,16 +586,16 @@ def test_npc_preview_reuses_world_library_when_moving_to_another_npc(
 ):
     session, images = npc_art
     calls = []
-    load = browser.load_library
+    load = browser_ui.load_library
 
     def counted(*args, **kwargs):
         calls.append(args)
         return load(*args, **kwargs)
 
-    monkeypatch.setattr(browser, "load_library", counted)
+    monkeypatch.setattr(browser_ui, "load_library", counted)
     session.npcs.npcs[1].shape = 151
     answers(monkeypatch, ["N", "Q"])
-    assert browser._browse_npcs(session, 0) == "Q"
+    assert browser_ui._browse_npcs(session, 0) == "Q"
     assert len(calls) == 1 and len(images) == 2
     assert images[0][0].getpixel((1, 0)) == (255, 0, 0, 255)
     assert images[1][0].getpixel((1, 0)) == (0, 255, 0, 255)
@@ -633,7 +634,7 @@ def test_unavailable_npc_art_keeps_details_and_navigation_working(
     else:
         session.preview_error = "Choose the world matching this save's game identity."
     answers(monkeypatch, ["Q"])
-    assert browser._browse_npcs(session, 0) == "Q"
+    assert browser_ui._browse_npcs(session, 0) == "Q"
     output = capsys.readouterr().out
     assert "NPC 0: Avatar" in output and "NPC preview unavailable:" in output
     assert not images
@@ -643,13 +644,13 @@ def test_unavailable_npc_art_keeps_details_and_navigation_working(
 
 def test_redirected_output_never_loads_preview_art(npc_art, monkeypatch):
     session, images = npc_art
-    monkeypatch.setattr(browser.sys.stdout, "isatty", lambda: False)
+    monkeypatch.setattr(browser_ui.sys.stdout, "isatty", lambda: False)
     monkeypatch.setattr(
-        browser,
+        browser_ui,
         "load_library",
         lambda *args, **kwargs: pytest.fail("redirected output loaded art"),
     )
-    browser.npc_preview(session, session.npcs.npcs[0])
+    browser_ui.npc_preview(session, session.npcs.npcs[0])
     assert not images and session.preview_library is None
 
 
@@ -661,9 +662,9 @@ def test_failed_world_art_load_is_not_retried_for_each_npc(npc_art, monkeypatch)
         calls.append(args)
         raise ValueError("Missing palette")
 
-    monkeypatch.setattr(browser, "load_library", unavailable)
-    browser.npc_preview(session, session.npcs.npcs[0])
-    browser.npc_preview(session, session.npcs.npcs[1])
+    monkeypatch.setattr(browser_ui, "load_library", unavailable)
+    browser_ui.npc_preview(session, session.npcs.npcs[0])
+    browser_ui.npc_preview(session, session.npcs.npcs[1])
     assert len(calls) == 1 and not images
 
 
@@ -693,7 +694,7 @@ def test_plain_npc_flow_search_details_inventory_schedules_back(
             "Q",
         ],
     )
-    assert browser.run_browser() == 0
+    assert browser_ui.run_browser() == 0
     output = capsys.readouterr().out
     assert "NPC 1: Iolo" in output and "NPC 2: Iolo Junior" in output
     assert "Daily schedules" in output and "Inventory and nested contents" in output
@@ -707,7 +708,7 @@ def test_plain_save_flow_selects_owner_save_and_lists_files(owner, monkeypatch, 
         title="My mod save",
     )
     answers(monkeypatch, ["2", "1", "S", "1", "F", "Q", "N", "0", "Q"])
-    assert browser.run_browser(saves=True) == 0
+    assert browser_ui.run_browser(saves=True) == 0
     output = capsys.readouterr().out
     assert "My mod save" in output and "Source files" in output
     assert "NPC 0: Avatar" in output
@@ -733,12 +734,12 @@ def test_bad_source_retries_and_cancel_returns_success(
     path = tmp_path / "corrupt.sav"
     path.write_bytes(b"wrong")
     answers(monkeypatch, ["2", "1", "G", "Q"])
-    assert browser.run_browser(source=str(path)) == 0
+    assert browser_ui.run_browser(source=str(path)) == 0
     assert "ERROR:" in capsys.readouterr().out
     monkeypatch.setattr(
         "builtins.input", lambda prompt="": (_ for _ in ()).throw(EOFError())
     )
-    assert browser.run_browser() == 0
+    assert browser_ui.run_browser() == 0
 
 
 def test_exports_nested_json_and_never_overwrites_sources(owner, monkeypatch, tmp_path):
@@ -747,14 +748,14 @@ def test_exports_nested_json_and_never_overwrites_sources(owner, monkeypatch, tm
     npc.inventory = [U7NPCInventoryItem(6, 0, 0, 0, 0, 2, 1, "5:0/6:0")]
     output = tmp_path / "reports" / "iolo.json"
     answers(monkeypatch, ["J", str(output)])
-    browser._export(session, [npc], npc)
+    browser_ui._export(session, [npc], npc)
     report = json.loads(output.read_text())
     assert report["npc"]["npc_num"] == 1
     assert report["inventory"][0]["path"] == "5:0/6:0"
     assert report["schedules"][0]["tx"] == 301
     answers(monkeypatch, ["J", str(output)])
     with pytest.raises(FileExistsError):
-        browser._export(session, [npc], npc)
+        browser_ui._export(session, [npc], npc)
     for path in (
         owner.gamedat / "NPC.DAT",
         owner.patch / "report.json",
@@ -762,7 +763,7 @@ def test_exports_nested_json_and_never_overwrites_sources(owner, monkeypatch, tm
     ):
         answers(monkeypatch, ["J", str(path)])
         with pytest.raises(ValueError, match="outside the game archives"):
-            browser._export(session, [npc], npc)
+            browser_ui._export(session, [npc], npc)
 
 
 @pytest.mark.parametrize(
@@ -772,7 +773,7 @@ def test_other_report_formats(owner, monkeypatch, tmp_path, action, suffix):
     session = browser.load_session(owner, browser.Source(owner.gamedat, "live"), "si")
     output = tmp_path / f"report_{action}{suffix}"
     answers(monkeypatch, [action, str(output)])
-    browser._export(session, [session.npcs.npcs[1]], session.npcs.npcs[1])
+    browser_ui._export(session, [session.npcs.npcs[1]], session.npcs.npcs[1])
     content = output.read_text()
     assert content
     if action in {"N", "S"}:
@@ -788,6 +789,6 @@ def test_detail_actions_use_native_immediate_hotkeys(owner, monkeypatch):
         return "Q"
 
     monkeypatch.setattr(ui, "choice", choose)
-    assert browser._browse_npcs(session, 1) == "Q"
+    assert browser_ui._browse_npcs(session, 1) == "Q"
     assert seen[0]["hotkeys"] is True
     assert {"N", "B", "S", "I", "T", "E", "D", "W", "Q"} <= set(seen[0]["labels"])

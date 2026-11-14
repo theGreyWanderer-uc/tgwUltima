@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 from collections import deque
 from dataclasses import dataclass
@@ -217,7 +218,7 @@ def discover_u9_installs(
 
 
 def u9_install_candidates(config: dict) -> list[Path]:
-    """List configured paths, then Galaxy, GOG, drive-root and Heroic installs."""
+    """List configured paths, then Galaxy, GOG, drive-root, Steam and Heroic installs."""
     candidates = []
     section = config.get("u9", {})
     base = section.get("game", {}).get("base")
@@ -240,6 +241,9 @@ def u9_install_candidates(config: dict) -> list[Path]:
         "",
         "Program Files/EA Games",
         "Program Files (x86)/Origin Games",
+        "Program Files (x86)/Steam/steamapps/common",
+        # Steam's default folder name for a library on a second drive.
+        "SteamLibrary/steamapps/common",
     ):
         launcher_roots.extend(Path(f"{drive}:/") / layout for drive in "CDEFG")
     launcher_roots += [Path.home() / "GOG Games", Path.home() / "Games/Heroic"]
@@ -277,3 +281,19 @@ def configured_u9_path(key: str) -> Path | None:
         if owner is not None:
             path = owner / filename
     return existing_u9_path(path) if path is not None else None
+
+
+def u9_setup_lines(selected: U9Installation) -> list[str]:
+    """Render ``[u9.game]`` and ``[u9.paths]`` for a new ``titan.toml``."""
+    lines = [
+        "",
+        "[u9.game]",
+        f"base = {json.dumps(selected.root.as_posix())}",
+        "",
+        "[u9.paths]",
+    ]
+    for key, resource in selected.paths.items():
+        lines.append(
+            f"{key} = {json.dumps(resource.relative_to(selected.root).as_posix())}"
+        )
+    return lines

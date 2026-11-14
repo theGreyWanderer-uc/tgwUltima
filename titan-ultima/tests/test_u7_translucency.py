@@ -27,7 +27,11 @@ def _make_translucency(num_slots=3, xform_file_order=None):
     blends = U7Blends(
         [
             U7BlendRecord(
-                index=i, r=i, g=i, b=i, alpha=200,
+                index=i,
+                r=i,
+                g=i,
+                b=i,
+                alpha=200,
                 translucent_palette_index=0xFF - num_slots + i,
             )
             for i in range(num_slots)

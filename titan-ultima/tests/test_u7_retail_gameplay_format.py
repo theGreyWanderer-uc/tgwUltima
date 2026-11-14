@@ -274,3 +274,68 @@ def test_cli_explicit_retail_mode_handles_255_records_and_keeps_default_exult(tm
     assert (
         invalid.exit_code != 0 and "supports weapon, ammo and armor" in invalid.output
     )
+
+
+def combat_record(kind, shape, value=0, *, deleted=False):
+    size = {"weapon": 21, "ammo": 13, "armor": 10}[kind]
+    data = bytearray(size)
+    data[:2] = shape.to_bytes(2, "little")
+    data[2] = value
+    data[-1] = 255 if deleted else 0
+    return bytes(data)
+
+
+@pytest.mark.parametrize(
+    "kind,reader,name",
+    [
+        ("weapon", U7Weapons, "WEAPONS.DAT"),
+        ("ammo", U7Ammos, "AMMO.DAT"),
+        ("armor", U7Armors, "ARMOR.DAT"),
+    ],
+)
+def test_shared_combat_world_resolves_sparse_replacements_and_removals(
+    tmp_path, kind, reader, name
+):
+    static, patch = tmp_path / "STATIC", tmp_path / "patch"
+    static.mkdir()
+    patch.mkdir()
+    assert reader.from_dir(str(static)).declared_count is None
+    base = bytes([2]) + combat_record(kind, 100, 1) + combat_record(kind, 101, 2)
+    mod = (
+        bytes([3])
+        + combat_record(kind, 100, deleted=True)
+        + combat_record(kind, 102, 3)
+        + combat_record(kind, 102, 4)
+    )
+    (static / name).write_bytes(base)
+    (patch / name.lower()).write_bytes(mod)
+    parsed = reader.from_dir(str(static), patch_dir=patch)
+    assert {row.shape for row in parsed.records} == {101, 102}
+    assert [layer.to_bytes() for layer in parsed.world_metadata.layers] == [base, mod]
+    assert parsed.world_metadata.records[102].raw[2] == 4
+    assert parsed.world_metadata.records[102].source.endswith(name.lower())
+
+
+@pytest.mark.parametrize("kind", ["weapon", "ammo", "armor"])
+def test_combat_copy_edits_preserve_headers_unknown_bytes_and_tail(kind):
+    row = combat_record(kind, 100, 9)
+    raw = b"\xff\x01\x00" + row + b"unknown-tail"
+    layer = U7CombatLayer.from_bytes(kind, raw, strict=True)
+    edited = layer.replace_record(0, combat_record(kind, 101, 8))
+    assert layer.to_bytes() == raw and edited.to_bytes()[:3] == raw[:3]
+    assert edited.table.trailing_data == b"unknown-tail"
+    removed = edited.append_record(edited.removal_record(101))
+    assert U7CombatMetadata(kind, (removed,)).records == {}
+    assert removed.table.header_size == 3 and removed.table.declared_count == 2
+    with pytest.raises(ValueError):
+        layer.replace_record(0, b"short")
+
+
+def test_combat_append_crosses_255_without_losing_unknown_data():
+    row = combat_record("armor", 100)
+    source = U7CombatLayer.from_bytes("armor", bytes([254]) + row * 254 + b"tail")
+    appended = source.append_record(combat_record("armor", 101))
+    assert appended.to_bytes()[:3] == b"\xff\xff\x00"
+    assert appended.table.trailing_data == b"tail" and source.table.header_size == 1
+    with pytest.raises(ValueError, match="incomplete"):
+        U7CombatLayer.from_bytes("armor", b"\x01short").append_record(row)

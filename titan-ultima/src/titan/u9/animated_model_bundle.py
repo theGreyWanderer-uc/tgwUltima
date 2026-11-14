@@ -22,7 +22,6 @@ __all__ = [
     "export_animated_model_library",
 ]
 
-import hashlib
 import io
 import json
 import math
@@ -42,9 +41,11 @@ from titan.u9.mesh_export import (
     export_limb_obj,
     limb_local_triangles,
 )
-from titan.u9.model import MATERIAL_ALPHA_NONE, U9Limb, U9Material, U9Model
+from titan.u9.model import U9Limb, U9Material, U9Model
 from titan.u9.node_registry import U9NodeRegistry
 from titan.u9.transform import mat4_trs
+from titan._files import sha256_file
+from titan.u9.model import material_alpha
 
 ANIMATED_MODEL_BUNDLE_SCHEMA = "titan.u9.rigid-animated-model"
 ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION = 1
@@ -92,14 +93,6 @@ class U9AnimatedModelLibraryResult:
     total_authoring_only_track_count: int
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def build_hashed_input_record(role: str, path: str | Path) -> dict[str, object]:
     """Describe one animation export input with a stable content hash."""
     resolved = Path(path)
@@ -109,7 +102,7 @@ def build_hashed_input_record(role: str, path: str | Path) -> dict[str, object]:
         "role": role,
         "name": resolved.name,
         "byte_size": resolved.stat().st_size,
-        "sha256": _sha256(resolved),
+        "sha256": sha256_file(resolved),
     }
 
 
@@ -675,12 +668,7 @@ def _native_scale(value: Vec3) -> Vec3:
 
 
 def _material_alpha(material: U9Material) -> float:
-    value = (
-        material.active_alpha
-        if material.active_alpha != MATERIAL_ALPHA_NONE
-        else material.default_alpha
-    )
-    return value / 255.0
+    return material_alpha(material) / 255.0
 
 
 def _add_glb_texture(

@@ -18,6 +18,7 @@ from titan.u7.map import U7MapRenderer, U7TileRectOverlay
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.u7.target_picker import select_map
+from titan.u7 import install as u7_install
 
 
 def archive(path: Path, records: list[bytes]) -> None:
@@ -83,7 +84,9 @@ def world(tmp_path, monkeypatch):
     target = ArchiveTarget("Custom SI world", static, patch, standalone=True, root=root)
     monkeypatch.setattr(wizard, "game_targets", lambda game: (target, []))
     monkeypatch.setattr(
-        cli, "_resolve_u7_paths", lambda game: (str(tmp_path / "wrong-retail"), None)
+        u7_install,
+        "resolve_u7_static_and_palette",
+        lambda game: (str(tmp_path / "wrong-retail"), None),
     )
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     monkeypatch.setattr(wizard, "open_preview", lambda path: True)
@@ -112,7 +115,9 @@ def test_bare_and_game_only_commands_open_wizard(monkeypatch):
 
 def test_explicit_regions_remain_batch_and_interactive_keeps_defaults(monkeypatch):
     batch, guided = [], []
-    monkeypatch.setattr(cli, "cmd_map_render", lambda args: batch.append(args) or 0)
+    monkeypatch.setattr(
+        cli.maps, "cmd_map_render", lambda args: batch.append(args) or 0
+    )
     monkeypatch.setattr(wizard, "run_wizard", lambda args: guided.append(args) or 0)
     argv = ["map-render", "--game", "si", "--sc", "0x55", "--view", "flat", "--grid"]
     assert CliRunner().invoke(cli.u7_app, argv).exit_code == 0
@@ -125,13 +130,13 @@ def test_explicit_regions_remain_batch_and_interactive_keeps_defaults(monkeypatc
 
 def test_cancel_after_reduced_preview_never_renders_full(world, monkeypatch, tmp_path):
     resolutions = []
-    original = cli.cmd_map_render
+    original = cli.maps.cmd_map_render
 
     def render(args):
         resolutions.append(args.resolution)
         return original(args)
 
-    monkeypatch.setattr(cli, "cmd_map_render", render)
+    monkeypatch.setattr(cli.maps, "cmd_map_render", render)
     answers(monkeypatch, [*initial_prompts(), "q"])
     output = tmp_path / "never.png"
     assert wizard.run_wizard(options(output=str(output))) == 0
@@ -144,14 +149,14 @@ def test_acceptance_renders_full_only_after_output_confirmation(
 ):
     output = tmp_path / "approved.png"
     resolutions = []
-    original = cli.cmd_map_render
+    original = cli.maps.cmd_map_render
 
     def render(args):
         assert not output.exists()
         resolutions.append(args.resolution)
         return original(args)
 
-    monkeypatch.setattr(cli, "cmd_map_render", render)
+    monkeypatch.setattr(cli.maps, "cmd_map_render", render)
     answers(monkeypatch, [*initial_prompts(), "y", str(output), "y"])
     assert wizard.run_wizard(options()) == 0
     assert resolutions == [0.2, 1.0]
@@ -166,9 +171,9 @@ def test_acceptance_renders_full_only_after_output_confirmation(
 def test_declining_save_skips_full_render(world, monkeypatch, tmp_path):
     output = tmp_path / "declined.png"
     resolutions = []
-    original = cli.cmd_map_render
+    original = cli.maps.cmd_map_render
     monkeypatch.setattr(
-        cli,
+        cli.maps,
         "cmd_map_render",
         lambda args: resolutions.append(args.resolution) or original(args),
     )
@@ -364,7 +369,7 @@ def test_reduced_overlays_and_grid_render_on_small_canvas(world):
 def test_save_retry_reuses_completed_full_render(world, monkeypatch, tmp_path):
     output = tmp_path / "retry.png"
     resolutions = []
-    original_render = cli.cmd_map_render
+    original_render = cli.maps.cmd_map_render
     original_save = wizard.save_preview
     attempts = 0
 
@@ -376,7 +381,7 @@ def test_save_retry_reuses_completed_full_render(world, monkeypatch, tmp_path):
         original_save(*args, **kwargs)
 
     monkeypatch.setattr(
-        cli,
+        cli.maps,
         "cmd_map_render",
         lambda args: resolutions.append(args.resolution) or original_render(args),
     )

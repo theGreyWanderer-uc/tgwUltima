@@ -72,12 +72,12 @@ class CycleRange:
 # (shapeid.h:64-69).  All six rotate the same direction, one colour slot
 # per tick -- see titan.u7.palette_cycle for the rotation itself.
 CYCLE_RANGES: tuple[CycleRange, ...] = (
-    CycleRange("magic", 224, 8),    # cyan/white
-    CycleRange("fire", 232, 8),     # yellow/red
+    CycleRange("magic", 224, 8),  # cyan/white
+    CycleRange("fire", 232, 8),  # yellow/red
     CycleRange("green", 240, 4),
     CycleRange("magenta", 244, 4),
-    CycleRange("yellow", 248, 4),   # white/yellow
-    CycleRange("ryb", 252, 3),      # red/yellow/black
+    CycleRange("yellow", 248, 4),  # white/yellow
+    CycleRange("ryb", 252, 3),  # red/yellow/black
 )
 
 

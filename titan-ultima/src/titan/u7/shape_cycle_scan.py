@@ -148,18 +148,28 @@ class ShapeCycleReport:
 
     @property
     def all_cycle_indices(self) -> FrozenSet[int]:
-        return frozenset().union(*(f.cycle_indices for f in self.frames)) if self.frames else frozenset()
+        return (
+            frozenset().union(*(f.cycle_indices for f in self.frames))
+            if self.frames
+            else frozenset()
+        )
 
     @property
     def all_translucent_indices(self) -> FrozenSet[int]:
-        return frozenset().union(*(f.translucent_indices for f in self.frames)) if self.frames else frozenset()
+        return (
+            frozenset().union(*(f.translucent_indices for f in self.frames))
+            if self.frames
+            else frozenset()
+        )
 
     @property
     def is_affected(self) -> bool:
         """Whether this shape has any animation-relevant content at all:
         TFA frame-sequencing, ordinary colour cycling, or translucency
         compositing."""
-        return self.has_frame_animation or self.has_any_cycle or self.has_any_translucency
+        return (
+            self.has_frame_animation or self.has_any_cycle or self.has_any_translucency
+        )
 
 
 def scan_frame(
@@ -194,7 +204,9 @@ def scan_frame(
         cycle = present
         translucent = set()
 
-    return FrameCycleReport(frame_index, is_tile, frozenset(cycle), frozenset(translucent), has_255)
+    return FrameCycleReport(
+        frame_index, is_tile, frozenset(cycle), frozenset(translucent), has_255
+    )
 
 
 def scan_shape(
@@ -219,8 +231,11 @@ def scan_shape(
 
     frame_reports = [
         scan_frame(
-            frame.pixels, i,
-            is_translucent=is_translucent, is_tile=frame.is_tile, xfstart=xfstart,
+            frame.pixels,
+            i,
+            is_translucent=is_translucent,
+            is_tile=frame.is_tile,
+            xfstart=xfstart,
         )
         for i, frame in enumerate(shape.frames)
         if frame.pixels is not None

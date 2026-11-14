@@ -48,7 +48,9 @@ REASON_LABELS = {
 def _png_data_uri(image: Image.Image) -> str:
     buffer = io.BytesIO()
     image.save(buffer, format="PNG", optimize=True)
-    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+    return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(
+        "ascii"
+    )
 
 
 def write_capacity_viewer(
@@ -97,7 +99,8 @@ def write_capacity_viewer(
         )
 
     region_data = [
-        r for r in (regions or [])
+        r
+        for r in (regions or [])
         if r["x"] < x1 and r["x"] + r["w"] > x0 and r["y"] < y1 and r["y"] + r["h"] > y0
     ]
     payload = {
@@ -121,10 +124,13 @@ def write_capacity_viewer(
                         "label": kind["label"],
                         "multi": kind["multi"],
                         "cls": kind["class"],
-                        "occupied": sorted([int(x), int(y)] for x, y in kind["footprint"].occupied),
+                        "occupied": sorted(
+                            [int(x), int(y)] for x, y in kind["footprint"].occupied
+                        ),
                         "yard": sorted(
                             [int(x), int(y)]
-                            for x, y in kind["footprint"].yard - kind["footprint"].occupied
+                            for x, y in kind["footprint"].yard
+                            - kind["footprint"].occupied
                         ),
                     }
                     for kind in packing["kinds"]
@@ -145,7 +151,10 @@ def write_capacity_viewer(
 
 def _html_escape(text: str) -> str:
     return (
-        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
     )
 
 

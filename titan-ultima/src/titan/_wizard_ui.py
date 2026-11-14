@@ -311,3 +311,25 @@ def legacy_menu(*lines: str) -> None:
     if not menus_enabled():
         for line in lines:
             print(line)
+
+
+def menu(
+    message: str,
+    labels: Mapping[str, str],
+    default: str = "",
+    *,
+    hotkeys: bool = True,
+    first_if_missing: bool = False,
+) -> str:
+    """Show a keyed menu and return the chosen key.
+
+    Prints the ``[key] label`` list for redirected input and offers the same
+    entries as an arrow-key menu in a terminal. *first_if_missing* selects the
+    first entry when *default* is not one of the keys.
+    """
+    if first_if_missing and default not in labels:
+        default = next(iter(labels))
+    legacy_menu(message, *(f"  [{key}] {label}" for key, label in labels.items()))
+    return choice(
+        "> ", list(labels), default, labels=labels, message=message, hotkeys=hotkeys
+    )

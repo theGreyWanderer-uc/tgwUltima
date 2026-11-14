@@ -10,12 +10,12 @@ __all__ = [
     "load_u7_intrinsic_names",
 ]
 
-import csv
-import io
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from titan._files import rows_to_csv
 
 if TYPE_CHECKING:
     from titan.u7.usecode_analysis import U7UsecodeSymbol, U7UsecodeDiagnostic
@@ -167,16 +167,6 @@ def _function_stream_offset(data: bytes) -> int:
 def _signed(value: int, bits: int) -> int:
     sign = 1 << (bits - 1)
     return value - (1 << bits) if value & sign else value
-
-
-def _rows_to_csv(rows: list[dict[str, object]]) -> str:
-    buf = io.StringIO()
-    if not rows:
-        return ""
-    writer = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
-    writer.writeheader()
-    writer.writerows(rows)
-    return buf.getvalue()
 
 
 @dataclass
@@ -499,7 +489,7 @@ class U7UsecodeFile:
             }
             for call in self.scan_intrinsic(intrinsic_id, intrinsic_names)
         ]
-        return _rows_to_csv(rows)
+        return rows_to_csv(rows)
 
     def disassemble(
         self,

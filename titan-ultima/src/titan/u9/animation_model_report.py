@@ -30,6 +30,7 @@ from titan.u9.model import U9Model, U9ModelError
 from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
+from titan._files import case_insensitive_child
 
 
 class U9AnimationModelReportError(Exception):
@@ -125,17 +126,6 @@ _GENERIC_ACTOR_HINTS = {"", "humanoid", "npc", "magic", "ui"}
 _NAME_STOP_WORDS = {"a", "an", "of", "the"}
 
 
-def _case_insensitive_child(directory: Path, filename: str) -> Path | None:
-    wanted = filename.casefold()
-    try:
-        return next(
-            (child for child in directory.iterdir() if child.name.casefold() == wanted),
-            None,
-        )
-    except OSError:
-        return None
-
-
 def _required_file(value: str | Path, description: str) -> Path:
     path = Path(value).expanduser().resolve()
     if not path.is_file():
@@ -150,7 +140,7 @@ def _optional_companion(
 ) -> Path | None:
     if explicit is not None:
         return _required_file(explicit, filename)
-    return _case_insensitive_child(directory, filename)
+    return case_insensitive_child(directory, filename)
 
 
 def _load_type_helpers(

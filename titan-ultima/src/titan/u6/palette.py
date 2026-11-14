@@ -54,13 +54,15 @@ class U6Palette:
     @classmethod
     def parse(cls, data: bytes) -> U6Palette:
         if len(data) < TOTAL_SIZE:
-            raise U6PaletteError(f"palette data too small: {len(data)} bytes (need {TOTAL_SIZE})")
+            raise U6PaletteError(
+                f"palette data too small: {len(data)} bytes (need {TOTAL_SIZE})"
+            )
 
         pal = cls()
         raw = data[:PALETTE_DATA_SIZE]
         for i in range(256):
             r, g, b = raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2]
-            # VGA 6-bit (0-63) -> 8-bit (0-255), matching titan.palette.U8Palette's scaling.
+            # VGA 6-bit (0-63) -> 8-bit (0-255), matching titan.u8.palette.U8Palette's scaling.
             pal.colors[i] = ((r * 255) // 63, (g * 255) // 63, (b * 255) // 63)
         pal.trailing = data[PALETTE_DATA_SIZE:TOTAL_SIZE]
         return pal
@@ -69,7 +71,7 @@ class U6Palette:
         """Return 768 bytes of flat RGB data (for PIL ``putpalette``)."""
         flat = bytearray(768)
         for i, (r, g, b) in enumerate(self.colors):
-            flat[i * 3:i * 3 + 3] = (r, g, b)
+            flat[i * 3 : i * 3 + 3] = (r, g, b)
         return bytes(flat)
 
     def to_pil_image(self, swatch_size: int = 16) -> Image.Image:

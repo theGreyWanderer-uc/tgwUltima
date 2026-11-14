@@ -23,7 +23,9 @@ ROOT = Path(__file__).resolve().parents[2] / "u9data" / "gameData_u9"
 )
 class RetailEntityTriggerTests(unittest.TestCase):
     def test_tag_halves_are_trigger_ids_and_link_is_not(self) -> None:
-        used = set(U9Triggers.from_file(ROOT / "static" / "triggers.flx").used_trigger_ids())
+        used = set(
+            U9Triggers.from_file(ROOT / "static" / "triggers.flx").used_trigger_ids()
+        )
         halves = hits = tagged = link_matches = 0
         for path in sorted((ROOT / "runtime").glob("NONFIXED.*")):
             region = U9Nonfixed.from_file(path)

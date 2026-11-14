@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u9.cli import (
+from titan.u9.cli.palettes import (
     cmd_color_cube_csv,
     cmd_color_cube_info,
     cmd_color_cube_lookup,

@@ -68,7 +68,7 @@ class RenderingTests(unittest.TestCase):
     def setUp(self):
         glyph_a = _make_glyph_bytes([0xFF] * 8)  # char 'A' = 0x41
         data = bytearray(FONT_BYTES)
-        data[ord("A") * 8: ord("A") * 8 + 8] = glyph_a
+        data[ord("A") * 8 : ord("A") * 8 + 8] = glyph_a
         self.font = U6Font(bytes(data))
 
     def test_to_pil_image_transparent_background(self):
@@ -99,10 +99,10 @@ class U6FontsTests(unittest.TestCase):
         runic_marker = _make_glyph_bytes([0x55] * 8)
         data = bytearray(FILE_SIZE)
         data[0:8] = english_marker
-        data[FONT_BYTES:FONT_BYTES + 8] = runic_marker
+        data[FONT_BYTES : FONT_BYTES + 8] = runic_marker
         fonts = U6Fonts.parse(bytes(data))
         self.assertEqual(fonts.english.glyph_array(0)[0, 0], 1)  # 0xAA = 10101010
-        self.assertEqual(fonts.runic.glyph_array(0)[0, 0], 0)   # 0x55 = 01010101
+        self.assertEqual(fonts.runic.glyph_array(0)[0, 0], 0)  # 0x55 = 01010101
 
     def test_rejects_short_data(self):
         with self.assertRaises(U6FontError):

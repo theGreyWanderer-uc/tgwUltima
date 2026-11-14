@@ -53,7 +53,14 @@ def _page(
     heads = list(heads or [])
     heads += [0] * (BUCKET_COUNT - len(heads))
     out = struct.pack(
-        "<7I", next_page, end_entity, end_trigger, base_x, base_y, entity_count, trigger_count
+        "<7I",
+        next_page,
+        end_entity,
+        end_trigger,
+        base_x,
+        base_y,
+        entity_count,
+        trigger_count,
     )
     out += struct.pack(f"<{BUCKET_COUNT}I", *heads)
     assert len(out) == PAGE_HEADER_SIZE
@@ -75,15 +82,27 @@ def _entity(
 ) -> bytes:
     out = struct.pack(
         "<IHHHH4hIHHI",
-        next_entity, x, y, z, type_index,
-        rotation[0], rotation[1], rotation[2], rotation[3],
-        flags, mesh_index, link, extra,
+        next_entity,
+        x,
+        y,
+        z,
+        type_index,
+        rotation[0],
+        rotation[1],
+        rotation[2],
+        rotation[3],
+        flags,
+        mesh_index,
+        link,
+        extra,
     )
     assert len(out) == ENTITY_SIZE
     return out
 
 
-def _extra(arg_count: int, arg_types: tuple[int, int, int], values: tuple[int, int, int]) -> bytes:
+def _extra(
+    arg_count: int, arg_types: tuple[int, int, int], values: tuple[int, int, int]
+) -> bytes:
     out = struct.pack("<B3B3I", arg_count, *arg_types, *values)
     assert len(out) == EXTRA_SIZE
     return out
@@ -111,9 +130,9 @@ def _allocator_payload(
     )
 
     for offset, record in entities.items():
-        payload[offset:offset + ENTITY_SIZE] = record
+        payload[offset : offset + ENTITY_SIZE] = record
     for offset, record in extras.items():
-        payload[offset:offset + EXTRA_SIZE] = record
+        payload[offset : offset + EXTRA_SIZE] = record
     for index, offset in enumerate(free_entities):
         next_offset = free_entities[index + 1] if index + 1 < len(free_entities) else 0
         struct.pack_into("<I", payload, offset, next_offset)
@@ -173,15 +192,27 @@ class NonfixedChunkTests(unittest.TestCase):
     def setUp(self) -> None:
         # One 2x2 region. Chunk (1, 0) -- table index 1 -- has a single page
         # at region-relative offset 0, so its table entry is 1, not 0.
-        entities = (
-            _entity(next_entity=PAGE_HEADER_SIZE + ENTITY_SIZE, x=10, y=20, z=30, type_index=203, mesh_index=1210)
-            + _entity(next_entity=0, x=40, y=50, z=60, type_index=295, mesh_index=3009, link=7)
+        entities = _entity(
+            next_entity=PAGE_HEADER_SIZE + ENTITY_SIZE,
+            x=10,
+            y=20,
+            z=30,
+            type_index=203,
+            mesh_index=1210,
+        ) + _entity(
+            next_entity=0, x=40, y=50, z=60, type_index=295, mesh_index=3009, link=7
         )
-        payload = _page(
-            base_x=4096, base_y=0, entity_count=2, trigger_count=3,
-            end_entity=PAGE_HEADER_SIZE + 2 * ENTITY_SIZE,
-            heads=[PAGE_HEADER_SIZE],
-        ) + entities
+        payload = (
+            _page(
+                base_x=4096,
+                base_y=0,
+                entity_count=2,
+                trigger_count=3,
+                end_entity=PAGE_HEADER_SIZE + 2 * ENTITY_SIZE,
+                heads=[PAGE_HEADER_SIZE],
+            )
+            + entities
+        )
         self.data = _header(2, 2, [0, 1, 0, 0], payload_size=len(payload)) + payload
 
     def test_chunk_lookup_and_base_coordinates(self) -> None:
@@ -236,7 +267,9 @@ class NonfixedPageChainTests(unittest.TestCase):
         # and one head's list spans both pages.
         page_a = _page(
             next_page=0x1000 + 1,  # biased by one
-            base_x=0, base_y=0, entity_count=1,
+            base_x=0,
+            base_y=0,
+            entity_count=1,
             heads=[PAGE_HEADER_SIZE],
         )
         ent_a = _entity(next_entity=0x1000 + PAGE_HEADER_SIZE, x=1, y=2, type_index=11)
@@ -337,7 +370,9 @@ class NonfixedRobustnessTests(unittest.TestCase):
 
     def test_entities_shared_between_buckets_are_not_double_counted(self) -> None:
         page = _page(
-            base_x=0, base_y=0, entity_count=1,
+            base_x=0,
+            base_y=0,
+            entity_count=1,
             heads=[PAGE_HEADER_SIZE, PAGE_HEADER_SIZE],
         )
         payload = page + _entity(next_entity=0, x=1, y=1)
@@ -376,9 +411,15 @@ class NonfixedExtraDataTests(unittest.TestCase):
 
         page = _page(base_x=0, base_y=0, entity_count=1, heads=[PAGE_HEADER_SIZE])
         ent = _entity(next_entity=0, x=1, y=1, link=9, extra=self.extra_off)
-        tags = _extra(3, (59, 66, 62), (0x0007_0000, 1, 0x0005_0003), )
+        tags = _extra(
+            3,
+            (59, 66, 62),
+            (0x0007_0000, 1, 0x0005_0003),
+        )
         payload = page + ent + tags
-        region = U9Nonfixed(_header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload)
+        region = U9Nonfixed(
+            _header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload
+        )
         entity = region.chunk(0, 0).entities[0]
         triggers = region.entity_triggers(entity)
         self.assertEqual(triggers.by_phase, (3, 5, 0, 7))
@@ -388,7 +429,9 @@ class NonfixedExtraDataTests(unittest.TestCase):
     def test_entity_without_extra_data(self) -> None:
         page = _page(base_x=0, base_y=0, entity_count=1, heads=[PAGE_HEADER_SIZE])
         payload = page + _entity(next_entity=0, extra=0)
-        region = U9Nonfixed(_header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload)
+        region = U9Nonfixed(
+            _header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload
+        )
         chunk = region.chunk(0, 0)
         assert chunk is not None
         entity = chunk.entities[0]
@@ -398,7 +441,9 @@ class NonfixedExtraDataTests(unittest.TestCase):
     def test_out_of_range_extra_offset_returns_none(self) -> None:
         data = bytearray(self.data)
         region = U9Nonfixed(bytes(data))
-        struct.pack_into("<I", data, region.header_size + PAGE_HEADER_SIZE + 0x1C, 0xFFFFF0)
+        struct.pack_into(
+            "<I", data, region.header_size + PAGE_HEADER_SIZE + 0x1C, 0xFFFFF0
+        )
         region = U9Nonfixed(bytes(data))
         chunk = region.chunk(0, 0)
         assert chunk is not None
@@ -423,7 +468,9 @@ class NonfixedAllocatorTests(unittest.TestCase):
         chunk = U9Nonfixed(self.data).chunk(0, 0)
         assert chunk is not None
         self.assertEqual([entity.type_index for entity in chunk.entities], [100])
-        self.assertEqual([entity.type_index for entity in chunk.unlinked_entities], [200])
+        self.assertEqual(
+            [entity.type_index for entity in chunk.unlinked_entities], [200]
+        )
         self.assertEqual(len(chunk.allocated_entities), 2)
         self.assertTrue(chunk.is_complete)
         self.assertTrue(chunk.allocation_is_complete)
@@ -483,7 +530,9 @@ class NonfixedRotationTests(unittest.TestCase):
     def test_quaternion_is_scaled_by_32767(self) -> None:
         page = _page(base_x=0, base_y=0, entity_count=1, heads=[PAGE_HEADER_SIZE])
         payload = page + _entity(next_entity=0, rotation=(0, 0, 32767, -32767))
-        region = U9Nonfixed(_header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload)
+        region = U9Nonfixed(
+            _header(2, 2, [1, 0, 0, 0], payload_size=len(payload)) + payload
+        )
         chunk = region.chunk(0, 0)
         assert chunk is not None
         qx, qy, qz, qw = chunk.entities[0].quaternion
@@ -498,10 +547,18 @@ class NonfixedRegionTests(unittest.TestCase):
         page0 = _page(base_x=0, base_y=0, entity_count=1, heads=[PAGE_HEADER_SIZE])
         ent0 = _entity(next_entity=0, x=1, y=1, type_index=7)
         block0 = page0 + ent0
-        page1 = _page(base_x=4096, base_y=0, entity_count=1, heads=[len(block0) + PAGE_HEADER_SIZE])
+        page1 = _page(
+            base_x=4096,
+            base_y=0,
+            entity_count=1,
+            heads=[len(block0) + PAGE_HEADER_SIZE],
+        )
         ent1 = _entity(next_entity=0, x=2, y=2, type_index=8)
         payload = block0 + page1 + ent1
-        data = _header(2, 2, [1, len(block0) + 1, 0, 0], payload_size=len(payload)) + payload
+        data = (
+            _header(2, 2, [1, len(block0) + 1, 0, 0], payload_size=len(payload))
+            + payload
+        )
 
         region = U9Nonfixed(data)
         self.assertEqual(len(region.chunks()), 2)

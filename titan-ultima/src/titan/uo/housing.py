@@ -34,7 +34,9 @@ _FOUNDATION_IDS = range(0x13EC, 0x1D00)  # customizable foundations get stairs
 _FLAG_WALL = 0x10
 _FLAG_SURFACE = 0x200
 
-_TABLE = re.compile(r"HousePlacementEntry\s*\[\]\s*(\w+)\s*=\s*new\s+HousePlacementEntry\s*\[\]")
+_TABLE = re.compile(
+    r"HousePlacementEntry\s*\[\]\s*(\w+)\s*=\s*new\s+HousePlacementEntry\s*\[\]"
+)
 _ENTRY = re.compile(
     r"new\s+HousePlacementEntry\s*\(\s*typeof\s*\(\s*(\w+)\s*\)\s*,"
     r"\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,"
@@ -153,7 +155,9 @@ def footprint_sheet(
     font = _sheet_font(13)
     small = _sheet_font(11)
     pad, label_h = 12, 34
-    sections: dict[str, list[tuple[HousePlacementEntry, str, HouseFootprint, Image.Image]]] = {}
+    sections: dict[
+        str, list[tuple[HousePlacementEntry, str, HouseFootprint, Image.Image]]
+    ] = {}
     for entry, name, footprint in items:
         sections.setdefault(entry.category, []).append(
             (entry, name, footprint, render_footprint(footprint, entry.offset, scale))
@@ -190,7 +194,12 @@ def footprint_sheet(
             _, entry, name, footprint, thumb = item
             min_x, max_x, min_y, max_y = HouseFootprint.extent(footprint.occupied)
             fp_w, fp_h = max_x - min_x + 1, max_y - min_y + 1
-            draw.text((x, y), _clip(name or entry.type_name, 24), fill=_SHEET_COLORS["text"], font=small)
+            draw.text(
+                (x, y),
+                _clip(name or entry.type_name, 24),
+                fill=_SHEET_COLORS["text"],
+                font=small,
+            )
             draw.text(
                 (x, y + 14),
                 f"0x{entry.multi_id:04X}  {fp_w}x{fp_h}",
@@ -208,8 +217,12 @@ def footprint_sheet(
     )
     lx = pad
     for key, text in legend:
-        draw.rectangle((lx, legend_y + 4, lx + 12, legend_y + 16), fill=_SHEET_COLORS[key])
-        draw.text((lx + 18, legend_y + 3), text, fill=_SHEET_COLORS["muted"], font=small)
+        draw.rectangle(
+            (lx, legend_y + 4, lx + 12, legend_y + 16), fill=_SHEET_COLORS[key]
+        )
+        draw.text(
+            (lx + 18, legend_y + 3), text, fill=_SHEET_COLORS["muted"], font=small
+        )
         lx += 30 + int(draw.textlength(text, font=small))
     return sheet
 
@@ -279,7 +292,9 @@ def house_footprint(multi: UOMulti, tiledata: UOTileData) -> HouseFootprint:
         return tiledata.statics[item_id].flags if item_id < len(tiledata.statics) else 0
 
     def height(item_id: int) -> int:
-        return tiledata.statics[item_id].height if item_id < len(tiledata.statics) else 0
+        return (
+            tiledata.statics[item_id].height if item_id < len(tiledata.statics) else 0
+        )
 
     foundation = {
         cell

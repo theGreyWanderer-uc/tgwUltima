@@ -276,10 +276,17 @@ def plan_for(raw: bytes) -> dict[str, object]:
 def test_retail_edits_do_not_assume_exult_flags_or_regroup_chunks() -> None:
     raw = object_wire()
     with pytest.raises(ValueError, match="Exult only"):
-        rewrite_ireg_stream(raw, [U7IregEdit(0, {"okay_to_take": True})], data_format="retail", context=context(3))
+        rewrite_ireg_stream(
+            raw,
+            [U7IregEdit(0, {"okay_to_take": True})],
+            data_format="retail",
+            context=context(3),
+        )
     with pytest.raises(ValueError, match="high nibble"):
         rewrite_ireg_stream(raw, [U7IregEdit(0, {"x_byte": 32})], data_format="retail")
-    result = rewrite_ireg_stream(raw, [U7IregEdit(0, {"x_byte": 15})], data_format="retail")
+    result = rewrite_ireg_stream(
+        raw, [U7IregEdit(0, {"x_byte": 15})], data_format="retail"
+    )
     assert result.data[1] == 15 and result.data[2:] == raw[2:]
 
 

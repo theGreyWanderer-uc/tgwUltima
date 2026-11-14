@@ -4,6 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
+
 def main():
     web_dir = Path(__file__).parent
     json_src = web_dir.parent / "json"
@@ -16,7 +17,9 @@ def main():
 
     data_dst.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(f.name for f in json_src.glob("*.json") if f.name != "all_dialogue.json")
+    files = sorted(
+        f.name for f in json_src.glob("*.json") if f.name != "all_dialogue.json"
+    )
     if not files:
         print(f"ERROR: No JSON files found in {json_src}")
         return 1
@@ -32,6 +35,7 @@ def main():
     print(f"Copied {len(files)} JSON files to {data_dst}")
     print(f"Wrote {manifest_path}")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

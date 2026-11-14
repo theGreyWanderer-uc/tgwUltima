@@ -15,7 +15,7 @@ from titan.u6.palette import U6Palette, U6PaletteError
 def _make_palette_bytes(colors: dict[int, tuple[int, int, int]] | None = None) -> bytes:
     data = bytearray(1024)
     for i, (r, g, b) in (colors or {}).items():
-        data[i * 3:i * 3 + 3] = (r, g, b)
+        data[i * 3 : i * 3 + 3] = (r, g, b)
     return bytes(data)
 
 

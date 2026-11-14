@@ -6,7 +6,7 @@ How to set up a clean development environment from scratch.
 
 ## Prerequisites
 
-- **Python 3.9+** (3.12 recommended)
+- **Python 3.10+** (3.12 recommended)
 - **Conda** (Miniconda or Anaconda) _— or use plain `venv`, either works_
 - **Git**
 
@@ -44,6 +44,15 @@ python -m venv .venv
 ```powershell
 cd titan-ultima
 pip install -e .
+```
+
+To run the tests and the linter as CI does, install the extras too:
+
+```powershell
+pip install -e ".[glb,test,lint]"
+python -m ruff check .
+python -m ruff format --check .   # drop --check to reformat
+python -m pytest -q
 ```
 
 This installs TITAN and all its dependencies (NumPy, Pillow, Typer, tomli)

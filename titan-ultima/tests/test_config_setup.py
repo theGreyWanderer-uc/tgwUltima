@@ -12,6 +12,7 @@ from titan import _config, cli
 from titan._setup_config import write_setup_config
 from titan.u7.flex import U7FlexArchive
 from titan.u7.install import inspect_install, install_roots, resolve_u7_path
+from titan.u7 import install as u7_install
 
 try:
     import tomllib
@@ -331,6 +332,18 @@ def test_u9_candidates_include_spaced_windows_layouts_on_multiple_drives(
     assert candidates.index(Path("C:/GOG Games/Ultima 9")) < candidates.index(
         Path("C:/Ultima 9")
     )
+
+
+def test_u9_candidates_include_steam_libraries_on_multiple_drives(setup_workspace):
+    from titan.u9.install import u9_install_candidates
+
+    candidates = u9_install_candidates({})
+    for drive in "CDEFG":
+        for layout in (
+            "Program Files (x86)/Steam/steamapps/common",
+            "SteamLibrary/steamapps/common",
+        ):
+            assert Path(f"{drive}:/") / layout / "Ultima IX" in candidates
 
 
 def test_setup_detects_u9_nested_install_and_records_actual_case(
@@ -817,7 +830,7 @@ def test_shared_workflows_fall_back_to_exult_for_missing_configured_paths(
     setup_workspace, monkeypatch, game
 ):
     from titan.fonts.palette import resolve_game_palette
-    from titan.u7 import cli as u7_cli, shape_wizard
+    from titan.u7 import shape_wizard
 
     root = _u7_install(setup_workspace / "unusual-install")
     section = "u7bg" if game == "BG" else "u7si"
@@ -838,8 +851,11 @@ def test_shared_workflows_fall_back_to_exult_for_missing_configured_paths(
     expected = root / "STATIC/PALETTES.FLX"
     assert resolve_u7_path(game, "palette") == expected
     assert shape_wizard._static_path(game) == str(root / "STATIC")
-    assert u7_cli._resolve_u7_paths(game) == (str(root / "STATIC"), str(expected))
-    assert u7_cli._resolve_u7_text_flx(game) == str(root / "STATIC/TEXT.FLX")
+    assert u7_install.resolve_u7_static_and_palette(game) == (
+        str(root / "STATIC"),
+        str(expected),
+    )
+    assert u7_install.resolve_u7_text_flx(game) == str(root / "STATIC/TEXT.FLX")
     assert resolve_game_palette(game).colors[0] == (80, 121, 161)
     assert shape_wizard._palette(shape_wizard.ShapeWizardConfig(game=game)).colors[
         0
@@ -989,7 +1005,6 @@ def test_cancel_manual_paths_leaves_existing_config_untouched(
 def test_relative_mod_paths_agree_between_inspector_and_workflows(
     setup_workspace, capsys
 ):
-    from titan.u7 import cli as u7_cli
 
     root = _u7_install(setup_workspace / "game")
     gamedat = root / "mods" / "Test" / "gamedat"
@@ -1003,8 +1018,8 @@ def test_relative_mod_paths_agree_between_inspector_and_workflows(
         '[u7si.mods.Test.paths]\ngamedat="mods/Test/gamedat"\narchive="mods/Test/initgame.dat"\n'
     )
     assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
-    assert u7_cli._resolve_u7_mod_gamedat("si", "Test") == str(gamedat)
-    assert u7_cli._resolve_u7_mod_archive("si", "Test") == str(archive)
+    assert u7_install.resolve_u7_mod_gamedat("si", "Test") == str(gamedat)
+    assert u7_install.resolve_u7_mod_archive("si", "Test") == str(archive)
     lines = capsys.readouterr().out.splitlines()
     assert all(
         "[OK]" in line for line in lines if "gamedat " in line or "archive " in line

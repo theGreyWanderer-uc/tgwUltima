@@ -38,7 +38,12 @@ import numpy as np
 from titan.uo.housing import HouseFootprint
 
 CLASSES = ("large", "medium", "forge", "small")  # packing order
-SMALLER = {"large": ("medium", "small"), "medium": ("small",), "forge": ("small",), "small": ()}
+SMALLER = {
+    "large": ("medium", "small"),
+    "medium": ("small",),
+    "forge": ("small",),
+    "small": (),
+}
 
 
 @dataclass(frozen=True)
@@ -70,7 +75,9 @@ class MixedSettings:
     )
     mountain_distance: int = 40  # zones this close to rock favour forges
     forge_weight: float = 0.65  # share of such zones that become forge zones
-    rock_share: float = 0.25  # a block counts as rock when this share of its cells is rock
+    rock_share: float = (
+        0.25  # a block counts as rock when this share of its cells is rock
+    )
     small_tiles: int = 110  # kinds up to this many tiles are small
     large_tiles: int = 280  # kinds from this many tiles are large
     seed: int = 20261018
@@ -128,7 +135,9 @@ def zone_distances(
             reached = grown
         return dist
 
-    return distance(blocks(town_mask, 0.0)), distance(blocks(rock_mask, settings.rock_share))
+    return distance(blocks(town_mask, 0.0)), distance(
+        blocks(rock_mask, settings.rock_share)
+    )
 
 
 @dataclass
@@ -176,11 +185,17 @@ def pack_mixed(
     zh, zw = (h + zs - 1) // zs, (w + zs - 1) // zs
 
     # Which kinds have legal centres in each zone.
-    by_class = {c: [i for i, k in enumerate(kinds) if k.house_class == c] for c in CLASSES}
+    by_class = {
+        c: [i for i, k in enumerate(kinds) if k.house_class == c] for c in CLASSES
+    }
     zone_of = [(rows // zs) * zw + (cols // zs) for rows, cols in legal_centres]
-    fits = np.stack(
-        [np.bincount(z, minlength=zh * zw)[: zh * zw] > 0 for z in zone_of], axis=1
-    ) if kinds else np.zeros((zh * zw, 0), dtype=bool)
+    fits = (
+        np.stack(
+            [np.bincount(z, minlength=zh * zw)[: zh * zw] > 0 for z in zone_of], axis=1
+        )
+        if kinds
+        else np.zeros((zh * zw, 0), dtype=bool)
+    )
 
     # Zone classes from town and rock distance at each zone's centre block. A
     # zone only draws a class with at least one kind that fits in it, so large
@@ -193,11 +208,13 @@ def pack_mixed(
             zone = zy * zw + zx
             by_ = min((zy * zs + zs // 2) // block, town_distance.shape[0] - 1)
             bx_ = min((zx * zs + zs // 2) // block, town_distance.shape[1] - 1)
-            fitting = {
-                c: [i for i in by_class[c] if fits[zone, i]] for c in CLASSES
-            }
-            weights = dict(zip(("small", "medium", "large"),
-                               _weights_at(float(town_distance[by_, bx_]), settings)))
+            fitting = {c: [i for i in by_class[c] if fits[zone, i]] for c in CLASSES}
+            weights = dict(
+                zip(
+                    ("small", "medium", "large"),
+                    _weights_at(float(town_distance[by_, bx_]), settings),
+                )
+            )
             near_rock = rock_distance[by_, bx_] <= settings.mountain_distance
             cls = None
             if near_rock and fitting["forge"] and rng.random() < settings.forge_weight:
@@ -206,7 +223,11 @@ def pack_mixed(
                 options = [c for c in ("small", "medium", "large") if fitting[c]]
                 if options:
                     p = np.array([weights[c] for c in options])
-                    cls = str(rng.choice(options, p=p / p.sum())) if p.sum() > 0 else options[0]
+                    cls = (
+                        str(rng.choice(options, p=p / p.sum()))
+                        if p.sum() > 0
+                        else options[0]
+                    )
                 else:
                     cls = "small"
             zone_class[zy, zx] = CLASSES.index(cls)
@@ -263,7 +284,9 @@ def pack_mixed(
                     mask, dx0, dy0 = stamp(other, k)
                     ys = r + margin + dy0
                     xs = c + margin + dx0
-                    region = blocked[other][ys : ys + mask.shape[0], xs : xs + mask.shape[1]]
+                    region = blocked[other][
+                        ys : ys + mask.shape[0], xs : xs + mask.shape[1]
+                    ]
                     region |= mask[: region.shape[0], : region.shape[1]]
 
     counts: dict[str, int] = {}

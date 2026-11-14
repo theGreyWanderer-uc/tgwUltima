@@ -101,14 +101,14 @@ class XMIDIConverter:
         """Recursively walk IFF chunks and collect EVNT from FORM XMID."""
         pos = start
         while pos + 8 <= min(end, len(data)):
-            cid = data[pos:pos + 4]
+            cid = data[pos : pos + 4]
             clen = struct.unpack_from(">I", data, pos + 4)[0]
             chunk_end = pos + 8 + clen
             if chunk_end > len(data):
                 break
 
             if cid == b"FORM":
-                sub_type = data[pos + 8:pos + 12]
+                sub_type = data[pos + 8 : pos + 12]
                 if sub_type == b"XMID":
                     # Leaf: find the EVNT within this FORM XMID
                     evnt_pos = cls._find_chunk_in_range(
@@ -116,7 +116,7 @@ class XMIDIConverter:
                     )
                     if evnt_pos is not None:
                         evnt_len = struct.unpack_from(">I", data, evnt_pos + 4)[0]
-                        evnts.append(data[evnt_pos + 8:evnt_pos + 8 + evnt_len])
+                        evnts.append(data[evnt_pos + 8 : evnt_pos + 8 + evnt_len])
                 else:
                     # FORM XDIR (or other) — recurse into body
                     cls._walk_iff(data, pos + 12, chunk_end, evnts)
@@ -138,7 +138,7 @@ class XMIDIConverter:
         """Find the first IFF chunk with *chunk_id* within [start, end)."""
         pos = start
         while pos + 8 <= min(end, len(data)):
-            cid = data[pos:pos + 4]
+            cid = data[pos : pos + 4]
             clen = struct.unpack_from(">I", data, pos + 4)[0]
             if cid == chunk_id:
                 return pos
@@ -210,7 +210,11 @@ class XMIDIConverter:
                     pos += meta_len
                     continue
 
-                evt = bytes([0xFF, meta_type]) + cls._to_vlq(meta_len) + evnt[pos:pos + meta_len]
+                evt = (
+                    bytes([0xFF, meta_type])
+                    + cls._to_vlq(meta_len)
+                    + evnt[pos : pos + meta_len]
+                )
                 pos += meta_len
                 events.append((current_tick, 1, evt))
                 continue
@@ -220,7 +224,11 @@ class XMIDIConverter:
                 pos += 1
                 sysex_len, bytes_read = cls._read_vlq(evnt, pos)
                 pos += bytes_read
-                evt = bytes([status]) + cls._to_vlq(sysex_len) + evnt[pos:pos + sysex_len]
+                evt = (
+                    bytes([status])
+                    + cls._to_vlq(sysex_len)
+                    + evnt[pos : pos + sysex_len]
+                )
                 pos += sysex_len
                 events.append((current_tick, 1, evt))
                 continue
@@ -250,47 +258,51 @@ class XMIDIConverter:
                         if old_off_tick > current_tick:
                             events[old_idx] = None
 
-                    events.append((current_tick, 2,
-                                   bytes([running_status, data1, data2])))
+                    events.append(
+                        (current_tick, 2, bytes([running_status, data1, data2]))
+                    )
                     duration = 0
                     if pos < len(evnt):
                         duration, dur_bytes = cls._read_vlq(evnt, pos)
                         pos += dur_bytes
                     note_off_tick = current_tick + duration
                     note_off_idx = len(events)
-                    events.append((note_off_tick, 0,
-                                   bytes([running_status, data1, 0])))
+                    events.append((note_off_tick, 0, bytes([running_status, data1, 0])))
                     pending_note_offs[key] = (note_off_tick, note_off_idx)
                 elif event_type == 0x80:
-                    events.append((current_tick, 0,
-                                   bytes([running_status, data1, data2])))
+                    events.append(
+                        (current_tick, 0, bytes([running_status, data1, data2]))
+                    )
                 elif event_type == 0xB0 and data1 in XMIDI_CCS:
                     pass  # Strip XMIDI-specific controllers
                 else:
-                    events.append((current_tick, 1,
-                                   bytes([running_status, data1, data2])))
+                    events.append(
+                        (current_tick, 1, bytes([running_status, data1, data2]))
+                    )
 
             elif event_type in (0xC0, 0xD0):
                 if pos >= len(evnt):
                     break
                 data1 = evnt[pos]
                 pos += 1
-                events.append((current_tick, 1,
-                               bytes([running_status, data1])))
+                events.append((current_tick, 1, bytes([running_status, data1])))
             else:
                 pos += 1  # skip unknown
 
         # Remove cancelled note-off entries, then sort by (tick, priority)
-        live_events: list[tuple[int, int, bytes]] = [
-            e for e in events if e is not None
-        ]
+        live_events: list[tuple[int, int, bytes]] = [e for e in events if e is not None]
         live_events.sort(key=lambda e: (e[0], e[1]))
 
         # Add all-notes-off on every channel used, then end-of-track
         max_tick = live_events[-1][0] if live_events else current_tick
         used_channels: set[int] = set()
         for _, _, ed in live_events:
-            if len(ed) >= 1 and (ed[0] & 0x80) and ed[0] != 0xFF and ed[0] not in (0xF0, 0xF7):
+            if (
+                len(ed) >= 1
+                and (ed[0] & 0x80)
+                and ed[0] != 0xFF
+                and ed[0] not in (0xF0, 0xF7)
+            ):
                 used_channels.add(ed[0] & 0x0F)
         for ch in sorted(used_channels):
             live_events.append((max_tick, 3, bytes([0xB0 | ch, 123, 0])))
@@ -317,9 +329,9 @@ class XMIDIConverter:
 
         # MThd header
         out.extend(b"MThd")
-        out.extend(struct.pack(">I", 6))       # Header length
-        out.extend(struct.pack(">H", 0))       # Format 0
-        out.extend(struct.pack(">H", 1))       # 1 track
+        out.extend(struct.pack(">I", 6))  # Header length
+        out.extend(struct.pack(">H", 0))  # Format 0
+        out.extend(struct.pack(">H", 1))  # 1 track
         out.extend(struct.pack(">H", cls.XMIDI_PPQN))
 
         # MTrk
@@ -337,8 +349,8 @@ class XMIDIConverter:
         # MThd header
         out.extend(b"MThd")
         out.extend(struct.pack(">I", 6))
-        out.extend(struct.pack(">H", 1))                  # Format 1
-        out.extend(struct.pack(">H", len(tracks)))        # N tracks
+        out.extend(struct.pack(">H", 1))  # Format 1
+        out.extend(struct.pack(">H", len(tracks)))  # N tracks
         out.extend(struct.pack(">H", cls.XMIDI_PPQN))
 
         for track_data in tracks:

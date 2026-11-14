@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 from titan import _wizard_ui as ui
 from titan.fonts.palette import resolve_gradient_to_indices
 from titan.u7 import palette_browser as browser
+from titan.u7 import palette_browser_ui as browser_ui
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
@@ -153,7 +154,7 @@ def test_record_selector_keeps_invalid_visible_and_paged(owner, monkeypatch, cap
     source = browser.load_source(owner)
     source.records += [browser.Record(i, source.paths[0], "base") for i in range(6, 14)]
     actions(monkeypatch, ["3", "N", "B", "5"])
-    assert browser.choose_record(source) == 5
+    assert browser_ui.choose_record(source) == 5
     output = capsys.readouterr().out
     assert "INVALID" in output
     assert "page 2/2" in output
@@ -161,7 +162,7 @@ def test_record_selector_keeps_invalid_visible_and_paged(owner, monkeypatch, cap
 
 
 def test_empty_archive_selector_returns_without_loop(owner, monkeypatch):
-    assert browser.choose_record(browser.PaletteSource(owner, [], [])) is None
+    assert browser_ui.choose_record(browser.PaletteSource(owner, [], [])) is None
 
 
 def test_grid_uses_indexed_native_background_cells_and_adapts_width(monkeypatch):
@@ -172,7 +173,7 @@ def test_grid_uses_indexed_native_background_cells_and_adapts_width(monkeypatch)
         "titan._palette_browser_ui.shutil.get_terminal_size",
         lambda *a: os.terminal_size((34, 25)),
     )
-    browser.show_grid(palette, 224, 32)
+    browser_ui.show_grid(palette, 224, 32)
     assert len(lines) == 4
     cells = [f for line in lines for f in line if "bg:" in f[0]]
     assert [text for _, text in cells] == [f"{i:03d}" for i in range(224, 256)]
@@ -182,7 +183,7 @@ def test_grid_uses_indexed_native_background_cells_and_adapts_width(monkeypatch)
 
 def test_redirected_grid_and_details_have_no_ansi(capsys):
     palette = U7Palette.default_palette()
-    browser.show_grid(palette, 192)
+    browser_ui.show_grid(palette, 192)
     text = capsys.readouterr().out
     assert "192" in text and "255" in text
     assert "\x1b" not in text
@@ -206,9 +207,11 @@ def test_cycle_provider_rotates_only_ranges_and_reuses_images():
 def test_cycle_preview_fallback_and_step(monkeypatch, capsys):
     actions(monkeypatch, ["P", "N", "R", "Q"])
     monkeypatch.setattr(
-        browser, "play_terminal", lambda *a, **k: pytest.fail("Playback must not run")
+        browser_ui,
+        "play_terminal",
+        lambda *a, **k: pytest.fail("Playback must not run"),
     )
-    browser.cycle_preview(U7Palette.default_palette())
+    browser_ui.cycle_preview(U7Palette.default_palette())
     output = capsys.readouterr().out
     assert "interactive terminal" in output and "step 1" in output
     assert "224-231" in output and "252-254" in output
@@ -241,7 +244,7 @@ def test_gradient_custom_uses_shared_ramp_and_excludes_cycles(monkeypatch, capsy
     monkeypatch.setattr(ui, "text", lambda *a, **k: next(inputs))
     palette = U7Palette.default_palette()
     expected, _ = resolve_gradient_to_indices(["#6f263d", "#236192"], palette, 6)
-    browser.gradient_test(palette)
+    browser_ui.gradient_test(palette)
     output = capsys.readouterr().out
     assert ", ".join(map(str, expected)) in output
     assert "RGB hex" in output
@@ -257,7 +260,7 @@ def test_gradient_preset_menu_has_formatted_swatches(monkeypatch):
         return "Q"
 
     monkeypatch.setattr(ui, "choice", choose)
-    browser.gradient_test(U7Palette.default_palette())
+    browser_ui.gradient_test(U7Palette.default_palette())
     preset_labels = [
         label for key, label in captured["labels"].items() if key.isdigit()
     ]
@@ -269,7 +272,7 @@ def test_gradient_cycles_are_opt_in_but_transparent_is_excluded(monkeypatch, cap
     actions(monkeypatch, ["C", "Y", "Q"])
     inputs = iter(["e0e0e0", "1"])
     monkeypatch.setattr(ui, "text", lambda *a, **k: next(inputs))
-    browser.gradient_test(U7Palette.default_palette())
+    browser_ui.gradient_test(U7Palette.default_palette())
     assert "font wizard): 224" in capsys.readouterr().out
 
 
@@ -316,7 +319,7 @@ def test_browser_page_and_record_hotkeys_skip_broken_records(
     owner, monkeypatch, capsys
 ):
     actions(monkeypatch, ["N", "B", "J", "J", "K", "Q"])
-    assert browser.browse(browser.load_source(owner)) == "Q"
+    assert browser_ui.browse(browser.load_source(owner)) == "Q"
     output = capsys.readouterr().out
     assert "Colours 64-127" in output
     assert "Palette 1:" in output and "Palette 5:" in output
@@ -325,7 +328,7 @@ def test_browser_page_and_record_hotkeys_skip_broken_records(
 
 def test_browser_invalid_initial_record_recovers(owner, monkeypatch, capsys):
     actions(monkeypatch, ["5", "W"])
-    assert browser.browse(browser.load_source(owner), index=99) == "W"
+    assert browser_ui.browse(browser.load_source(owner), index=99) == "W"
     assert "outside this source" in capsys.readouterr().out
 
 
@@ -334,7 +337,7 @@ def test_browser_colour_inspection_and_bad_encoding_keep_current(
 ):
     actions(monkeypatch, ["I", "Q", "U", "8", "Q"])
     monkeypatch.setattr(ui, "text", lambda *a, **k: "0xff")
-    assert browser.browse(browser.load_source(owner)) == "Q"
+    assert browser_ui.browse(browser.load_source(owner)) == "Q"
     output = capsys.readouterr().out
     assert "Index 255 (0xff)" in output
     assert "Colours 192-255" in output
@@ -347,7 +350,7 @@ def test_browser_switches_double_components(owner, tmp_path, monkeypatch, capsys
         bytes(v for pair in zip(palette_bytes(10), palette_bytes(20)) for v in pair)
     )
     actions(monkeypatch, ["R", "Q"])
-    assert browser.browse(browser.load_source(owner, path)) == "Q"
+    assert browser_ui.browse(browser.load_source(owner, path)) == "Q"
     output = capsys.readouterr().out
     assert "primary component" in output and "secondary component" in output
 
@@ -360,7 +363,7 @@ def test_failed_encoding_and_export_return_to_current_palette(
     source = browser.load_source(owner, path)
     actions(monkeypatch, ["U", "6", "E", "R", "Q"])
     monkeypatch.setattr(ui, "path", lambda *a, **k: str(path))
-    assert browser.browse(source) == "Q"
+    assert browser_ui.browse(source) == "Q"
     output = capsys.readouterr().out
     assert "Components exceed" in output
     assert "Choose an output outside" in output
@@ -382,16 +385,16 @@ def test_palette_browser_cancel_is_clean(monkeypatch, capsys):
         raise ui.PromptCancelled
 
     monkeypatch.setattr(ui, "choice", cancel)
-    assert browser.run_browser() == 0
+    assert browser_ui.run_browser() == 0
     assert "Cancelled" in capsys.readouterr().out
 
 
 def test_run_browser_source_recovery_and_quit(owner, monkeypatch, capsys):
     actions(monkeypatch, ["2", "C", "Q"])
-    monkeypatch.setattr(browser, "game_targets", lambda game: (owner, []))
-    monkeypatch.setattr(browser, "select_target", lambda *a: owner)
+    monkeypatch.setattr(browser_ui, "game_targets", lambda game: (owner, []))
+    monkeypatch.setattr(browser_ui, "select_target", lambda *a: owner)
     monkeypatch.setattr(ui, "path", lambda *a, **k: str(owner.static / "PALETTES.FLX"))
-    assert browser.run_browser(game="si", file="missing.pal") == 0
+    assert browser_ui.run_browser(game="si", file="missing.pal") == 0
     output = capsys.readouterr().out
     assert "ERROR" in output and "Palette 0:" in output
 
@@ -399,7 +402,7 @@ def test_run_browser_source_recovery_and_quit(owner, monkeypatch, capsys):
 def test_cli_forwards_initial_options_and_validates_index(monkeypatch):
     captured = {}
     monkeypatch.setattr(
-        browser, "run_browser", lambda **kwargs: captured.update(kwargs) or 0
+        browser_ui, "run_browser", lambda **kwargs: captured.update(kwargs) or 0
     )
     result = CliRunner().invoke(
         u7_app,

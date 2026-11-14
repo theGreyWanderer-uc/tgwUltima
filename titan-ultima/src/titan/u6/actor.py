@@ -97,7 +97,9 @@ OFFSET_BASE_APPEARANCE = 0x15F1
 OFFSET_TALK_FLAGS = 0x17F1
 OFFSET_MOVEMENT_FLAGS = 0x19F1
 
-REQUIRED_SIZE = OFFSET_MOVEMENT_FLAGS + NUM_ACTORS  # smallest buffer this module can fully read
+REQUIRED_SIZE = (
+    OFFSET_MOVEMENT_FLAGS + NUM_ACTORS
+)  # smallest buffer this module can fully read
 
 
 @dataclass(frozen=True)
@@ -230,13 +232,17 @@ class U6Actors:
     """Parser for the actor identity tables within ``objlist``."""
 
     @classmethod
-    def parse(cls, data: bytes, *, layout: U6ActorLayout = U6_ACTOR_LAYOUT) -> list[U6Actor]:
+    def parse(
+        cls, data: bytes, *, layout: U6ActorLayout = U6_ACTOR_LAYOUT
+    ) -> list[U6Actor]:
         """Decode raw actor tables with explicit game offsets; defaults remain Ultima VI."""
         if len(data) < layout.required_size:
-            raise U6ActorError(f"objlist data too short: {len(data)} bytes, need at least {layout.required_size}")
+            raise U6ActorError(
+                f"objlist data too short: {len(data)} bytes, need at least {layout.required_size}"
+            )
 
         def bytes_at(offset: int) -> bytes:
-            return data[offset:offset + NUM_ACTORS]
+            return data[offset : offset + NUM_ACTORS]
 
         obj_flags = bytes_at(OFFSET_OBJ_FLAGS)
         status_flags = bytes_at(OFFSET_STATUS_FLAGS)
@@ -254,7 +260,9 @@ class U6Actors:
         actors: list[U6Actor] = []
         for i in range(NUM_ACTORS):
             pos_off = OFFSET_POSITION + i * 3
-            x, y, z = unpack_position(data[pos_off], data[pos_off + 1], data[pos_off + 2])
+            x, y, z = unpack_position(
+                data[pos_off], data[pos_off + 1], data[pos_off + 2]
+            )
 
             app_off = OFFSET_APPEARANCE + i * 2
             b1, b2 = data[app_off], data[app_off + 1]
@@ -266,23 +274,28 @@ class U6Actors:
             base_obj_n = bb1 | ((bb2 & 0x03) << 8)
             old_frame_n = (bb2 & 0xFC) >> 2
 
-            actors.append(U6Actor(
-                actor_id=i,
-                x=x, y=y, z=z,
-                obj_n=obj_n, frame_n=frame_n,
-                obj_flags=obj_flags[i],
-                status_flags=status_flags[i],
-                strength=strength[i],
-                dexterity=dexterity[i],
-                intelligence=intelligence[i],
-                experience=experience[i],
-                hp=hp[i],
-                level=level[i],
-                combat_mode=combat_mode[i],
-                magic=magic[i],
-                base_obj_n=base_obj_n,
-                old_frame_n=old_frame_n,
-                talk_flags=talk_flags[i],
-                movement_flags=movement_flags[i],
-            ))
+            actors.append(
+                U6Actor(
+                    actor_id=i,
+                    x=x,
+                    y=y,
+                    z=z,
+                    obj_n=obj_n,
+                    frame_n=frame_n,
+                    obj_flags=obj_flags[i],
+                    status_flags=status_flags[i],
+                    strength=strength[i],
+                    dexterity=dexterity[i],
+                    intelligence=intelligence[i],
+                    experience=experience[i],
+                    hp=hp[i],
+                    level=level[i],
+                    combat_mode=combat_mode[i],
+                    magic=magic[i],
+                    base_obj_n=base_obj_n,
+                    old_frame_n=old_frame_n,
+                    talk_flags=talk_flags[i],
+                    movement_flags=movement_flags[i],
+                )
+            )
         return actors

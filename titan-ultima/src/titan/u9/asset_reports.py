@@ -35,6 +35,7 @@ from titan.u9.texture import U9TextureError, parse_texture_set
 from titan.u9.texture_writer import U9TextureWriteError, frame_encoding
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
+from titan._files import case_insensitive_child
 
 
 class U9AssetReportError(Exception):
@@ -166,18 +167,6 @@ MODEL_REPORT_COLUMNS = [
 ]
 
 
-def _case_insensitive_child(directory: Path, filename: str) -> Path | None:
-    """Return a direct child by case-insensitive name without recursive guessing."""
-    wanted = filename.casefold()
-    try:
-        return next(
-            (child for child in directory.iterdir() if child.name.casefold() == wanted),
-            None,
-        )
-    except OSError:
-        return None
-
-
 def _require_path(value: str | Path, description: str) -> Path:
     path = Path(value).expanduser().resolve()
     if not path.exists():
@@ -198,14 +187,14 @@ def _discover_texture_sources(source: str | Path) -> list[_TextureSource]:
     if path.is_dir():
         sources: list[_TextureSource] = []
         for filename, tier, sdinfo_filename in KNOWN_TEXTURE_FILES:
-            texture_path = _case_insensitive_child(path, filename)
+            texture_path = case_insensitive_child(path, filename)
             if texture_path is None:
                 continue
             sources.append(
                 _TextureSource(
                     tier=tier,
                     path=texture_path,
-                    sdinfo_path=_case_insensitive_child(path, sdinfo_filename),
+                    sdinfo_path=case_insensitive_child(path, sdinfo_filename),
                 )
             )
         if not sources:
@@ -220,7 +209,7 @@ def _discover_texture_sources(source: str | Path) -> list[_TextureSource]:
     )
     tier = known[1] if known else _safe_tier_name(path.stem)
     sdinfo_path = (
-        _case_insensitive_child(path.parent, known[2]) if known is not None else None
+        case_insensitive_child(path.parent, known[2]) if known is not None else None
     )
     return [_TextureSource(tier=tier, path=path, sdinfo_path=sdinfo_path)]
 
@@ -230,13 +219,13 @@ def _discover_optional_file(
 ) -> Path | None:
     if explicit is not None:
         return _require_path(explicit, filename)
-    return _case_insensitive_child(directory, filename)
+    return case_insensitive_child(directory, filename)
 
 
 def _discover_model_archive(source: str | Path) -> tuple[Path, Path]:
     path = _require_path(source, "model source")
     if path.is_dir():
-        model_path = _case_insensitive_child(path, "sappear.flx")
+        model_path = case_insensitive_child(path, "sappear.flx")
         if model_path is None:
             raise U9AssetReportError(f"sappear.flx not found in {path}")
         return model_path, path

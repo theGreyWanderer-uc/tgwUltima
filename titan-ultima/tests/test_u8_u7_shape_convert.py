@@ -23,7 +23,7 @@ import unittest
 
 import numpy as np
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.u8.shape import U8Shape
@@ -127,7 +127,10 @@ class ConvertFrameTests(unittest.TestCase):
 class ConvertShapeTests(unittest.TestCase):
     def test_converts_all_non_empty_frames_with_consistent_scale(self) -> None:
         shape = U8Shape()
-        shape.frames = [_solid_u8_frame(10, 20, index=0), _solid_u8_frame(10, 20, index=1)]
+        shape.frames = [
+            _solid_u8_frame(10, 20, index=0),
+            _solid_u8_frame(10, 20, index=1),
+        ]
         # Target area 800 = 4x the 10x20 source's area 200 -> uniform linear scale sqrt(4) = 2.0.
         table = {(1, 1, 0): [(20, 40)]}
         u7_shape = convert_shape(shape, (1, 1, 0), _u8_palette(), _u7_palette(), table)

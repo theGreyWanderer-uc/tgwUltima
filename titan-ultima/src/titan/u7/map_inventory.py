@@ -46,7 +46,6 @@ __all__ = [
     "write_u7_map_inventory",
 ]
 
-import csv
 import html
 import json
 from collections import Counter
@@ -73,6 +72,7 @@ from titan.u7.world import (
     load_ireg_context,
     resolve_world_sources,
 )
+from titan._files import write_csv
 
 SOURCES = ("terrain", "chunk", "ifix", "ireg", "contents")
 OBJECT_SOURCES = ("chunk", "ifix", "ireg")  # placements that make up the map
@@ -601,9 +601,9 @@ def write_u7_map_inventory(
         ("flats.csv", flats),
         ("shapes.csv", shapes),
     ):
-        _write_csv(outdir / name, records)
+        write_csv(outdir / name, records)
     if inv.area:
-        _write_csv(outdir / "placements.csv", _placement_records(inv, preview_paths))
+        write_csv(outdir / "placements.csv", _placement_records(inv, preview_paths))
 
     object_shapes = [s for s in shapes if s["kind"] == "object" and s["placements"]]
     summary: U7MapInventorySummary = {
@@ -676,16 +676,6 @@ def _placement_records(inv: U7MapInventory, previews: dict) -> list[dict]:
 
 def _area_label(area: list[Rect]) -> str:
     return "; ".join(f"tiles {x0},{y0} to {x1},{y1}" for x0, y0, x1, y1 in area)
-
-
-def _write_csv(path: Path, records: list[dict]) -> None:
-    if not records:
-        path.write_text("", encoding="utf-8")
-        return
-    with path.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(records[0]))
-        writer.writeheader()
-        writer.writerows(records)
 
 
 def _write_previews(

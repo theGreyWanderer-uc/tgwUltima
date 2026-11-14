@@ -104,7 +104,9 @@ class U6MapTests(unittest.TestCase):
             surface_arrangement=2,
         )
         grid = m.build_surface_grid(self.chunks)
-        self.assertEqual(grid.shape, (32, 32))  # 2 superchunks-wide * 2 chunks * 8 tiles
+        self.assertEqual(
+            grid.shape, (32, 32)
+        )  # 2 superchunks-wide * 2 chunks * 8 tiles
 
         # Superchunk 0 at world (0,0): refs [0,1,2,3] -> (cx,cy) row-major.
         self.assertTrue(np.all(grid[0:8, 0:8] == 0))
@@ -163,13 +165,19 @@ class RenderTileGridAnimDataTests(unittest.TestCase):
 
     def setUp(self):
         masktypes = bytes([MASKTYPE_PLAIN, MASKTYPE_PLAIN, MASKTYPE_PLAIN])
-        tile0 = bytes([0xFF] * 256)  # placeholder: 100% transparent, like real water tiles 8-15
+        tile0 = bytes(
+            [0xFF] * 256
+        )  # placeholder: 100% transparent, like real water tiles 8-15
         tile1 = bytes([20] * 256)
         tile2 = bytes([30] * 256)  # the "real" frame tile 0 should be substituted with
-        self.tiles = U6Tiles.from_parts(masktypes, tile0 + tile1 + tile2, b"", num_tiles=3)
+        self.tiles = U6Tiles.from_parts(
+            masktypes, tile0 + tile1 + tile2, b"", num_tiles=3
+        )
         self.palette = U6Palette.parse(bytes(1024))
         self.grid = np.array([[0, 1]], dtype=np.uint8)
-        self.anim = U6AnimData([U6AnimEntry(placeholder_tile=0, first_frame_tile=2, and_mask=0, shift=0)])
+        self.anim = U6AnimData(
+            [U6AnimEntry(placeholder_tile=0, first_frame_tile=2, and_mask=0, shift=0)]
+        )
 
     def test_without_animdata_placeholder_renders_as_raw_transparent_fallback(self):
         img = render_tile_grid(self.grid, self.tiles, self.palette, transparent=False)
@@ -178,12 +186,16 @@ class RenderTileGridAnimDataTests(unittest.TestCase):
         self.assertEqual(img.getpixel((0, 0)), expected)
 
     def test_with_animdata_placeholder_renders_as_substituted_frame(self):
-        img = render_tile_grid(self.grid, self.tiles, self.palette, transparent=False, animdata=self.anim)
+        img = render_tile_grid(
+            self.grid, self.tiles, self.palette, transparent=False, animdata=self.anim
+        )
         expected = self.palette.colors[30]
         self.assertEqual(img.getpixel((0, 0)), expected)
 
     def test_untouched_tile_unaffected_by_animdata(self):
-        img = render_tile_grid(self.grid, self.tiles, self.palette, transparent=False, animdata=self.anim)
+        img = render_tile_grid(
+            self.grid, self.tiles, self.palette, transparent=False, animdata=self.anim
+        )
         expected = self.palette.colors[20]
         self.assertEqual(img.getpixel((16, 0)), expected)
 

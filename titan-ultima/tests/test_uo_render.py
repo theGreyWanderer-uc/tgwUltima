@@ -22,7 +22,10 @@ from titan.uo.tiledata import UOLandTile, UOStaticTile, UOTileData
 
 def _static_art(width: int, height: int, color: int) -> bytes:
     """Encode a solid static: one run per row."""
-    rows = b"".join(struct.pack("<HH", 0, width) + struct.pack("<H", color) * width + b"\0\0\0\0" for _ in range(height))
+    rows = b"".join(
+        struct.pack("<HH", 0, width) + struct.pack("<H", color) * width + b"\0\0\0\0"
+        for _ in range(height)
+    )
     row_words = 2 + width + 2
     table = b"".join(struct.pack("<H", y * row_words) for y in range(height))
     return struct.pack("<Ihh", 0, width, height) + table + rows
@@ -83,7 +86,9 @@ def test_cell_order_land_first_on_tie_then_shorter_then_foliage_last():
 
 def test_flat_quad_covers_the_diamond_and_flat_normal_is_up():
     texture = np.full((64, 64), 0x7FFF, dtype=np.uint16)
-    rgb, mask, ox, oy = _rasterize_quad(texture, False, 0, 0, 0, ((0, 0), (63, 0), (63, 63), (0, 63)))
+    rgb, mask, ox, oy = _rasterize_quad(
+        texture, False, 0, 0, 0, ((0, 0), (63, 0), (63, 63), (0, 63))
+    )
     assert (ox, oy) == (-22, 0)
     assert mask.shape == (45, 45)
     assert mask[22, 22] and mask[0, 22] and mask[22, 0] and not mask[0, 0]
@@ -104,7 +109,9 @@ def test_render_draws_land_then_static_on_top():
 
     land_art = struct.pack("<1012H", *([0x03E0] * 1012))
     static_art = _static_art(4, 4, 0x7C00)
-    art = UOArtSource(lambda idx: land_art if idx == 3 else static_art if idx == 0x4010 else None)
+    art = UOArtSource(
+        lambda idx: land_art if idx == 3 else static_art if idx == 0x4010 else None
+    )
     tiledata = UOTileData(
         is_new_format=True,
         land=[UOLandTile(i, 0, 0, "grass") for i in range(4)],
@@ -185,7 +192,18 @@ def test_translucent_draw_blends_at_client_alpha():
     canvas[:] = (0, 0, 200)
     pixels = np.full((1, 2, 3), 255, dtype=np.uint8)
     mask = np.array([[True, False]])
-    _blit(canvas, _Draw(z=0, priority=False, pixels=pixels, mask=mask, dx=0, dy=0, alpha=TRANSLUCENT_ALPHA))
+    _blit(
+        canvas,
+        _Draw(
+            z=0,
+            priority=False,
+            pixels=pixels,
+            mask=mask,
+            dx=0,
+            dy=0,
+            alpha=TRANSLUCENT_ALPHA,
+        ),
+    )
 
     expected = [round(c + (255 - c) * 178 / 255) for c in (0, 0, 200)]
     assert list(canvas[0, 0]) == expected

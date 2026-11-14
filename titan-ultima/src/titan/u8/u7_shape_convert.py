@@ -122,7 +122,13 @@ Example::
 
 from __future__ import annotations
 
-__all__ = ["build_footprint_size_table", "pick_target_size", "convert_frame", "convert_shape", "MAX_OUTPUT_DIM"]
+__all__ = [
+    "build_footprint_size_table",
+    "pick_target_size",
+    "convert_frame",
+    "convert_shape",
+    "MAX_OUTPUT_DIM",
+]
 
 import statistics
 from typing import Optional
@@ -148,7 +154,8 @@ MAX_OUTPUT_DIM = 64
 
 
 def build_footprint_size_table(
-    u7_typeflags: U7TypeFlags, u7_shapes: "U7FlexArchive"  # noqa: F821 -- see titan.u7.flex
+    u7_typeflags: U7TypeFlags,
+    u7_shapes: "U7FlexArchive",  # noqa: F821 -- see titan.u7.flex
 ) -> dict[Footprint, list[tuple[int, int]]]:
     """Empirical ``(dims_x, dims_y, dims_z) -> [(pixel_w, pixel_h), ...]`` table.
 
@@ -197,13 +204,17 @@ def pick_target_size(
     if (x, y, z) in table:
         return _median_size(table[(x, y, z)])
 
-    same_xy = {key: samples for key, samples in table.items() if key[0] == x and key[1] == y}
+    same_xy = {
+        key: samples for key, samples in table.items() if key[0] == x and key[1] == y
+    }
     if same_xy:
         nearest_key = min(same_xy, key=lambda k: abs(k[2] - z))
         return _median_size(same_xy[nearest_key])
 
     if table:
-        nearest_key = min(table, key=lambda k: abs(k[0] - x) + abs(k[1] - y) + abs(k[2] - z))
+        nearest_key = min(
+            table, key=lambda k: abs(k[0] - x) + abs(k[1] - y) + abs(k[2] - z)
+        )
         return _median_size(table[nearest_key])
 
     # No real data at all (empty table) -- last-resort generic formula.
@@ -223,7 +234,7 @@ def _quantize_to_palette(rgba_img: Image.Image, palette) -> np.ndarray:
     """Nearest-RGB quantize an RGBA image against any ``palette.colors``.
 
     Same approach as :meth:`titan.u8.shape.U8Shape.quantize_to_palette`,
-    generalized to work with either :class:`titan.palette.U8Palette` or
+    generalized to work with either :class:`titan.u8.palette.U8Palette` or
     :class:`titan.u7.palette.U7Palette` (both expose ``.colors``, a
     256-entry list of RGB tuples). Index 0xFF is the transparent marker,
     so opaque pixels are matched against indices 0-254 only.
@@ -320,7 +331,11 @@ def convert_shape(
     blew up every other frame too. The largest frame is a much more
     representative "full size" for the shape as a whole.
     """
-    non_empty = [f for f in u8_shape.frames if f.pixels is not None and f.width > 0 and f.height > 0]
+    non_empty = [
+        f
+        for f in u8_shape.frames
+        if f.pixels is not None and f.width > 0 and f.height > 0
+    ]
     if not non_empty:
         return U7Shape()
     reference = max(non_empty, key=lambda f: f.width * f.height)

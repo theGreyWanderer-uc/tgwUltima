@@ -23,7 +23,6 @@ import unittest
 
 from titan.u9.flx_archive import (
     COMMENT_SIZE,
-    COUNT_OFFSET,
     DIR_OFFSET,
     SIZE2_OFFSET,
     SIZE_OFFSET,

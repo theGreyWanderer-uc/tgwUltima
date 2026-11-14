@@ -8,6 +8,7 @@ Re-exports all U8 public symbols for convenient access::
 
 from __future__ import annotations
 
+from titan.u8.palette import U8Palette
 from titan.u8.shape import U8Shape
 from titan.u8.itemcach import (
     U8ItemCache,
@@ -41,6 +42,7 @@ from titan.u8.credits import decrypt_credit_text
 from titan.u8.xformpal import U8_XFORM_PALETTE
 
 __all__ = [
+    "U8Palette",
     "U8AvatarState",
     "U8GumpState",
     "U8ContainerGump",

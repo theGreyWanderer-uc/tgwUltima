@@ -61,7 +61,9 @@ def _build_archive(occupancy: dict, slot_count: int, title: str) -> U7FlexArchiv
 def make_bg_shaped_archive(path: str) -> str:
     """16 declared slots, 12 populated (0-8, 10-12) -- matches the real
     Black Gate PALETTES.FLX occupancy pattern found in production data."""
-    occupancy = {i: make_6bit_palette_bytes(seed=i) for i in list(range(9)) + [10, 11, 12]}
+    occupancy = {
+        i: make_6bit_palette_bytes(seed=i) for i in list(range(9)) + [10, 11, 12]
+    }
     archive = _build_archive(occupancy, 16, "Synthetic BG-shaped palette archive")
     archive.save(path)
     return path

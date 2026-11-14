@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -56,7 +57,12 @@ def _capture_handler(command, monkeypatch):
         )
     else:
         assert len(handlers) == 1
-        monkeypatch.setattr(cli, handlers[0], lambda args: seen.append(args) or 0)
+        # Handlers live beside their Typer wrapper in a command-family module.
+        monkeypatch.setattr(
+            sys.modules[callback.__module__],
+            handlers[0],
+            lambda args: seen.append(args) or 0,
+        )
     return seen
 
 

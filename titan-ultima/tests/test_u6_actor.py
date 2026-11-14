@@ -51,14 +51,20 @@ def _make_objlist(overrides: dict[int, int | tuple] | None = None) -> bytearray:
 def _set_position(buf: bytearray, actor_id: int, x: int, y: int, z: int) -> None:
     b0, b1, b2 = pack_position(x, y, z)
     off = OFFSET_POSITION + actor_id * 3
-    buf[off:off + 3] = bytes([b0, b1, b2])
+    buf[off : off + 3] = bytes([b0, b1, b2])
 
 
-def _set_appearance(buf: bytearray, actor_id: int, obj_n: int, frame_n: int, offset: int = OFFSET_APPEARANCE) -> None:
+def _set_appearance(
+    buf: bytearray,
+    actor_id: int,
+    obj_n: int,
+    frame_n: int,
+    offset: int = OFFSET_APPEARANCE,
+) -> None:
     b1 = obj_n & 0xFF
     b2 = ((obj_n >> 8) & 0x03) | ((frame_n << 2) & 0xFC)
     off = offset + actor_id * 2
-    buf[off:off + 2] = bytes([b1, b2])
+    buf[off : off + 2] = bytes([b1, b2])
 
 
 class ParseTests(unittest.TestCase):
@@ -168,7 +174,9 @@ class StatusFlagAndAlignmentTests(unittest.TestCase):
         actor0 = U6Actors.parse(bytes(buf))[0]
         self.assertTrue(actor0.is_in_party)
 
-        buf[OFFSET_STATUS_FLAGS + 1] = 0x20  # unrelated bit (part of the alignment mask)
+        buf[OFFSET_STATUS_FLAGS + 1] = (
+            0x20  # unrelated bit (part of the alignment mask)
+        )
         actor1 = U6Actors.parse(bytes(buf))[1]
         self.assertFalse(actor1.is_in_party)
 

@@ -70,9 +70,9 @@ def load_u7_gump_sources(
                 )
     else:
         if exult_flx is None and discover_defaults:
-            from titan.u7.cli import _resolve_u7_exult_flx
+            from titan.u7.install import resolve_u7_exult_flx
 
-            exult_flx = _resolve_u7_exult_flx(game)
+            exult_flx = resolve_u7_exult_flx(game)
         if exult_flx is None:
             result.warnings.append(
                 f"U7 gump metadata: {game.upper()} default bundle unavailable; default mappings and text are unknown."

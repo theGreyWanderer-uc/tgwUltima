@@ -13,7 +13,7 @@ from unittest.mock import patch
 from PIL import Image
 import numpy as np
 
-from titan.u7.cli import cmd_shape_import
+from titan.u7.cli.shapes import cmd_shape_import
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.u7.shape_import import quantize_u7_rgba_frame
@@ -350,7 +350,7 @@ class ShapeImportCliTests(unittest.TestCase):
         _write_rgba_frame(self.frames_dir / "frame.png", (255, 0, 0, 255))
 
         with patch(
-            "titan.u7.cli._resolve_u7_paths",
+            "titan.u7.install.resolve_u7_static_and_palette",
             return_value=(str(self.root), str(self.palette_path)),
         ) as resolve_paths:
             result = cmd_shape_import(
@@ -370,7 +370,7 @@ class ShapeImportCliTests(unittest.TestCase):
     def test_explicit_palette_overrides_selected_game_config(self) -> None:
         _write_rgba_frame(self.frames_dir / "frame.png", (255, 0, 0, 255))
 
-        with patch("titan.u7.cli._resolve_u7_paths") as resolve_paths:
+        with patch("titan.u7.install.resolve_u7_static_and_palette") as resolve_paths:
             result = self._run_import()
 
         self.assertEqual(result, 0)
@@ -379,7 +379,9 @@ class ShapeImportCliTests(unittest.TestCase):
     def test_rejects_missing_explicit_and_configured_palette(self) -> None:
         _write_rgba_frame(self.frames_dir / "frame.png", (255, 0, 0, 255))
 
-        with patch("titan.u7.cli._resolve_u7_paths", return_value=(None, None)):
+        with patch(
+            "titan.u7.install.resolve_u7_static_and_palette", return_value=(None, None)
+        ):
             result = cmd_shape_import(
                 SimpleNamespace(
                     directory=str(self.frames_dir),

@@ -428,9 +428,7 @@ class UOMap:
             "length_not_multiple_of_7": int(
                 (~no_data & (index[:, 1] % STATIC_RECORD_BYTES != 0)).sum()
             ),
-            "static_count": int(
-                (index[~no_data, 1] // STATIC_RECORD_BYTES).sum()
-            ),
+            "static_count": int((index[~no_data, 1] // STATIC_RECORD_BYTES).sum()),
         }
 
     # -- rendering -------------------------------------------------------
@@ -466,9 +464,9 @@ class UOMap:
                 inside = (top_x < self.width) & (top_y < self.height)
                 top, top_x, top_y = top[inside], top_x[inside], top_y[inside]
                 above = records["z"][top].astype(np.int16) >= land_z[top_y, top_x]
-                color_index[top_y[above], top_x[above]] = (
-                    0x4000 + records["tile_id"][top[above]].astype(np.int64)
-                )
+                color_index[top_y[above], top_x[above]] = 0x4000 + records["tile_id"][
+                    top[above]
+                ].astype(np.int64)
 
         color_index[color_index >= len(lut)] = 0
         return Image.fromarray(lut[color_index])
@@ -476,6 +474,4 @@ class UOMap:
     def render_heightmap(self) -> Image.Image:
         """Render land altitude as greyscale: z -128 maps to 0, z 127 to 255."""
         _ids, land_z = self.land_arrays()
-        return Image.fromarray(
-            (land_z.astype(np.int16) + 128).astype(np.uint8)
-        )
+        return Image.fromarray((land_z.astype(np.int16) + 128).astype(np.uint8))

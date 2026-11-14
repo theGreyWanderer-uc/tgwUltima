@@ -184,7 +184,7 @@ class U6TileFlagEntry:
 
     @property
     def is_generic(self) -> bool:
-        """"Ge" in Nuvie's docs -- decompiled source comments it as replicate/vanish-able."""
+        """ "Ge" in Nuvie's docs -- decompiled source comments it as replicate/vanish-able."""
         return bool(self.extra & 0x08)
 
     @property

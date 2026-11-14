@@ -10,6 +10,7 @@ from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.world import WorldQueryParams, parse_numbers, parse_rectangle, run_query
 from titan.u7 import world_workflow as workflow
+from titan.u7 import install as u7_install
 
 
 def write_ifix(directory, sc, objects):
@@ -47,12 +48,13 @@ def world(tmp_path, monkeypatch):
     (static / "TEXT.FLX").write_bytes(names.to_bytes())
     write_ifix(static, 0, [(150, 0, 1, 2), (150, 1, 3, 4), (151, 0, 5, 6)])
     write_ifix(static, 1, [(151, 2, 7, 8)])
-    import titan.u7.cli as cli
 
-    monkeypatch.setattr(cli, "_resolve_u7_paths", lambda game: (None, None))
-    monkeypatch.setattr(cli, "_resolve_u7_gamedat", lambda game: None)
-    monkeypatch.setattr(cli, "_resolve_u7_text_flx", lambda game, static: None)
-    monkeypatch.setattr(cli, "_resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr(
+        u7_install, "resolve_u7_static_and_palette", lambda game: (None, None)
+    )
+    monkeypatch.setattr(u7_install, "resolve_u7_gamedat", lambda game: None)
+    monkeypatch.setattr(u7_install, "resolve_u7_text_flx", lambda game, static: None)
+    monkeypatch.setattr(u7_install, "resolve_u7_exult_flx", lambda game: None)
     return WorldQueryParams(static_dir=str(static), superchunks=[0, 1])
 
 

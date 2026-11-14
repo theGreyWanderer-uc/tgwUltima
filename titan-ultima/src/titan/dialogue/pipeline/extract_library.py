@@ -15,9 +15,13 @@ from typing import Any
 from titan.dialogue.pipeline.extract_books import build_books
 
 
-QUALITY_RE = re.compile(r"\b(?:Item::getQuality\(this\)|local\d+)\s*==\s*(0x[\dA-Fa-f]+)h")
+QUALITY_RE = re.compile(
+    r"\b(?:Item::getQuality\(this\)|local\d+)\s*==\s*(0x[\dA-Fa-f]+)h"
+)
 DISPATCH_RE = re.compile(r"->(\w+)::(\w+)\(")
-SCROLL_READ_RE = re.compile(r'Scroll::read\((?:str_to_ptr|strptr)\("(.*?)"\)', re.DOTALL)
+SCROLL_READ_RE = re.compile(
+    r'Scroll::read\((?:str_to_ptr|strptr)\("(.*?)"\)', re.DOTALL
+)
 NON_READABLE_SCROLL_CLASSES = frozenset({"SCROLL2"})
 GRAVE_READ_RE = re.compile(r'Grave::read\((?:str_to_ptr|strptr)\("(.*?)"\)', re.DOTALL)
 PLAQUE_READ_RE = re.compile(
@@ -597,8 +601,12 @@ def _section(
         "icon": icon,
         "itemClass": item_class,
         "totalItems": len(items),
-        "itemsWithText": sum(1 for item in items if isinstance(item.get("text"), str) and item["text"]),
-        "itemsWithContent": sum(1 for item in items if item.get("text") or item.get("details")),
+        "itemsWithText": sum(
+            1 for item in items if isinstance(item.get("text"), str) and item["text"]
+        ),
+        "itemsWithContent": sum(
+            1 for item in items if item.get("text") or item.get("details")
+        ),
         "items": items,
     }
 
@@ -661,8 +669,14 @@ def build_scroll_section(json_dir: Path) -> dict[str, Any]:
         cls, func = dispatch[quality]
         source = f"{cls}::{func}"
         raw = func_text.get(source)
-        title = titles.get(quality) or (_title_from_text(raw, "Scroll") if raw else f"Scroll {quality:02X}")
-        category = "Magic Scrolls" if quality >= 0x32 or "scroll of" in title.lower() else "Scrolls & Notes"
+        title = titles.get(quality) or (
+            _title_from_text(raw, "Scroll") if raw else f"Scroll {quality:02X}"
+        )
+        category = (
+            "Magic Scrolls"
+            if quality >= 0x32 or "scroll of" in title.lower()
+            else "Scrolls & Notes"
+        )
         details: dict[str, Any] = {}
         if raw:
             first_id = text_first_seen.get(raw)
@@ -681,7 +695,14 @@ def build_scroll_section(json_dir: Path) -> dict[str, Any]:
                 details=details or None,
             )
         )
-    return _section("scrolls", "Scrolls", "Readable scrolls dispatched by BASESCRL.", "scroll", "BASESCRL", items)
+    return _section(
+        "scrolls",
+        "Scrolls",
+        "Readable scrolls dispatched by BASESCRL.",
+        "scroll",
+        "BASESCRL",
+        items,
+    )
 
 
 def build_direct_read_section(
@@ -833,7 +854,9 @@ def main(argv: list[str] | None = None) -> int:
         default=default_json_dir,
         help="Directory containing extracted U8P_*.json AST files",
     )
-    parser.add_argument("--out", default=default_out_path, help="Output path for library.json")
+    parser.add_argument(
+        "--out", default=default_out_path, help="Output path for library.json"
+    )
     args = parser.parse_args(argv)
 
     json_dir = Path(args.json_dir).resolve()

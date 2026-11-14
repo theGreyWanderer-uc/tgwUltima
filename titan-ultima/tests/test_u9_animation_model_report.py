@@ -13,7 +13,7 @@ from titan.u9.animation_model_report import (
     ANIMATION_MODEL_REPORT_COLUMNS,
     build_animation_model_report,
 )
-from titan.u9.cli import cmd_animation_model_report
+from titan.u9.cli.animations import cmd_animation_model_report
 from titan.u9.types_dat import EXPECTED_SIZE, RECORD_SIZE, RECORD_STRUCT
 
 FLX_DIRECTORY_OFFSET = 0x80

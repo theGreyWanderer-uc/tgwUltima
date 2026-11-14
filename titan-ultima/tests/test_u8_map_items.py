@@ -407,7 +407,7 @@ def test_existing_map_commands_report_bad_fixed_input_cleanly(tmp_path, command)
 
 
 def test_existing_map_input_helpers_report_bad_nonfixed_cleanly(tmp_path, capsys):
-    from titan.u8.cli import _load_nonfixed_maps
+    from titan.u8.cli.maps import _load_nonfixed_maps
 
     source = tmp_path / "NONFIXED.DAT"
     source.write_bytes(b"bad")

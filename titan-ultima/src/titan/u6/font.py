@@ -62,15 +62,26 @@ class U6Font:
 
     def __init__(self, data: bytes) -> None:
         if len(data) < FONT_BYTES:
-            raise U6FontError(f"font data too short: {len(data)} bytes, need {FONT_BYTES}")
+            raise U6FontError(
+                f"font data too short: {len(data)} bytes, need {FONT_BYTES}"
+            )
         self._data = data
 
     def glyph_array(self, char_code: int) -> np.ndarray:
         """Return one glyph as an 8x8 uint8 array (1 = foreground pixel, 0 = background)."""
         if char_code < 0 or char_code >= GLYPHS_PER_FONT:
-            raise U6FontError(f"char_code {char_code} out of range (0..{GLYPHS_PER_FONT - 1})")
-        rows = np.frombuffer(self._data, dtype=np.uint8, count=GLYPH_BYTES, offset=char_code * GLYPH_BYTES)
-        return np.unpackbits(rows.reshape(GLYPH_DIM, 1), axis=1, count=GLYPH_DIM, bitorder="big")
+            raise U6FontError(
+                f"char_code {char_code} out of range (0..{GLYPHS_PER_FONT - 1})"
+            )
+        rows = np.frombuffer(
+            self._data,
+            dtype=np.uint8,
+            count=GLYPH_BYTES,
+            offset=char_code * GLYPH_BYTES,
+        )
+        return np.unpackbits(
+            rows.reshape(GLYPH_DIM, 1), axis=1, count=GLYPH_DIM, bitorder="big"
+        )
 
     def to_pil_image(
         self,
@@ -118,7 +129,9 @@ class U6Font:
     def to_contact_sheet(self, cols: int = 16, scale: int = 2) -> Image.Image:
         """Render all 128 glyphs as a labeled-position grid (no labels; positions ARE the char codes)."""
         rows = (GLYPHS_PER_FONT + cols - 1) // cols
-        sheet = Image.new("RGB", (cols * GLYPH_DIM * scale, rows * GLYPH_DIM * scale), (0, 0, 0))
+        sheet = Image.new(
+            "RGB", (cols * GLYPH_DIM * scale, rows * GLYPH_DIM * scale), (0, 0, 0)
+        )
         for code in range(GLYPHS_PER_FONT):
             glyph = self.to_pil_image(code, bg=(0, 0, 0))
             glyph = glyph.resize((GLYPH_DIM * scale, GLYPH_DIM * scale), Image.NEAREST)
@@ -143,5 +156,9 @@ class U6Fonts:
     @classmethod
     def parse(cls, data: bytes) -> U6Fonts:
         if len(data) < FILE_SIZE:
-            raise U6FontError(f"U6.CH data too short: {len(data)} bytes, need {FILE_SIZE}")
-        return cls(english=U6Font(data[:FONT_BYTES]), runic=U6Font(data[FONT_BYTES:FILE_SIZE]))
+            raise U6FontError(
+                f"U6.CH data too short: {len(data)} bytes, need {FILE_SIZE}"
+            )
+        return cls(
+            english=U6Font(data[:FONT_BYTES]), runic=U6Font(data[FONT_BYTES:FILE_SIZE])
+        )

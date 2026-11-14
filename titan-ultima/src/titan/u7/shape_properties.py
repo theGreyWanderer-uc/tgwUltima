@@ -101,7 +101,7 @@ def container_records(data: bytes) -> U7Containers:
 
 def load_properties(library: ShapeLibrary) -> ShapeProperties:
     from titan.u7 import shape_browser as browser
-    from titan.u7.cli import _resolve_u7_exult_flx
+    from titan.u7.install import resolve_u7_exult_flx
     from titan.u7.shapeinfo import _exult_record
 
     result = ShapeProperties()
@@ -165,7 +165,7 @@ def load_properties(library: ShapeLibrary) -> ShapeProperties:
                     result.warnings.append(
                         f"{path}: {error}; {kind} properties unavailable."
                     )
-    exult = _resolve_u7_exult_flx(library.game)
+    exult = resolve_u7_exult_flx(library.game)
     try:
         ready = U7ReadyMetadata.from_dir(
             library.target.static,
@@ -286,7 +286,7 @@ def filtered_ids(library: ShapeLibrary, mode: str) -> list[int]:
 
 
 def choose_filter(library: ShapeLibrary) -> None:
-    from titan.u7 import shape_browser as browser
+    from titan.u7 import shape_browser_ui as browser_ui
 
     labels = {
         "A": "All populated shapes",
@@ -300,7 +300,7 @@ def choose_filter(library: ShapeLibrary) -> None:
         "U": "Unknown TFA metadata",
         "Q": "Keep current filter",
     }
-    selected = browser._menu("Filter shapes:", labels, "A")
+    selected = browser_ui._menu("Filter shapes:", labels, "A")
     mode = {
         "A": "all",
         "W": "weapon",
@@ -316,7 +316,7 @@ def choose_filter(library: ShapeLibrary) -> None:
             for number, name in U7TypeFlags.SHAPE_CLASS_NAMES.items()
         }
         classes["Q"] = "Back"
-        choice = browser._menu("Shape class:", classes, "6")
+        choice = browser_ui._menu("Shape class:", classes, "6")
         mode = "class:" + choice if choice != "Q" else None
     elif selected == "F":
         flags = (
@@ -327,7 +327,7 @@ def choose_filter(library: ShapeLibrary) -> None:
         )
         options = {str(i): name for i, name in enumerate(flags, 1)}
         options["Q"] = "Back"
-        choice = browser._menu("Physical flag:", options, "4")
+        choice = browser_ui._menu("Physical flag:", options, "4")
         mode = "flag:" + options[choice] if choice != "Q" else None
     if mode is not None:
         library.property_filter = mode
@@ -449,8 +449,9 @@ def report_lines(report: dict[str, object]) -> list[str]:
 
 def export_report(library: ShapeLibrary, report: dict[str, object]) -> None:
     from titan.u7 import shape_browser as browser
+    from titan.u7 import shape_browser_ui as browser_ui
 
-    path = browser._path(
+    path = browser_ui._path(
         "JSON report (new file)", f"shape_{report['shape']}_properties.json"
     )
     resolved = path.resolve()
@@ -485,7 +486,7 @@ def export_report(library: ShapeLibrary, report: dict[str, object]) -> None:
 def show_properties(
     library: ShapeLibrary, shape: U7Shape, number: int, frame: int
 ) -> None:
-    from titan.u7 import shape_browser as browser
+    from titan.u7 import shape_browser_ui as browser_ui
 
     report = property_report(library, shape, number, frame)
     lines = report_lines(report)
@@ -499,7 +500,7 @@ def show_properties(
             labels["N"] = "Next page"
         if page:
             labels["B"] = "Previous page"
-        action = browser._menu(
+        action = browser_ui._menu(
             "Shape properties:", labels, "N" if "N" in labels else "Q"
         )
         if action == "Q":

@@ -17,6 +17,7 @@ from typer.testing import CliRunner
 
 from titan import _wizard_ui as ui
 from titan.u7 import monster_browser as browser
+from titan.u7 import monster_browser_ui as browser_ui
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
@@ -151,7 +152,7 @@ def owner(tmp_path, monkeypatch):
     target = ArchiveTarget(
         "Test SI mod", static, patch, root=tmp_path, gamedat=gamedat, save_root=saves
     )
-    monkeypatch.setattr(browser, "game_targets", lambda game: (target, []))
+    monkeypatch.setattr(browser_ui, "game_targets", lambda game: (target, []))
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     return target
 
@@ -178,7 +179,7 @@ def definitions(owner):
 def test_actor_abilities_are_resolved_from_patch_separately_from_binary(
     owner, monkeypatch
 ):
-    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
     raw = bytearray(definition(150))
     raw[15] = 0
     (owner.patch / "monsters.dat").write_bytes(b"\1" + raw)
@@ -198,7 +199,7 @@ def test_actor_abilities_are_resolved_from_patch_separately_from_binary(
 def test_foreign_definition_does_not_inherit_owner_actor_flags(
     owner, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
     (owner.patch / "shape_info.txt").write_text(
         "%%section actor_flags\n:190/0/0/1\n%%endsection\n"
     )
@@ -405,7 +406,7 @@ def test_cli_live_next_monster_distinguishes_same_shape_instances(owner, monkeyp
 
 
 def test_cli_paging_and_filter_hotkeys(owner, monkeypatch):
-    monkeypatch.setattr(browser, "PAGE_SIZE", 1)
+    monkeypatch.setattr(browser_ui, "PAGE_SIZE", 1)
     answers(monkeypatch, ["2", "1", "G", "N", "B", "F", "D", "2", "N", "Q"])
     result = CliRunner().invoke(u7_app, ["monster-browse"])
     assert result.exit_code == 0, result.output
@@ -428,7 +429,7 @@ def test_unavailable_spawn_data_keeps_current_monster_and_navigation(
 ):
     session = definitions(replace(owner, gamedat=None))
     answers(monkeypatch, ["G", "0", "N", "Q"])
-    assert browser.browse(session, 150) == "Q"
+    assert browser_ui.browse(session, 150) == "Q"
     output = capsys.readouterr().out
     assert "No live GAMEDAT" in output
     assert "definition: troll" in output
@@ -469,20 +470,20 @@ def test_possible_equipment_is_separate_from_actual_inventory(owner, monkeypatch
 def art(owner, monkeypatch):
     images = []
     monkeypatch.setattr(
-        browser, "sys", SimpleNamespace(stdout=SimpleNamespace(isatty=lambda: True))
+        browser_ui, "sys", SimpleNamespace(stdout=SimpleNamespace(isatty=lambda: True))
     )
     monkeypatch.setattr(
-        browser, "terminal_image", lambda image, **kwargs: images.append(image)
+        browser_ui, "terminal_image", lambda image, **kwargs: images.append(image)
     )
     return definitions(owner), images
 
 
 def test_preview_standing_pose_transparency_and_short_shape_fallback(art):
     session, images = art
-    assert browser.preview(session, session.records[0]) == 16
+    assert browser_ui.preview(session, session.records[0]) == 16
     assert images[0].getpixel((1, 0)) == (255, 0, 0, 255)
     assert images[0].getpixel((0, 0))[3] == 0
-    assert browser.preview(session, session.records[1]) == 0
+    assert browser_ui.preview(session, session.records[1]) == 0
     assert images[1].getpixel((1, 0)) == (0, 0, 255, 255)
 
 
@@ -490,9 +491,9 @@ def test_preview_owner_sparse_patch_and_cache(art):
     session, images = art
     write_flex(session.target.patch / "shapes.vga", [b""] * 150 + [sprite(2)], 0xCC01)
     write_flex(session.target.patch / "palettes.flx", [b""])
-    assert browser.preview(session, session.records[0]) == 0
+    assert browser_ui.preview(session, session.records[0]) == 0
     first = session.preview_library
-    assert browser.preview(session, session.records[1]) == 0
+    assert browser_ui.preview(session, session.records[1]) == 0
     assert session.preview_library is first
     assert images[0].getpixel((1, 0)) == (0, 0, 255, 255)
 
@@ -500,7 +501,7 @@ def test_preview_owner_sparse_patch_and_cache(art):
 def test_preview_missing_palette_keeps_details_available(art, capsys):
     session, images = art
     (session.target.static / "PALETTES.FLX").unlink()
-    assert browser.preview(session, session.records[0]) is None
+    assert browser_ui.preview(session, session.records[0]) is None
     assert not images
     assert "preview unavailable" in capsys.readouterr().out
     assert "Base stats: STR 10" in browser.detail(session, session.records[0])
@@ -509,12 +510,12 @@ def test_preview_missing_palette_keeps_details_available(art, capsys):
 def test_redirected_preview_does_not_load_art(owner, monkeypatch):
     session = definitions(owner)
     monkeypatch.setattr(
-        browser, "sys", SimpleNamespace(stdout=SimpleNamespace(isatty=lambda: False))
+        browser_ui, "sys", SimpleNamespace(stdout=SimpleNamespace(isatty=lambda: False))
     )
     monkeypatch.setattr(
-        browser, "load_library", lambda *_: pytest.fail("loaded redirected artwork")
+        browser_ui, "load_library", lambda *_: pytest.fail("loaded redirected artwork")
     )
-    assert browser.preview(session, session.records[0]) is None
+    assert browser_ui.preview(session, session.records[0]) is None
 
 
 def test_cli_frame_hotkeys_and_playback_use_same_shape_provider(
@@ -523,12 +524,12 @@ def test_cli_frame_hotkeys_and_playback_use_same_shape_provider(
     session, images = art
     playback = []
     monkeypatch.setattr(
-        browser,
+        browser_ui,
         "play_terminal",
         lambda provider, **kwargs: playback.append(provider(0, 0)[0]),
     )
     answers(monkeypatch, ["F", "P", "Q"])
-    assert browser.browse(session, 151) == "Q"
+    assert browser_ui.browse(session, 151) == "Q"
     assert len(playback) == 1
     assert "frame 0" in capsys.readouterr().out
     assert len(images) == 3
@@ -603,7 +604,7 @@ def test_spawn_map_menu_includes_stored_extra_maps(owner, monkeypatch):
     write_save(path, {"monsnpcs.dat": actors(), "map01/u7ireg00": b""})
     session = browser.load_session(owner, Source(path, "save"), "si")
     answers(monkeypatch, ["1"])
-    assert browser._spawn_map(session, session.records[0]) == 1
+    assert browser_ui._spawn_map(session, session.records[0]) == 1
 
 
 @pytest.mark.parametrize(
@@ -642,7 +643,7 @@ def test_json_export_separates_base_stats_possible_equipment_and_actual_actor(
     session = live(owner)
     path = tmp_path / "reports" / "goblin.json"
     answers(monkeypatch, ["J", str(path)])
-    browser._export(session, session.records, session.records[1])
+    browser_ui._export(session, session.records, session.records[1])
     data = json.loads(path.read_text())
     assert data["record_number"] == 1
     assert data["definition"]["strength"] == 10
@@ -657,7 +658,7 @@ def test_filtered_actor_csv_keeps_original_instance_number(
     session = live(owner)
     path = tmp_path / "filtered.csv"
     answers(monkeypatch, ["C", str(path)])
-    browser._export(session, browser.filter_entries(session, "#1"))
+    browser_ui._export(session, browser.filter_entries(session, "#1"))
     rows = list(csv.DictReader(io.StringIO(path.read_text())))
     assert len(rows) == 1
     assert rows[0]["live_index"] == "1"
@@ -682,7 +683,7 @@ def test_report_exports_cannot_change_game_data_or_existing_files(
         path.write_text("original")
     original = path.read_bytes() if path.exists() else None
     with pytest.raises((ValueError, FileExistsError)):
-        browser.write_report(session, path, "changed")
+        browser_ui.write_report(session, path, "changed")
     assert (path.read_bytes() if path.exists() else None) == original
 
 
@@ -691,4 +692,4 @@ def test_eof_cancel_is_clean(owner, monkeypatch):
         raise EOFError
 
     monkeypatch.setattr("builtins.input", cancel)
-    assert browser.run_browser() == 0
+    assert browser_ui.run_browser() == 0

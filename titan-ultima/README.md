@@ -30,7 +30,7 @@ pip install titan-ultima
 
 Requirements:
 
-- Python 3.9+
+- Python 3.10+
 - NumPy >= 1.24
 - Pillow >= 10.0
 - Typer >= 0.15
@@ -88,7 +88,7 @@ titan uo animation-body-names-export -o uo_metadata/
 titan u9 save-browse
 ```
 
-U9 setup searches common GOG, Galaxy, EA/Origin, manual and Heroic locations,
+U9 setup searches common GOG, Galaxy, Steam, EA/Origin, manual and Heroic locations,
 as well as an existing `[u9.game].base` or `[u9.paths].static`. It searches
 up to three directory levels, skips backup/patch/save folders, and verifies
 the three bitmap archives, matching `sdInfo` tables and `ankh.pal` before

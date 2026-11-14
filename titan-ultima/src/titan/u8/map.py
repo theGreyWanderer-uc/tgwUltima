@@ -7,7 +7,7 @@ Provides :class:`U8MapRenderer` for isometric map rendering and
 Example::
 
     from titan.u8.map import U8MapRenderer, U8MapSampler
-    from titan.palette import U8Palette
+    from titan.u8.palette import U8Palette
 
     pal = U8Palette.from_file("U8PAL.PAL")
 
@@ -34,7 +34,7 @@ from typing import Optional
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.map_items import U8MapItem, U8MapItems
 from titan.u8.shape import U8Shape
 from titan.u8.state_io import read_u8_state_bytes
@@ -154,8 +154,7 @@ class U8MapRenderer:
             gz = glob_data[off + 2]
             gtype = struct.unpack_from("<H", glob_data, off + 3)[0]
             gframe = glob_data[off + 5]
-            objs.append(cls.MapObject(x=gx, y=gy, z=gz,
-                                      type_num=gtype, frame=gframe))
+            objs.append(cls.MapObject(x=gx, y=gy, z=gz, type_num=gtype, frame=gframe))
         return objs
 
     @classmethod
@@ -195,15 +194,17 @@ class U8MapRenderer:
             base_z = obj.z
 
             for sub in glob_cache[quality]:
-                result.append(cls.MapObject(
-                    x=sub.x * 2 + base_x,
-                    y=sub.y * 2 + base_y,
-                    z=sub.z + base_z,
-                    type_num=sub.type_num,
-                    frame=sub.frame,
-                    status=0x0082,  # Native GLOB.C: disposable | fast_only.
-                    source_record=obj.source_record,
-                ))
+                result.append(
+                    cls.MapObject(
+                        x=sub.x * 2 + base_x,
+                        y=sub.y * 2 + base_y,
+                        z=sub.z + base_z,
+                        type_num=sub.type_num,
+                        frame=sub.frame,
+                        status=0x0082,  # Native GLOB.C: disposable | fast_only.
+                        source_record=obj.source_record,
+                    )
+                )
         return result
 
     @staticmethod
@@ -219,27 +220,26 @@ class U8MapRenderer:
         Shape is excluded if ANY of its enabled exclude flags match.
         """
         _flag_bits: dict[str, tuple[int, int]] = {
-            'no_fixed': (0, 0x01),
-            'no_solid': (0, 0x02),
-            'no_sea': (0, 0x04),
-            'no_land': (0, 0x08),
-            'no_occl': (0, 0x10),
-            'no_bag': (0, 0x20),
-            'no_damaging': (0, 0x40),
-            'no_noisy': (0, 0x80),
-            'no_draw': (1, 0x01),
-            'no_ignore': (1, 0x02),
-            'no_roof': (1, 0x04),
-            'no_transl': (1, 0x08),
-            'no_editor': (5, 0x10),
-            'no_explode': (5, 0x20),
-            'no_unk46': (5, 0x40),
-            'no_unk47': (5, 0x80),
+            "no_fixed": (0, 0x01),
+            "no_solid": (0, 0x02),
+            "no_sea": (0, 0x04),
+            "no_land": (0, 0x08),
+            "no_occl": (0, 0x10),
+            "no_bag": (0, 0x20),
+            "no_damaging": (0, 0x40),
+            "no_noisy": (0, 0x80),
+            "no_draw": (1, 0x01),
+            "no_ignore": (1, 0x02),
+            "no_roof": (1, 0x04),
+            "no_transl": (1, 0x08),
+            "no_editor": (5, 0x10),
+            "no_explode": (5, 0x20),
+            "no_unk46": (5, 0x40),
+            "no_unk47": (5, 0x80),
         }
 
         if not os.path.isfile(typeflag_path):
-            raise FileNotFoundError(
-                f"typeflag.dat not found: {typeflag_path}")
+            raise FileNotFoundError(f"typeflag.dat not found: {typeflag_path}")
         with open(typeflag_path, "rb") as _f:
             _data = _f.read()
 
@@ -248,7 +248,7 @@ class U8MapRenderer:
 
         for _i in range(len(_data) // _block):
             _off = _i * _block
-            _bytes = _data[_off:_off + 8]
+            _bytes = _data[_off : _off + 8]
             for _flag_name in exclude_flags:
                 if exclude_flags[_flag_name] and _flag_name in _flag_bits:
                     _byte_idx, _bit_mask = _flag_bits[_flag_name]
@@ -366,7 +366,9 @@ class U8MapRenderer:
         Returns:
             PIL RGBA Image of the rendered map.
         """
-        sx_fn, sy_fn, depth_fn = cls.PROJECTIONS.get(view, cls.PROJECTIONS[cls.DEFAULT_VIEW])
+        sx_fn, sy_fn, depth_fn = cls.PROJECTIONS.get(
+            view, cls.PROJECTIONS[cls.DEFAULT_VIEW]
+        )
 
         for obj in map_objects:
             cls.project(obj, view)
@@ -383,12 +385,14 @@ class U8MapRenderer:
             _info: dict[int, tuple[int, int, int, int, int, int, int, int]] = {}
             for e in tf_entries:
                 _info[e.shape_num] = (
-                    e.x * 32, e.y * 32, e.z * 8,
+                    e.x * 32,
+                    e.y * 32,
+                    e.z * 8,
                     1 if e.animtype != 0 else 0,
-                    1 if e.flags & 0x0800 else 0,   # SI_TRANSL
-                    1 if e.flags & 0x0100 else 0,   # SI_DRAW
-                    1 if e.flags & 0x0002 else 0,   # SI_SOLID
-                    1 if e.flags & 0x0010 else 0,   # SI_OCCL
+                    1 if e.flags & 0x0800 else 0,  # SI_TRANSL
+                    1 if e.flags & 0x0100 else 0,  # SI_DRAW
+                    1 if e.flags & 0x0002 else 0,  # SI_SOLID
+                    1 if e.flags & 0x0010 else 0,  # SI_OCCL
                 )
             _zero_info = (0, 0, 0, 0, 0, 0, 0, 0)
 
@@ -398,21 +402,29 @@ class U8MapRenderer:
             #  type_num, frame, obj_ref)
             _si = []
             for obj in map_objects:
-                fx, fy, fz, _a, _t, _d, _s, _o = _info.get(
-                    obj.type_num, _zero_info)
+                fx, fy, fz, _a, _t, _d, _s, _o = _info.get(obj.type_num, _zero_info)
                 if obj.status & 0x0020:
                     fx, fy = fy, fx
-                _si.append((
-                    obj.x, obj.y, obj.z,
-                    obj.x - fx,              # xleft  (back x)
-                    obj.y - fy,              # yfar   (back y)
-                    obj.z + fz,              # ztop   (top z)
-                    1 if fz == 0 else 0,     # flat
-                    1 if fx == 128 and fy == 128 else 0,  # f32x32
-                    _a, _t, _d, _s, _o,     # anim, trans, draw, solid, occl
-                    obj.type_num, obj.frame,
-                    obj,
-                ))
+                _si.append(
+                    (
+                        obj.x,
+                        obj.y,
+                        obj.z,
+                        obj.x - fx,  # xleft  (back x)
+                        obj.y - fy,  # yfar   (back y)
+                        obj.z + fz,  # ztop   (top z)
+                        1 if fz == 0 else 0,  # flat
+                        1 if fx == 128 and fy == 128 else 0,  # f32x32
+                        _a,
+                        _t,
+                        _d,
+                        _s,
+                        _o,  # anim, trans, draw, solid, occl
+                        obj.type_num,
+                        obj.frame,
+                        obj,
+                    )
+                )
 
             def _cmp(a: tuple, b: tuple) -> int:
                 """Pentagram-inspired isometric depth comparison.
@@ -421,12 +433,42 @@ class U8MapRenderer:
                 Ported from Pentagram ``SortItem::operator<`` in
                 ``world/ItemSorter.cpp``.
                 """
-                (ax, ay, az, axl, ayf, azt, af, af32,
-                 aa, atr, adr, aso, aoc,
-                 at, afr, _) = a
-                (bx, by, bz, bxl, byf, bzt, bf, bf32,
-                 ba, btr, bdr, bso, boc,
-                 bt, bfr, _) = b
+                (
+                    ax,
+                    ay,
+                    az,
+                    axl,
+                    ayf,
+                    azt,
+                    af,
+                    af32,
+                    aa,
+                    atr,
+                    adr,
+                    aso,
+                    aoc,
+                    at,
+                    afr,
+                    _,
+                ) = a
+                (
+                    bx,
+                    by,
+                    bz,
+                    bxl,
+                    byf,
+                    bzt,
+                    bf,
+                    bf32,
+                    ba,
+                    btr,
+                    bdr,
+                    bso,
+                    boc,
+                    bt,
+                    bfr,
+                    _,
+                ) = b
 
                 # --- Both flat (zero z-height) ---
                 if af and bf:
@@ -533,12 +575,14 @@ class U8MapRenderer:
             for _item in _si:
                 _ix, _iy, _iz = _item[0], _item[1], _item[2]
                 _ixl, _iyf, _izt = _item[3], _item[4], _item[5]
-                _ss.append((
-                    _ixl // 4 - _iy // 4,       # sxleft
-                    _ix // 4 - _iyf // 4,        # sxright
-                    _ixl // 8 + _iyf // 8 - _izt, # sytop
-                    _ix // 8 + _iy // 8 - _iz,   # sybot
-                ))
+                _ss.append(
+                    (
+                        _ixl // 4 - _iy // 4,  # sxleft
+                        _ix // 4 - _iyf // 4,  # sxright
+                        _ixl // 8 + _iyf // 8 - _izt,  # sytop
+                        _ix // 8 + _iy // 8 - _iz,  # sybot
+                    )
+                )
 
             # 3. Build dependency graph via sweep-line on screen-X.
             #    For each pair that overlaps on screen, use _cmp to
@@ -549,8 +593,7 @@ class U8MapRenderer:
             for _idx in _sweep:
                 _sxl_cur = _ss[_idx][0]
                 # Prune expired items from active set
-                _active = [a for a in _active
-                           if _ss[a][1] > _sxl_cur]
+                _active = [a for a in _active if _ss[a][1] > _sxl_cur]
                 for _other in _active:
                     _a = _ss[_idx]
                     _b = _ss[_other]
@@ -626,8 +669,7 @@ class U8MapRenderer:
 
             if key not in frame_cache:
                 if obj.type_num not in shape_cache:
-                    shp_path = os.path.join(shapes_dir,
-                                            f"{obj.type_num:04d}.shp")
+                    shp_path = os.path.join(shapes_dir, f"{obj.type_num:04d}.shp")
                     if os.path.isfile(shp_path):
                         try:
                             shape_cache[obj.type_num] = U8Shape.from_file(shp_path)
@@ -637,15 +679,13 @@ class U8MapRenderer:
                         shape_cache[obj.type_num] = None
 
                 shape = shape_cache[obj.type_num]
-                if (shape is not None and 0 <= obj.frame < len(shape.frames)):
+                if shape is not None and 0 <= obj.frame < len(shape.frames):
                     fr = shape.frames[obj.frame]
-                    if (fr.pixels is not None
-                            and fr.width > 0 and fr.height > 0):
+                    if fr.pixels is not None and fr.width > 0 and fr.height > 0:
                         indexed = Image.fromarray(fr.pixels, mode="P")
                         indexed.putpalette(flat_rgb)
                         rgba = indexed.convert("RGBA")
-                        alpha = np.where(fr.pixels == 0xFF, 0,
-                                         255).astype(np.uint8)
+                        alpha = np.where(fr.pixels == 0xFF, 0, 255).astype(np.uint8)
                         rgba.putalpha(Image.fromarray(alpha, mode="L"))
                         xoff = fr.xoff
                         if flipped:
@@ -694,16 +734,14 @@ class U8MapRenderer:
                 _y0 = sy_fn(_wx, 0, 0) + off_y
                 _x1 = sx_fn(_wx, _MAP_END, 0) + off_x
                 _y1 = sy_fn(_wx, _MAP_END, 0) + off_y
-                _draw.line([(_x0, _y0), (_x1, _y1)],
-                           fill=_grid_rgba, width=grid_size)
+                _draw.line([(_x0, _y0), (_x1, _y1)], fill=_grid_rgba, width=grid_size)
             for _n in range(65):
                 _wy = _n * _CHUNK
                 _x0 = sx_fn(0, _wy, 0) + off_x
                 _y0 = sy_fn(0, _wy, 0) + off_y
                 _x1 = sx_fn(_MAP_END, _wy, 0) + off_x
                 _y1 = sy_fn(_MAP_END, _wy, 0) + off_y
-                _draw.line([(_x0, _y0), (_x1, _y1)],
-                           fill=_grid_rgba, width=grid_size)
+                _draw.line([(_x0, _y0), (_x1, _y1)], fill=_grid_rgba, width=grid_size)
 
             # Chunk coordinate labels at each grid intersection
             try:
@@ -716,8 +754,7 @@ class U8MapRenderer:
                     _wy = _cy * _CHUNK
                     _lx = sx_fn(_wx, _wy, 0) + off_x + 2
                     _ly = sy_fn(_wx, _wy, 0) + off_y + 1
-                    _draw.text((_lx, _ly), f"{_cx},{_cy}",
-                               fill=_grid_rgba, font=_font)
+                    _draw.text((_lx, _ly), f"{_cx},{_cy}", fill=_grid_rgba, font=_font)
 
         return canvas
 
@@ -780,7 +817,8 @@ class U8MapSampler:
                 try:
                     shape_cache[obj.type_num] = (
                         U8Shape.from_file(shp_path)
-                        if os.path.isfile(shp_path) else None
+                        if os.path.isfile(shp_path)
+                        else None
                     )
                 except Exception:
                     shape_cache[obj.type_num] = None
@@ -808,9 +846,7 @@ class U8MapSampler:
             r_sum = g_sum = b_sum = cnt = 0
             for fj in range(2):
                 for fi in range(2):
-                    ax = fr.xoff + (
-                        iso_sx - fi if obj.status & 0x0020 else fi - iso_sx
-                    )
+                    ax = fr.xoff + (iso_sx - fi if obj.status & 0x0020 else fi - iso_sx)
                     ay = (fj - iso_sy) + fr.yoff
                     if ax < 0 or ay < 0 or ax >= fr.width or ay >= fr.height:
                         continue
@@ -825,11 +861,9 @@ class U8MapSampler:
             if not cnt:
                 continue
 
-            color = np.array(
-                [r_sum // cnt, g_sum // cnt, b_sum // cnt], dtype=np.uint8
-            )
+            color = np.array([r_sum // cnt, g_sum // cnt, b_sum // cnt], dtype=np.uint8)
 
-            out[py_min:py_max + 1, px_min:px_max + 1] = color
+            out[py_min : py_max + 1, px_min : px_max + 1] = color
 
         _img = Image.fromarray(out, mode="RGB")
         if grid:
@@ -839,11 +873,17 @@ class U8MapSampler:
             for _n in range(65):
                 _pos = (_n * _CHUNK) // scale
                 if 0 <= _pos < _img.width:
-                    _draw.line([(_pos, 0), (_pos, _img.height - 1)],
-                               fill=_grid_rgb, width=grid_size)
+                    _draw.line(
+                        [(_pos, 0), (_pos, _img.height - 1)],
+                        fill=_grid_rgb,
+                        width=grid_size,
+                    )
                 if 0 <= _pos < _img.height:
-                    _draw.line([(0, _pos), (_img.width - 1, _pos)],
-                               fill=_grid_rgb, width=grid_size)
+                    _draw.line(
+                        [(0, _pos), (_img.width - 1, _pos)],
+                        fill=_grid_rgb,
+                        width=grid_size,
+                    )
 
             # Chunk coordinate labels
             try:
@@ -855,6 +895,7 @@ class U8MapSampler:
                     _px = (_cx * _CHUNK) // scale + 2
                     _py = (_cy * _CHUNK) // scale + 1
                     if 0 <= _px < _img.width and 0 <= _py < _img.height:
-                        _draw.text((_px, _py), f"{_cx},{_cy}",
-                                   fill=_grid_rgb, font=_font)
+                        _draw.text(
+                            (_px, _py), f"{_cx},{_cy}", fill=_grid_rgb, font=_font
+                        )
         return _img

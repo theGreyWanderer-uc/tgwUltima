@@ -107,7 +107,9 @@ class ScanFrameTests(unittest.TestCase):
 
 class ScanShapeTests(unittest.TestCase):
     def test_translucent_animated_shape(self):
-        tfa = U7TypeFlags.parse(_make_tfa_bytes({0: (FLAG_IS_ANIMATED, FLAG_TRANSLUCENT)}))
+        tfa = U7TypeFlags.parse(
+            _make_tfa_bytes({0: (FLAG_IS_ANIMATED, FLAG_TRANSLUCENT)})
+        )
         shape = _make_shape([np.array([[238, 10]], dtype=np.uint8)])
         report = scan_shape(shape, 0, tfa, xfstart=238)
 
@@ -140,11 +142,13 @@ class ScanShapeTests(unittest.TestCase):
 
     def test_scans_every_frame_not_just_first(self):
         tfa = U7TypeFlags.parse(_make_tfa_bytes({3: (0x00, 0x00)}))
-        shape = _make_shape([
-            np.array([[10]], dtype=np.uint8),
-            np.array([[10]], dtype=np.uint8),
-            np.array([[240]], dtype=np.uint8),  # only frame 2 has a cycle pixel
-        ])
+        shape = _make_shape(
+            [
+                np.array([[10]], dtype=np.uint8),
+                np.array([[10]], dtype=np.uint8),
+                np.array([[240]], dtype=np.uint8),  # only frame 2 has a cycle pixel
+            ]
+        )
         report = scan_shape(shape, 3, tfa, xfstart=238)
         self.assertEqual(report.cycle_frame_indices, [2])
         self.assertTrue(report.is_affected)
@@ -226,10 +230,12 @@ class ScanShapeTests(unittest.TestCase):
 
     def test_index_255_frame_indices_tracked_per_shape(self):
         tfa = U7TypeFlags.parse(_make_tfa_bytes({0: (0x00, 0x00)}))
-        shape = _make_shape([
-            np.array([[10]], dtype=np.uint8),
-            np.array([[255]], dtype=np.uint8),
-        ])
+        shape = _make_shape(
+            [
+                np.array([[10]], dtype=np.uint8),
+                np.array([[255]], dtype=np.uint8),
+            ]
+        )
         report = scan_shape(shape, 0, tfa, xfstart=238)
         self.assertEqual(report.index_255_frame_indices, [1])
 

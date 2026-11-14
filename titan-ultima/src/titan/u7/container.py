@@ -626,10 +626,8 @@ def run_wizard(
         )
     except (SelectionCancelled, KeyboardInterrupt, EOFError):
         return 0
-    from titan.u7.container_browser import (
-        browse_u7_container_session,
-        load_u7_container_session,
-    )
+    from titan.u7.container_browser import load_u7_container_session
+    from titan.u7.container_browser_ui import browse_u7_container_session
 
     if world.game != game:
         from titan._config import exult_cfg

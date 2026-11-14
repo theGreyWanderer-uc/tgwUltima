@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import json
+import ntpath
 from pathlib import Path, PureWindowsPath
 from typing import Sequence
 
 from titan.u7.save_container import U7SaveMember
+
+
+def _is_windows_reserved(windows: PureWindowsPath) -> bool:
+    """Detect DOS device names such as CON or COM1 on any host platform."""
+    # ntpath.isreserved replaces PureWindowsPath.is_reserved from Python 3.13.
+    isreserved = getattr(ntpath, "isreserved", None)
+    if isreserved is not None:
+        return isreserved(windows)
+    return windows.is_reserved()
 
 
 def extract_u7_save_members(
@@ -37,7 +47,7 @@ def extract_u7_save_members(
             not member.name
             or windows.drive
             or windows.is_absolute()
-            or windows.is_reserved()
+            or _is_windows_reserved(windows)
             or path.is_absolute()
             or ".." in path.parts
             or not path.parts

@@ -21,7 +21,12 @@ from titan.fonts.renderer import (
     unpack_mono_bitmap,
 )
 from titan.fonts.palette import PaletteLUT
-from titan.fonts.encoder import glyphs_to_shape, GlyphBitmap, FontFrame, EXULT_STUDIO_PREVIEW_FRAME
+from titan.fonts.encoder import (
+    glyphs_to_shape,
+    GlyphBitmap,
+    FontFrame,
+    EXULT_STUDIO_PREVIEW_FRAME,
+)
 from titan.fonts.presets import FONT_SHAPES, BUNDLED_TTFS
 
 __all__ = [

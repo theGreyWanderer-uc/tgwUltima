@@ -23,7 +23,9 @@ def build_data(json_src: Path, data_dst: Path) -> int:
 
     data_dst.mkdir(parents=True, exist_ok=True)
 
-    files = sorted(f.name for f in json_src.glob("*.json") if f.name != "all_dialogue.json")
+    files = sorted(
+        f.name for f in json_src.glob("*.json") if f.name != "all_dialogue.json"
+    )
     if not files:
         print(f"ERROR: No JSON files found in {json_src}")
         return 1
@@ -39,7 +41,9 @@ def build_data(json_src: Path, data_dst: Path) -> int:
         shutil.copy2(json_src / fname, data_dst / fname)
 
     # Always distribute flag metadata from permanent Titan resources.
-    flag_metadata_src = Path(__file__).resolve().parent / "resources" / FLAG_METADATA_FILENAME
+    flag_metadata_src = (
+        Path(__file__).resolve().parent / "resources" / FLAG_METADATA_FILENAME
+    )
     if not flag_metadata_src.is_file():
         print(f"ERROR: Required metadata file not found: {flag_metadata_src}")
         return 1
@@ -62,8 +66,16 @@ def _default_paths() -> tuple[Path, Path]:
 def main(argv: list[str] | None = None) -> int:
     default_json_src, default_data_dst = _default_paths()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--json-src", default=str(default_json_src), help="Source directory containing U8P_*.json")
-    parser.add_argument("--data-dst", default=str(default_data_dst), help="Destination web data directory")
+    parser.add_argument(
+        "--json-src",
+        default=str(default_json_src),
+        help="Source directory containing U8P_*.json",
+    )
+    parser.add_argument(
+        "--data-dst",
+        default=str(default_data_dst),
+        help="Destination web data directory",
+    )
     args = parser.parse_args(argv)
     return build_data(Path(args.json_src), Path(args.data_dst))
 

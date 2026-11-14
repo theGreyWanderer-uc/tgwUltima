@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image
 
-from titan.u7.cli import cmd_shape_export
+from titan.u7.cli.shapes import cmd_shape_export
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 
@@ -28,7 +28,9 @@ _PLAIN_SHAPE = 201
 _TRANSLUCENT_INDEX = 254  # xfstart with a single BLENDS.DAT record
 _RAW_PALETTE_COLOR = (0, 255, 0)  # what index 254 looks like if NOT blended
 _BLEND_RGBA = (255, 0, 0, 255)  # BLENDS.DAT record for index 254
-_EXPECTED_PREVIEW = tuple(_BLEND_RGBA[:3])  # composite_rgba_preview: raw, undivided blend RGB
+_EXPECTED_PREVIEW = tuple(
+    _BLEND_RGBA[:3]
+)  # composite_rgba_preview: raw, undivided blend RGB
 
 
 def _write_tfa(static_dir: str) -> None:
@@ -128,7 +130,8 @@ class ShapeExportAutoDetectTranslucencyTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         colors = self._colors()
         self.assertNotIn(
-            _RAW_PALETTE_COLOR, colors,
+            _RAW_PALETTE_COLOR,
+            colors,
             "translucent shape exported with raw unblended palette colour "
             "even though --static + --shape gave enough info to auto-detect it",
         )

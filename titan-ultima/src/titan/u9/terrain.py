@@ -388,7 +388,9 @@ class U9Terrain:
             )
         self.flags = struct.unpack_from("<I", data, FLAGS_OFFSET)[0]
 
-        self.declared_chunk_count = struct.unpack_from("<I", data, CHUNK_COUNT_OFFSET)[0]
+        self.declared_chunk_count = struct.unpack_from("<I", data, CHUNK_COUNT_OFFSET)[
+            0
+        ]
 
         self._chunk_base = HEADER_SIZE + self.tile_count * 2
         if len(data) < self._chunk_base:
@@ -627,9 +629,7 @@ class U9Terrain:
         data[offset : offset + CHUNK_SIZE] = chunk.to_bytes()
         return U9Terrain(bytes(data))
 
-    def replace_tile(
-        self, tile_x: int, tile_y: int, chunk_index: int
-    ) -> U9Terrain:
+    def replace_tile(self, tile_x: int, tile_y: int, chunk_index: int) -> U9Terrain:
         """Return a parsed copy with one tile redirected to a declared chunk."""
         self.tile(tile_x, tile_y)
         if not isinstance(chunk_index, int) or isinstance(chunk_index, bool):
@@ -657,8 +657,7 @@ class U9Terrain:
         """One point by its position in the whole region, in points."""
         if not (0 <= x < self.width and 0 <= y < self.height):
             raise U9TerrainError(
-                f"point ({x}, {y}) out of range for a "
-                f"{self.width}x{self.height} region"
+                f"point ({x}, {y}) out of range for a {self.width}x{self.height} region"
             )
         chunk = self.chunk_for_tile(x // CHUNK_POINTS, y // CHUNK_POINTS)
         local = chunk.point(x % CHUNK_POINTS, y % CHUNK_POINTS)

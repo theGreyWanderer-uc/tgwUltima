@@ -55,7 +55,9 @@ class AnimationSelectionTests(unittest.TestCase):
 
     def test_shared_label_asks_for_an_id(self) -> None:
         with self.assertRaisesRegex(U9AnimationSelectionError, "209, 936"):
-            resolve_animation_selector("humanoid/combat/attack_avatar_handoneaa", LABELS)
+            resolve_animation_selector(
+                "humanoid/combat/attack_avatar_handoneaa", LABELS
+            )
 
     def test_alias_detects_archive_disagreement(self) -> None:
         moved = U9AnimationLabels({172: "humanoid/idle/look_avatar"})

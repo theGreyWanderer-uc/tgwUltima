@@ -27,7 +27,11 @@ from titan.dialogue.pipeline.extract_library import (
 )
 from titan.dialogue.pipeline.extract_library import main as extract_library_main
 from titan.dialogue.pipeline.lint_json import run_lint
-from titan.dialogue.pipeline.run_fold import FoldRunError, get_effective_fold_path, run_fold
+from titan.dialogue.pipeline.run_fold import (
+    FoldRunError,
+    get_effective_fold_path,
+    run_fold,
+)
 
 
 dialogue_app = typer.Typer(
@@ -39,22 +43,24 @@ dialogue_app = typer.Typer(
 )
 
 
-NON_NPC_DIALOGUE_COPY_CLASSES = frozenset({
-    # Player/system and base helper classes.
-    "AVATAR",
-    "FREE",
-    "METHOD",
-    # Interactive objects that use dialogue-menu machinery.
-    "BEDEW",
-    "BEDNS",
-    "BEDROLL",
-    "LOGBOOK",
-    "LOGBOOK3",
-    "RECALL",
-    # Scene/spawn helpers that contain player-facing lines but are not NPC classes.
-    "DAEMSCEN",
-    "SORCHAT",
-})
+NON_NPC_DIALOGUE_COPY_CLASSES = frozenset(
+    {
+        # Player/system and base helper classes.
+        "AVATAR",
+        "FREE",
+        "METHOD",
+        # Interactive objects that use dialogue-menu machinery.
+        "BEDEW",
+        "BEDNS",
+        "BEDROLL",
+        "LOGBOOK",
+        "LOGBOOK3",
+        "RECALL",
+        # Scene/spawn helpers that contain player-facing lines but are not NPC classes.
+        "DAEMSCEN",
+        "SORCHAT",
+    }
+)
 
 
 def _dialogue_root() -> Path:
@@ -126,9 +132,7 @@ def _resolve_symbols_path(symbols: Optional[Path]) -> Path:
     candidate = dialogue_root / "pipeline" / "resources" / "symbols.csv"
     if candidate.is_file():
         return candidate
-    raise typer.BadParameter(
-        f"symbols.csv not found in Titan resources: {candidate}"
-    )
+    raise typer.BadParameter(f"symbols.csv not found in Titan resources: {candidate}")
 
 
 def _resolve_classes_path(classes: Optional[Path]) -> Path:
@@ -165,7 +169,11 @@ def _run_prepare(
 
     def _count_global_symbols(path: Path) -> int:
         with path.open("r", encoding="utf-8", newline="") as f:
-            return sum(1 for row in csv.DictReader(f) if (row.get("type") or "").strip() == "global")
+            return sum(
+                1
+                for row in csv.DictReader(f)
+                if (row.get("type") or "").strip() == "global"
+            )
 
     dirs = _runtime_dirs(runtime_root)
     websrc_data = _dialogue_root() / "websrc" / "public" / "data"
@@ -178,13 +186,32 @@ def _run_prepare(
         for pattern in ("U8P_*.txt",):
             for file in dirs.fold.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json", "library.json"):
+        for pattern in (
+            "U8P_*.json",
+            "all_dialogue.json",
+            "manifest.json",
+            "books.json",
+            "library.json",
+        ):
             for file in dirs.json.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "books.json", "library.json"):
+        for pattern in (
+            "U8P_*.json",
+            "all_dialogue.json",
+            "manifest.json",
+            "books.json",
+            "library.json",
+        ):
             for file in dirs.web_data.glob(pattern):
                 file.unlink()
-        for pattern in ("U8P_*.json", "all_dialogue.json", "manifest.json", "flag_metadata.json", "books.json", "library.json"):
+        for pattern in (
+            "U8P_*.json",
+            "all_dialogue.json",
+            "manifest.json",
+            "flag_metadata.json",
+            "books.json",
+            "library.json",
+        ):
             for file in websrc_data.glob(pattern):
                 file.unlink()
 
@@ -220,17 +247,19 @@ def _run_prepare(
     _ok(f"Fold class files: {fold_count}/{class_rows}")
     typer.echo("Starting AST extraction and JSON generation...")
 
-    extract_rc = extract_ast_main([
-        str(dirs.fold),
-        "--outdir",
-        str(dirs.json),
-        "--repo-root",
-        str(Path.cwd()),
-        "--symbols",
-        str(effective_symbols),
-        "--classes",
-        str(effective_classes),
-    ])
+    extract_rc = extract_ast_main(
+        [
+            str(dirs.fold),
+            "--outdir",
+            str(dirs.json),
+            "--repo-root",
+            str(Path.cwd()),
+            "--symbols",
+            str(effective_symbols),
+            "--classes",
+            str(effective_classes),
+        ]
+    )
     if extract_rc != 0:
         _bad(f"AST extraction failed with exit code {extract_rc}")
         return extract_rc
@@ -238,12 +267,14 @@ def _run_prepare(
     _ok("AST extraction complete")
 
     typer.echo("Starting book extraction...")
-    books_rc = extract_books_main([
-        "--json-dir",
-        str(dirs.json),
-        "--out",
-        str(dirs.json / "books.json"),
-    ])
+    books_rc = extract_books_main(
+        [
+            "--json-dir",
+            str(dirs.json),
+            "--out",
+            str(dirs.json / "books.json"),
+        ]
+    )
     if books_rc != 0:
         _bad(f"Book extraction failed with exit code {books_rc}")
         return books_rc
@@ -251,12 +282,14 @@ def _run_prepare(
     _ok("Book extraction complete")
 
     typer.echo("Starting library extraction...")
-    library_rc = extract_library_main([
-        "--json-dir",
-        str(dirs.json),
-        "--out",
-        str(dirs.json / "library.json"),
-    ])
+    library_rc = extract_library_main(
+        [
+            "--json-dir",
+            str(dirs.json),
+            "--out",
+            str(dirs.json / "library.json"),
+        ]
+    )
     if library_rc != 0:
         _bad(f"Library extraction failed with exit code {library_rc}")
         return library_rc
@@ -306,24 +339,36 @@ def _discover_copy_npc_names(data_dir: Path) -> list[str]:
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise typer.BadParameter(f"Prepared dialogue manifest is not valid JSON: {manifest_path} ({exc})") from exc
+        raise typer.BadParameter(
+            f"Prepared dialogue manifest is not valid JSON: {manifest_path} ({exc})"
+        ) from exc
 
     if not isinstance(manifest, list):
-        raise typer.BadParameter(f"Prepared dialogue manifest is not a JSON array: {manifest_path}")
+        raise typer.BadParameter(
+            f"Prepared dialogue manifest is not a JSON array: {manifest_path}"
+        )
 
     npc_names: list[str] = []
     for entry in manifest:
-        if not isinstance(entry, str) or not entry.startswith("U8P_") or not entry.endswith(".json"):
+        if (
+            not isinstance(entry, str)
+            or not entry.startswith("U8P_")
+            or not entry.endswith(".json")
+        ):
             continue
 
         json_path = data_dir / entry
         try:
             payload = json.loads(json_path.read_text(encoding="utf-8"))
         except Exception as exc:
-            raise typer.BadParameter(f"Prepared dialogue JSON is not valid: {json_path} ({exc})") from exc
+            raise typer.BadParameter(
+                f"Prepared dialogue JSON is not valid: {json_path} ({exc})"
+            ) from exc
 
         if not isinstance(payload, dict):
-            raise typer.BadParameter(f"Prepared dialogue JSON is not an object: {json_path}")
+            raise typer.BadParameter(
+                f"Prepared dialogue JSON is not an object: {json_path}"
+            )
 
         npc_name = payload.get("npc")
         if (
@@ -335,7 +380,9 @@ def _discover_copy_npc_names(data_dir: Path) -> list[str]:
 
     npc_names = sorted(set(npc_names))
     if not npc_names:
-        raise typer.BadParameter(f"No NPC dialogue classes found in prepared data: {data_dir}")
+        raise typer.BadParameter(
+            f"No NPC dialogue classes found in prepared data: {data_dir}"
+        )
     return npc_names
 
 
@@ -394,11 +441,15 @@ def _copy_dialogue_npc_files(runtime_root: Path, destination: Path) -> int:
         shutil.copy2(source, target)
 
     _ok(f"Identified NPC/actor classes: {', '.join(npc_names)}")
-    _ok(f"Copied {len(npc_names)} NPC JSON files and {len(npc_names)} NPC META JSON files.")
+    _ok(
+        f"Copied {len(npc_names)} NPC JSON files and {len(npc_names)} NPC META JSON files."
+    )
     return 0
 
 
-def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_content_lint: bool) -> int:
+def _validate_pipeline_outputs(
+    runtime_root: Path, expected_classes: int, run_content_lint: bool
+) -> int:
     dirs = _runtime_dirs(runtime_root)
     pipeline_resources = _dialogue_root() / "pipeline" / "resources"
     websrc_data = _dialogue_root() / "websrc" / "public" / "data"
@@ -436,7 +487,9 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
 
         total_books = payload.get("totalBooks")
         if total_books != len(books):
-            _bad(f"{label} totalBooks mismatch: declared {total_books}, actual {len(books)} in {path}")
+            _bad(
+                f"{label} totalBooks mismatch: declared {total_books}, actual {len(books)} in {path}"
+            )
 
         seen_qualities: set[int] = set()
         readable = 0
@@ -476,13 +529,21 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
 
             if isinstance(text, str):
                 readable += 1
-                if not isinstance(paragraphs, list) or not all(isinstance(p, str) for p in paragraphs):
-                    _bad(f"{label} book {expected_hex} has text but invalid paragraphs in {path}")
+                if not isinstance(paragraphs, list) or not all(
+                    isinstance(p, str) for p in paragraphs
+                ):
+                    _bad(
+                        f"{label} book {expected_hex} has text but invalid paragraphs in {path}"
+                    )
             elif text is not None:
-                _bad(f"{label} book {expected_hex} text must be string or null in {path}")
+                _bad(
+                    f"{label} book {expected_hex} text must be string or null in {path}"
+                )
 
         if bad_entries:
-            _bad(f"{label} books data contains {bad_entries} malformed entries in {path}")
+            _bad(
+                f"{label} books data contains {bad_entries} malformed entries in {path}"
+            )
 
         if resurrection_entry is None:
             _bad(f"{label} books data is missing Resurrection quality 0x66 in {path}")
@@ -549,7 +610,9 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
                 continue
             items = section.get("items")
             if not isinstance(items, list) or not items:
-                _bad(f"{label} library section {section.get('id')!r} has no items in {path}")
+                _bad(
+                    f"{label} library section {section.get('id')!r} has no items in {path}"
+                )
                 continue
             if section.get("totalItems") != len(items):
                 _bad(
@@ -589,7 +652,9 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
                     malformed += 1
                 if not isinstance(item.get("kind"), str) or not item.get("kind"):
                     malformed += 1
-                if not isinstance(item.get("category"), str) or not item.get("category"):
+                if not isinstance(item.get("category"), str) or not item.get(
+                    "category"
+                ):
                     malformed += 1
 
         spell_sections = [
@@ -702,7 +767,9 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
                 f"actual {total_items} in {path}"
             )
         if malformed:
-            _bad(f"{label} library data contains {malformed} malformed item(s) in {path}")
+            _bad(
+                f"{label} library data contains {malformed} malformed item(s) in {path}"
+            )
         else:
             _ok(f"{label} library data: {len(sections)} sections, {total_items} items")
 
@@ -714,7 +781,9 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     else:
         fold_count = _count(dirs.fold, "U8P_*.txt")
         if fold_count != expected_classes:
-            _bad(f"Fold class count mismatch: expected {expected_classes}, found {fold_count} in {dirs.fold}")
+            _bad(
+                f"Fold class count mismatch: expected {expected_classes}, found {fold_count} in {dirs.fold}"
+            )
         else:
             _ok(f"Fold class files: {fold_count}/{expected_classes}")
 
@@ -723,7 +792,9 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
     else:
         json_count = _count(dirs.json, "U8P_*.json")
         if json_count != expected_classes:
-            _bad(f"JSON class count mismatch: expected {expected_classes}, found {json_count} in {dirs.json}")
+            _bad(
+                f"JSON class count mismatch: expected {expected_classes}, found {json_count} in {dirs.json}"
+            )
         else:
             _ok(f"JSON class files: {json_count}/{expected_classes}")
 
@@ -736,7 +807,9 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
                 payload = json.loads(class_json.read_text(encoding="utf-8"))
             except Exception:
                 continue
-            item_props = payload.get("itemProperties") if isinstance(payload, dict) else None
+            item_props = (
+                payload.get("itemProperties") if isinstance(payload, dict) else None
+            )
             if not isinstance(item_props, dict):
                 continue
             item_props_total += 1
@@ -780,15 +853,20 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
             _bad(f"Runtime manifest is not a JSON array: {manifest_path}")
         else:
             class_entries = [
-                item for item in manifest
-                if isinstance(item, str) and item.startswith("U8P_") and item.endswith(".json")
+                item
+                for item in manifest
+                if isinstance(item, str)
+                and item.startswith("U8P_")
+                and item.endswith(".json")
             ]
             if len(class_entries) != expected_classes:
                 _bad(
                     f"Runtime manifest class entries mismatch: expected {expected_classes}, found {len(class_entries)}"
                 )
             else:
-                _ok(f"Runtime manifest class entries: {len(class_entries)}/{expected_classes}")
+                _ok(
+                    f"Runtime manifest class entries: {len(class_entries)}/{expected_classes}"
+                )
 
     runtime_flag_meta = dirs.web_data / "flag_metadata.json"
     if not runtime_flag_meta.is_file():
@@ -833,11 +911,15 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
         _validate_library_json(websrc_library, "Websrc")
 
     if not websrc_meta.is_dir():
-        _bad(f"Websrc meta directory missing (required for dialogue launch): {websrc_meta}")
+        _bad(
+            f"Websrc meta directory missing (required for dialogue launch): {websrc_meta}"
+        )
     else:
         meta_count = _count(websrc_meta, "*_META.JSON")
         if meta_count == 0:
-            _bad(f"Websrc meta directory is empty (required for dialogue launch): {websrc_meta}")
+            _bad(
+                f"Websrc meta directory is empty (required for dialogue launch): {websrc_meta}"
+            )
         else:
             _ok(f"Websrc meta files: {meta_count}")
 
@@ -850,7 +932,12 @@ def _validate_pipeline_outputs(runtime_root: Path, expected_classes: int, run_co
             _ok("Content lint passed")
 
     if errors:
-        typer.secho(f"Validation failed with {errors} issue(s).", fg=typer.colors.RED, bold=True, err=True)
+        typer.secho(
+            f"Validation failed with {errors} issue(s).",
+            fg=typer.colors.RED,
+            bold=True,
+            err=True,
+        )
         return 1
 
     typer.secho("Validation passed.", fg=typer.colors.GREEN, bold=True)
@@ -880,7 +967,14 @@ def _is_placeholder_shell(shell_dir: Path) -> bool:
     return "Titan dialogue shell placeholder" in text
 
 
-def _serve_dialogue(shell_dir: Path, data_dir: Path, meta_dir: Path, host: str, port: int, open_browser: bool) -> int:
+def _serve_dialogue(
+    shell_dir: Path,
+    data_dir: Path,
+    meta_dir: Path,
+    host: str,
+    port: int,
+    open_browser: bool,
+) -> int:
     class DialogueHandler(SimpleHTTPRequestHandler):
         def log_message(self, format: str, *args) -> None:
             return
@@ -890,10 +984,10 @@ def _serve_dialogue(shell_dir: Path, data_dir: Path, meta_dir: Path, host: str, 
             path = unquote(parsed.path)
 
             if path.startswith("/data"):
-                rel = path[len("/data"):].lstrip("/")
+                rel = path[len("/data") :].lstrip("/")
                 return data_dir / rel
             if path.startswith("/meta"):
-                rel = path[len("/meta"):].lstrip("/")
+                rel = path[len("/meta") :].lstrip("/")
                 return meta_dir / rel
             return None
 
@@ -926,11 +1020,25 @@ def _serve_dialogue(shell_dir: Path, data_dir: Path, meta_dir: Path, host: str, 
 
 @dialogue_app.command("prepare")
 def prepare_cmd(
-    usecode: Optional[Path] = typer.Option(None, "--usecode", help="Path to EUSECODE.FLX"),
-    workdir: Optional[Path] = typer.Option(None, "--workdir", help="Runtime output directory"),
-    symbols: Optional[Path] = typer.Option(None, "--symbols", help="Override symbols.csv path (default: Titan bundled resources)"),
-    classes: Optional[Path] = typer.Option(None, "--classes", help="Override usecode_classes.csv path (default: Titan bundled resources)"),
-    force: bool = typer.Option(False, "--force", help="Regenerate by clearing existing runtime artifacts first"),
+    usecode: Optional[Path] = typer.Option(
+        None, "--usecode", help="Path to EUSECODE.FLX"
+    ),
+    workdir: Optional[Path] = typer.Option(
+        None, "--workdir", help="Runtime output directory"
+    ),
+    symbols: Optional[Path] = typer.Option(
+        None,
+        "--symbols",
+        help="Override symbols.csv path (default: Titan bundled resources)",
+    ),
+    classes: Optional[Path] = typer.Option(
+        None,
+        "--classes",
+        help="Override usecode_classes.csv path (default: Titan bundled resources)",
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Regenerate by clearing existing runtime artifacts first"
+    ),
 ) -> None:
     """Generate fold/text/json/data artifacts for the dialogue viewer."""
     runtime_root = (workdir or _default_runtime_root()).resolve()
@@ -950,7 +1058,9 @@ def prepare_cmd(
 
 @dialogue_app.command("copy")
 def copy_cmd(
-    workdir: Optional[Path] = typer.Option(None, "--workdir", help="Runtime output directory"),
+    workdir: Optional[Path] = typer.Option(
+        None, "--workdir", help="Runtime output directory"
+    ),
     destination: Optional[Path] = typer.Option(
         None,
         "--dest",
@@ -962,7 +1072,9 @@ def copy_cmd(
     """Copy the generated NPC JSON files and bundled META sidecars to a destination folder."""
     runtime_root = (workdir or _default_runtime_root()).resolve()
     if destination is None:
-        destination_text = typer.prompt("Destination directory for NPC JSON and META JSON files")
+        destination_text = typer.prompt(
+            "Destination directory for NPC JSON and META JSON files"
+        )
         destination = Path(destination_text)
     destination_path = destination.expanduser().resolve()
     raise SystemExit(_copy_dialogue_npc_files(runtime_root, destination_path))
@@ -970,27 +1082,51 @@ def copy_cmd(
 
 @dialogue_app.command("validate")
 def validate_cmd(
-    workdir: Optional[Path] = typer.Option(None, "--workdir", help="Runtime output directory"),
-    content_lint: bool = typer.Option(False, "--content-lint", help="Also run deep JSON content lint checks"),
+    workdir: Optional[Path] = typer.Option(
+        None, "--workdir", help="Runtime output directory"
+    ),
+    content_lint: bool = typer.Option(
+        False, "--content-lint", help="Also run deep JSON content lint checks"
+    ),
 ) -> None:
     """Validate generated dialogue pipeline artifacts required for launch."""
     runtime_root = (workdir or _default_runtime_root()).resolve()
     classes_path = _resolve_classes_path(None)
     with classes_path.open("r", encoding="utf-8", newline="") as f:
         expected_classes = sum(1 for _ in csv.DictReader(f))
-    raise SystemExit(_validate_pipeline_outputs(runtime_root, expected_classes, run_content_lint=content_lint))
+    raise SystemExit(
+        _validate_pipeline_outputs(
+            runtime_root, expected_classes, run_content_lint=content_lint
+        )
+    )
 
 
 @dialogue_app.command("launch")
 def launch_cmd(
-    usecode: Optional[Path] = typer.Option(None, "--usecode", help="Path to EUSECODE.FLX"),
-    workdir: Optional[Path] = typer.Option(None, "--workdir", help="Runtime output directory"),
-    symbols: Optional[Path] = typer.Option(None, "--symbols", help="Override symbols.csv path (default: Titan bundled resources)"),
-    classes: Optional[Path] = typer.Option(None, "--classes", help="Override usecode_classes.csv path (default: Titan bundled resources)"),
+    usecode: Optional[Path] = typer.Option(
+        None, "--usecode", help="Path to EUSECODE.FLX"
+    ),
+    workdir: Optional[Path] = typer.Option(
+        None, "--workdir", help="Runtime output directory"
+    ),
+    symbols: Optional[Path] = typer.Option(
+        None,
+        "--symbols",
+        help="Override symbols.csv path (default: Titan bundled resources)",
+    ),
+    classes: Optional[Path] = typer.Option(
+        None,
+        "--classes",
+        help="Override usecode_classes.csv path (default: Titan bundled resources)",
+    ),
     host: str = typer.Option("127.0.0.1", "--host", help="Server bind address"),
     port: int = typer.Option(4173, "--port", help="Server port"),
-    force: bool = typer.Option(False, "--force", help="Force regeneration before launch"),
-    no_open: bool = typer.Option(False, "--no-open", help="Do not auto-open a browser tab"),
+    force: bool = typer.Option(
+        False, "--force", help="Force regeneration before launch"
+    ),
+    no_open: bool = typer.Option(
+        False, "--no-open", help="Do not auto-open a browser tab"
+    ),
 ) -> None:
     """Launch static dialogue viewer using prepared runtime artifacts."""
     runtime_root = (workdir or _default_runtime_root()).resolve()
@@ -1029,8 +1165,14 @@ def launch_cmd(
 
     meta_dir = _dialogue_root() / "websrc" / "public" / "meta"
     if not meta_dir.exists():
-        typer.secho(f"[x] Meta directory not found: {meta_dir}", fg=typer.colors.RED, err=True)
+        typer.secho(
+            f"[x] Meta directory not found: {meta_dir}", fg=typer.colors.RED, err=True
+        )
         raise SystemExit(1)
 
     dirs = _runtime_dirs(runtime_root)
-    raise SystemExit(_serve_dialogue(shell_dir, dirs.web_data, meta_dir, host, port, open_browser=not no_open))
+    raise SystemExit(
+        _serve_dialogue(
+            shell_dir, dirs.web_data, meta_dir, host, port, open_browser=not no_open
+        )
+    )

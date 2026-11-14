@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from titan.md.game_profile import resolve_martian_directory
@@ -83,3 +84,17 @@ def martian_resource_paths(root: Path) -> dict[str, Path]:
         for key, name in MD_RESOURCE_NAMES.items()
         if ((root / name).is_dir() if key == "savegame" else (root / name).is_file())
     }
+
+
+def martian_setup_lines(root: Path, base: Path) -> list[str]:
+    """Render ``[md.game]`` and ``[md.paths]``; *base* may be MARTIAN's parent."""
+    lines = [
+        "",
+        "[md.game]",
+        f"base = {json.dumps(base.as_posix())}",
+        "",
+        "[md.paths]",
+    ]
+    for key, resource in martian_resource_paths(root).items():
+        lines.append(f"{key} = {json.dumps(resource.relative_to(base).as_posix())}")
+    return lines

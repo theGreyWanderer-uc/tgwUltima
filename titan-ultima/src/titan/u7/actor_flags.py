@@ -198,9 +198,9 @@ def load_u7_actor_flags(
     else:
         bundle = str(exult_flx_path) if exult_flx_path is not None else None
         if bundle is None and discover_defaults:
-            from titan.u7.cli import _resolve_u7_exult_flx
+            from titan.u7.install import resolve_u7_exult_flx
 
-            bundle = _resolve_u7_exult_flx(game)
+            bundle = resolve_u7_exult_flx(game)
         if bundle is not None:
             path = Path(bundle).expanduser()
             archive = U7FlexArchive.from_file(str(path), strict=True)

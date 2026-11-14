@@ -20,15 +20,19 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image, ImageSequence
 
-from titan.u7.cli import cmd_shape_animate
+from titan.u7.cli.shapes import cmd_shape_animate
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
+from pathlib import Path
+import pytest
 
 _SHAPE_NUM = 200  # > FIRST_OBJ_SHAPE (150), so it's treated as an RLE sprite
 _TRANSLUCENT_INDEX = 254  # xfstart with a single BLENDS.DAT record
 _RAW_PALETTE_COLOR = (0, 255, 0)  # what index 254 looks like if NOT blended
 _BLEND_RGBA = (255, 0, 0, 255)  # BLENDS.DAT record for index 254
-_EXPECTED_PREVIEW = tuple(_BLEND_RGBA[:3])  # composite_rgba_preview: raw, undivided blend RGB
+_EXPECTED_PREVIEW = tuple(
+    _BLEND_RGBA[:3]
+)  # composite_rgba_preview: raw, undivided blend RGB
 
 
 def _write_tfa(static_dir: str) -> None:
@@ -139,7 +143,8 @@ class ShapeAnimateFramesModeTranslucencyTests(unittest.TestCase):
         for i, colors in enumerate(per_frame_colors):
             with self.subTest(frame=i):
                 self.assertNotIn(
-                    _RAW_PALETTE_COLOR, colors,
+                    _RAW_PALETTE_COLOR,
+                    colors,
                     "translucent pixel rendered as raw unblended palette colour "
                     "(the frames-mode to_pngs() call is missing translucency args)",
                 )
@@ -156,3 +161,28 @@ class ShapeAnimateFramesModeTranslucencyTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_cycle_export_rejects_empty_frame_without_creating_gif(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source = tmp_path / "empty.shp"
+    source.write_bytes(b"placeholder")
+    shape = U7Shape()
+    shape.frames = [U7Shape.Frame()]
+    monkeypatch.setattr(U7Shape, "from_file", lambda _path: shape)
+    output = tmp_path / "empty.gif"
+    status = cmd_shape_animate(
+        SimpleNamespace(
+            file=str(source),
+            palette=None,
+            frame=0,
+            static=None,
+            shape=None,
+            mode="cycle",
+            output=str(output),
+        )
+    )
+    assert status == 1
+    assert "Frame 0 has no pixel data" in capsys.readouterr().err
+    assert not output.exists()

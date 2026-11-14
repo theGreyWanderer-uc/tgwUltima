@@ -20,15 +20,22 @@ def _config(tmp_path):
     uof = tmp_path / "uof"
     classic.mkdir()
     uof.mkdir()
-    return {
-        "uo": {
-            "game": {"install": "classic"},
-            "installs": {
-                "classic": {"path": str(classic), "output": str(tmp_path / "out" / "classic")},
-                "UOF": {"path": str(uof), "multis": "mul"},
-            },
-        }
-    }, classic, uof
+    return (
+        {
+            "uo": {
+                "game": {"install": "classic"},
+                "installs": {
+                    "classic": {
+                        "path": str(classic),
+                        "output": str(tmp_path / "out" / "classic"),
+                    },
+                    "UOF": {"path": str(uof), "multis": "mul"},
+                },
+            }
+        },
+        classic,
+        uof,
+    )
 
 
 def test_resolve_install_by_name_default_and_path(tmp_path):
@@ -41,7 +48,9 @@ def test_resolve_install_by_name_default_and_path(tmp_path):
     path, install = resolve_install("uof", config)  # names are case-insensitive
     assert path == uof and install.multis == "mul" and install.output is None
 
-    path, install = resolve_install(str(uof), config)  # a directory maps back to its install
+    path, install = resolve_install(
+        str(uof), config
+    )  # a directory maps back to its install
     assert install is not None and install.name == "UOF"
 
     other = tmp_path / "other"
@@ -61,7 +70,10 @@ def test_resolve_install_errors(tmp_path):
 
 
 def test_legacy_base_still_works(tmp_path):
-    assert resolve_install(None, {"uo": {"game": {"base": str(tmp_path)}}}) == (tmp_path, None)
+    assert resolve_install(None, {"uo": {"game": {"base": str(tmp_path)}}}) == (
+        tmp_path,
+        None,
+    )
 
 
 # -- multi record size ------------------------------------------------------
@@ -130,14 +142,18 @@ def test_parse_house_placement_tool(tmp_path):
     path = tmp_path / "HousePlacementTool.cs"
     path.write_text(_TOOL, encoding="utf-8")
     entries = parse_house_placement_tool(path)
-    assert [(e.category, e.type_name, e.multi_id, e.offset, e.cost) for e in entries] == [
+    assert [
+        (e.category, e.type_name, e.multi_id, e.offset, e.cost) for e in entries
+    ] == [
         ("ClassicHouses", "SmallOldHouse", 0x64, (0, 4, 0), 37000),
         ("TwoStoryFoundations", "HouseFoundation", 0x13EC, (0, 4, 0), 30500),
     ]
 
 
 def _tiledata():
-    statics = [UOStaticTile(i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "x") for i in range(0x200)]
+    statics = [
+        UOStaticTile(i, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "x") for i in range(0x200)
+    ]
     statics[0x10] = UOStaticTile(0x10, 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, "wall")
     statics[0x63] = UOStaticTile(0x63, 0x10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, "stairs")
     statics[0x20] = UOStaticTile(0x20, 0x200, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, "floor")
@@ -186,7 +202,9 @@ def test_footprint_drawing_and_sheet(tmp_path):
     cursor = thumb.getpixel((2 * 4 + 2, 10 * 4 + 2))
     assert centre == (220, 60, 60) and cursor == (90, 200, 120)
 
-    sheet = footprint_sheet([(entry, "Stone house", footprint)], scale=4, max_width=400, title="t")
+    sheet = footprint_sheet(
+        [(entry, "Stone house", footprint)], scale=4, max_width=400, title="t"
+    )
     assert sheet.width == 400 and sheet.height > thumb.height
 
 
@@ -214,12 +232,14 @@ def _placement_tiledata():
 
     td = _tiledata()
     td.land = [UOLandTile(i, 0, 0, "grass") for i in range(4)]
-    td.statics[0x50] = UOStaticTile(0x50, 0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, "tree")
+    td.statics[0x50] = UOStaticTile(
+        0x50, 0x40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 20, "tree"
+    )
     return td
 
 
 def test_placement_legal_area_and_tree_blocking():
-    from titan.uo.placement import coverage, pack_houses, placement_legality
+    from titan.uo.placement import coverage, placement_legality
 
     td = _placement_tiledata()
     multi = _ring_multi(0x64)  # 3x3 house, border reaches +-2
@@ -284,7 +304,7 @@ def test_region_layers_follow_region_find(tmp_path):
     path = tmp_path / "Regions.xml"
     path.write_text(_REGIONS, encoding="utf-8")
     layers, counts = load_region_layers(path, "Felucca", 32, 16)
-    assert [(l.z_min, l.z_max) for l in layers] == [(-128, 0), (0, 128)]
+    assert [(layer.z_min, layer.z_max) for layer in layers] == [(-128, 0), (0, 128)]
     below, ground = layers
 
     # The town only reaches down to z 0 (its zrange), so below that it allows.
@@ -321,17 +341,37 @@ def test_capacity_viewer_embeds_layers(tmp_path):
         title="Test <map>",
         window=(0, 0, 48, 48),
         base_rgb=np.zeros((48, 48, 3), dtype=np.uint8),
-        houses=[{"label": "Ring", "result": result, "coverage": covered, "placed": placed}],
-        regions=[{"name": "Town", "type": "TownRegion", "allow": False, "no_housing": False,
-                  "priority": 50, "x": 0, "y": 0, "w": 5, "h": 5}],
+        houses=[
+            {"label": "Ring", "result": result, "coverage": covered, "placed": placed}
+        ],
+        regions=[
+            {
+                "name": "Town",
+                "type": "TownRegion",
+                "allow": False,
+                "no_housing": False,
+                "priority": 50,
+                "x": 0,
+                "y": 0,
+                "w": 5,
+                "h": 5,
+            }
+        ],
     )
     assert "Test &lt;map&gt;" in page.read_text(encoding="utf-8")
-    data = json.loads((tmp_path / "viewer" / "data.js").read_text(encoding="utf-8")
-                      .removeprefix("window.CAPACITY = ").rstrip().rstrip(";"))
+    data = json.loads(
+        (tmp_path / "viewer" / "data.js")
+        .read_text(encoding="utf-8")
+        .removeprefix("window.CAPACITY = ")
+        .rstrip()
+        .rstrip(";")
+    )
     house = data["houses"][0]
     assert house["legal"] == result.legal_count and len(house["placed"]) == len(placed)
     assert [r["key"] for r in data["reasons"]] == list(REASONS)
-    codes = np.asarray(Image.open(io.BytesIO(base64.b64decode(house["codes"].split(",", 1)[1]))))
+    codes = np.asarray(
+        Image.open(io.BytesIO(base64.b64decode(house["codes"].split(",", 1)[1])))
+    )
     assert codes.shape == (48, 48)
     assert ((codes & COVERED_BIT) != 0).sum() == covered.sum()
     assert ((codes & 0x7F) == 0).sum() == result.legal_count
@@ -342,7 +382,12 @@ def test_capacity_viewer_embeds_layers(tmp_path):
 def test_mixed_packing_classes_and_conflicts():
     import numpy as np
 
-    from titan.uo.mixed_packing import HouseKind, MixedSettings, pack_mixed, zone_distances
+    from titan.uo.mixed_packing import (
+        HouseKind,
+        MixedSettings,
+        pack_mixed,
+        zone_distances,
+    )
     from titan.uo.placement import build_placement_grids, legal_centres
 
     td = _placement_tiledata()
@@ -359,11 +404,16 @@ def test_mixed_packing_classes_and_conflicts():
     tdist, rdist = zone_distances((96, 96), town, rock, settings)
     assert tdist[0, 0] == 0 and tdist[-1, -1] > 0 and np.isinf(rdist).all()
 
-    packing = pack_mixed((0, 0, 96, 96), kinds, [centres, centres], tdist, rdist, settings)
+    packing = pack_mixed(
+        (0, 0, 96, 96), kinds, [centres, centres], tdist, rdist, settings
+    )
     # Every zone drew "large", so the large kind is placed first and dominates.
     assert packing.counts.get("large", 0) > 0
     assert (packing.zone_classes == 0).all()
-    reach = [{(x + dx, y + dy) for dx, dy in fp.occupied | fp.yard} for x, y, _ in packing.placed]
+    reach = [
+        {(x + dx, y + dy) for dx, dy in fp.occupied | fp.yard}
+        for x, y, _ in packing.placed
+    ]
     occ = [{(x + dx, y + dy) for dx, dy in fp.occupied} for x, y, _ in packing.placed]
     for i in range(len(occ)):
         for j in range(i):
@@ -380,10 +430,18 @@ def test_mixed_zones_only_draw_classes_that_fit():
     # The large kind fits only in the top-left 32x32 zone.
     small_centres = (np.array([5, 40, 70]), np.array([5, 40, 70]))
     large_centres = (np.array([5]), np.array([5]))
-    settings = MixedSettings(zone_size=32, seed=3, class_weights=((0.01, 0.0, 0.99),) * 4)
+    settings = MixedSettings(
+        zone_size=32, seed=3, class_weights=((0.01, 0.0, 0.99),) * 4
+    )
     dist = np.zeros((12, 12), dtype=np.float32)
-    packing = pack_mixed((0, 0, 96, 96), kinds, [small_centres, large_centres], dist,
-                         np.full((12, 12), np.inf, dtype=np.float32), settings)
+    packing = pack_mixed(
+        (0, 0, 96, 96),
+        kinds,
+        [small_centres, large_centres],
+        dist,
+        np.full((12, 12), np.inf, dtype=np.float32),
+        settings,
+    )
     classes = packing.zone_classes
     assert classes[0, 0] == 0  # "large" where a large house fits
     assert (classes.ravel()[1:] == 3).all()  # everywhere else falls to "small"
@@ -409,12 +467,18 @@ def test_server_profile_round_trip(tmp_path):
     tool.write_text(_TOOL, encoding="utf-8")
 
     profile = build_server_profile(
-        "Test", regions_xml=regions, scripts_dir=scripts, placement_tool=tool, source={"x": 1}
+        "Test",
+        regions_xml=regions,
+        scripts_dir=scripts,
+        placement_tool=tool,
+        source={"x": 1},
     )
     path = profile.write(tmp_path / "profile.json")
     loaded = ServerProfile.load(path)
 
-    expected, _ = _parse_region_rects(regions, "Felucca", no_housing_region_types(scripts))
+    expected, _ = _parse_region_rects(
+        regions, "Felucca", no_housing_region_types(scripts)
+    )
     assert loaded.region_rects("felucca") == expected
     assert loaded.region_rects("Malas") is None
     assert loaded.forbidding_types == {"TownRegion", "NoHousingRegion"}
@@ -437,4 +501,6 @@ def test_builtin_house_entries_from_client_multis():
         ("CustomizableFoundations", 0x13EC),
     ]
     assert entries[0].cliloc == 1011303
-    assert entries[1].type_name == "3x3 customizable plot"  # 3 wide, stairs row excluded
+    assert (
+        entries[1].type_name == "3x3 customizable plot"
+    )  # 3 wide, stairs row excluded

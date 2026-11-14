@@ -118,7 +118,7 @@ class U6Library:
         return len(self.items)
 
     def _read_entry(self, pos: int) -> int:
-        return int.from_bytes(self._data[pos:pos + self.entry_size], "little")
+        return int.from_bytes(self._data[pos : pos + self.entry_size], "little")
 
     def _count_offsets(self, table_start: int) -> int:
         """Scan the offset table until candidate length bounds converge (see module docstring)."""
@@ -169,12 +169,14 @@ class U6Library:
         for i in range(num_offsets):
             offset = raw_offsets[i]
             next_offset = 0
-            for later in bounds[i + 1:]:
+            for later in bounds[i + 1 :]:
                 if later:
                     next_offset = later
                     break
             size = (next_offset - offset) if (offset and next_offset > offset) else 0
-            self.items.append(U6LibraryItem(index=i, offset=offset, flag=flags[i], size=size))
+            self.items.append(
+                U6LibraryItem(index=i, offset=offset, flag=flags[i], size=size)
+            )
 
     def is_compressed(self, item_number: int) -> bool:
         """
@@ -191,7 +193,7 @@ class U6Library:
         if item.flag in (FLAG_COMPRESSED, FLAG_COMPRESSED_MD_FONTS):
             return True
         if item.flag == FLAG_DEFER_TO_NEXT:
-            for later in self.items[item_number + 1:]:
+            for later in self.items[item_number + 1 :]:
                 if later.flag != FLAG_DEFER_TO_NEXT:
                     return self.is_compressed(later.index)
         return False
@@ -199,11 +201,13 @@ class U6Library:
     def get_item(self, item_number: int) -> bytes:
         """Return the bytes for one item, transparently LZW-decompressed if needed."""
         if item_number < 0 or item_number >= len(self.items):
-            raise U6LibraryError(f"item index {item_number} out of range (0..{len(self.items) - 1})")
+            raise U6LibraryError(
+                f"item index {item_number} out of range (0..{len(self.items) - 1})"
+            )
         item = self.items[item_number]
         if item.size == 0 or item.offset == 0:
             return b""
-        raw = self._data[item.offset:item.offset + item.size]
+        raw = self._data[item.offset : item.offset + item.size]
         if self.is_compressed(item_number) or U6Lzw.is_valid(raw):
             return U6Lzw.decompress_buffer(raw)
         return raw

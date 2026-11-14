@@ -164,7 +164,9 @@ class U9SaveArchive:
             raw, offset = read_bytes(read_i32(f"{name} length"), name)
             nonfixed.append(U9SaveMember(name, raw, offset, map_number))
         if cursor != len(data):
-            raise U9SaveError(f"{len(data) - cursor} trailing bytes after map terminator")
+            raise U9SaveError(
+                f"{len(data) - cursor} trailing bytes after map terminator"
+            )
         return cls(header, screenshot, processes, diary, tuple(nonfixed))
 
     def member(self, name: str) -> U9SaveMember | None:
@@ -174,4 +176,6 @@ class U9SaveArchive:
             return self.processes
         if lowered == "diary.txt":
             return self.diary
-        return next((member for member in self.nonfixed if member.name == lowered), None)
+        return next(
+            (member for member in self.nonfixed if member.name == lowered), None
+        )

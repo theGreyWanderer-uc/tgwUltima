@@ -17,10 +17,15 @@ from .resize_right.resize_right2d_numpy import (
 )
 
 _LUT_NAMES: list[str] = [
-    "LUTft_s1_cr0", "LUTft_s1_sr0", "LUTft_s1_tr0",
-    "LUTft_s2_cr0", "LUTft_s2_cr1",
-    "LUTft_s2_sr0", "LUTft_s2_sr1",
-    "LUTft_s2_tr0", "LUTft_s2_tr1",
+    "LUTft_s1_cr0",
+    "LUTft_s1_sr0",
+    "LUTft_s1_tr0",
+    "LUTft_s2_cr0",
+    "LUTft_s2_cr1",
+    "LUTft_s2_sr0",
+    "LUTft_s2_sr1",
+    "LUTft_s2_tr0",
+    "LUTft_s2_tr1",
 ]
 
 
@@ -82,7 +87,11 @@ def downscale_adaptive(
             if key in luts:
                 lut = luts[key]
                 # Quantise input to LUT indices
-                idx = (target * (lut.shape[0] - 1)).astype(np.int32).clip(0, lut.shape[0] - 1)
+                idx = (
+                    (target * (lut.shape[0] - 1))
+                    .astype(np.int32)
+                    .clip(0, lut.shape[0] - 1)
+                )
                 # Use LUT as a 1-D refinement table
                 if lut.ndim == 1:
                     target[...] = lut[idx]

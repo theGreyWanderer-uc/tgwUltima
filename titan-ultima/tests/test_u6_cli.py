@@ -55,7 +55,11 @@ from titan.u6.cli import (
     _u6_gamedir,
 )
 from titan.u6.font import FILE_SIZE as FONT_FILE_SIZE
-from titan.u6.gamestate import OFFSET_NUM_IN_PARTY, OFFSET_PARTY_NAMES, OFFSET_PARTY_ROSTER
+from titan.u6.gamestate import (
+    OFFSET_NUM_IN_PARTY,
+    OFFSET_PARTY_NAMES,
+    OFFSET_PARTY_ROSTER,
+)
 from titan.u6.gamestate import REQUIRED_SIZE as GAMESTATE_REQUIRED_SIZE
 from titan.u6.map import DUNGEON_LEVELS, SURFACE_SIDE_SUPERCHUNKS, SURFACE_SUPERCHUNKS
 from titan.u6.object import EGG_OBJ_N, pack_position
@@ -88,7 +92,9 @@ def _make_synthetic_gamedir(dirpath: str) -> None:
     # surface blocks; 5 empty dungeon blocks followed by an all-zero
     # objlist tail (large enough for U6Actors.parse to accept).
     b0, b1, b2 = pack_position(1, 1, 0)
-    record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 3, 0, 1, 0)  # status=on-map, obj_n=3
+    record = struct.pack(
+        "<BBBBBBBB", 0x00, b0, b1, b2, 3, 0, 1, 0
+    )  # status=on-map, obj_n=3
     block0 = struct.pack("<H", 1) + record
     with open(os.path.join(dirpath, "LZOBJBLK"), "wb") as f:
         f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
@@ -172,33 +178,54 @@ class LibraryCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_lib_list_missing_file(self):
-        rc = cmd_lib_list(SimpleNamespace(file="/nope", entry_size=4, size_header=False))
+        rc = cmd_lib_list(
+            SimpleNamespace(file="/nope", entry_size=4, size_header=False)
+        )
         self.assertEqual(rc, 1)
 
     def test_lib_list_succeeds(self):
-        rc = cmd_lib_list(SimpleNamespace(file=self.path, entry_size=4, size_header=False))
+        rc = cmd_lib_list(
+            SimpleNamespace(file=self.path, entry_size=4, size_header=False)
+        )
         self.assertEqual(rc, 0)
 
     def test_lib_extract_out_of_range(self):
-        rc = cmd_lib_extract(SimpleNamespace(
-            file=self.path, item=99, entry_size=4, size_header=False, output=None,
-        ))
+        rc = cmd_lib_extract(
+            SimpleNamespace(
+                file=self.path,
+                item=99,
+                entry_size=4,
+                size_header=False,
+                output=None,
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_lib_extract_writes_item(self):
         outdir = os.path.join(self.tmpdir.name, "out")
-        rc = cmd_lib_extract(SimpleNamespace(
-            file=self.path, item=0, entry_size=4, size_header=False, output=outdir,
-        ))
+        rc = cmd_lib_extract(
+            SimpleNamespace(
+                file=self.path,
+                item=0,
+                entry_size=4,
+                size_header=False,
+                output=outdir,
+            )
+        )
         self.assertEqual(rc, 0)
         with open(os.path.join(outdir, "TESTLIB_0000.bin"), "rb") as f:
             self.assertEqual(f.read(), b"AB")
 
     def test_lib_extract_all_writes_every_item(self):
         outdir = os.path.join(self.tmpdir.name, "out_all")
-        rc = cmd_lib_extract_all(SimpleNamespace(
-            file=self.path, entry_size=4, size_header=False, output=outdir,
-        ))
+        rc = cmd_lib_extract_all(
+            SimpleNamespace(
+                file=self.path,
+                entry_size=4,
+                size_header=False,
+                output=outdir,
+            )
+        )
         self.assertEqual(rc, 0)
         self.assertTrue(os.path.isfile(os.path.join(outdir, "0000_TESTLIB.bin")))
         self.assertTrue(os.path.isfile(os.path.join(outdir, "0001_TESTLIB.bin")))
@@ -247,27 +274,45 @@ class TileExportCliTests(unittest.TestCase):
 
     def test_missing_gamedir_errors(self):
         with self.assertRaises(SystemExit):
-            cmd_tile_export(SimpleNamespace(tile_num=0, gamedir=None, palette=None, output=None))
+            cmd_tile_export(
+                SimpleNamespace(tile_num=0, gamedir=None, palette=None, output=None)
+            )
 
     def test_out_of_range_tile(self):
-        rc = cmd_tile_export(SimpleNamespace(
-            tile_num=99999, gamedir=self.tmpdir.name, palette=None, output=None,
-        ))
+        rc = cmd_tile_export(
+            SimpleNamespace(
+                tile_num=99999,
+                gamedir=self.tmpdir.name,
+                palette=None,
+                output=None,
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_exports_one_tile(self):
         outdir = os.path.join(self.tmpdir.name, "out")
-        rc = cmd_tile_export(SimpleNamespace(
-            tile_num=0, gamedir=self.tmpdir.name, palette=None, output=outdir,
-        ))
+        rc = cmd_tile_export(
+            SimpleNamespace(
+                tile_num=0,
+                gamedir=self.tmpdir.name,
+                palette=None,
+                output=outdir,
+            )
+        )
         self.assertEqual(rc, 0)
         self.assertTrue(os.path.isfile(os.path.join(outdir, "tile_0000.png")))
 
     def test_exports_all_in_range(self):
         outdir = os.path.join(self.tmpdir.name, "out_all")
-        rc = cmd_tile_export_all(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, start=0, end=3, output=outdir,
-        ))
+        rc = cmd_tile_export_all(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                start=0,
+                end=3,
+                output=outdir,
+            )
+        )
         self.assertEqual(rc, 0)
         for i in range(4):
             self.assertTrue(os.path.isfile(os.path.join(outdir, f"tile_{i:04d}.png")))
@@ -284,8 +329,14 @@ class MapRenderCliTests(unittest.TestCase):
 
     def _args(self, **overrides):
         base = dict(
-            gamedir=self.tmpdir.name, palette=None, region=None, dungeon=None,
-            full=False, tick=0, objects=False, output=None,
+            gamedir=self.tmpdir.name,
+            palette=None,
+            region=None,
+            dungeon=None,
+            full=False,
+            tick=0,
+            objects=False,
+            output=None,
         )
         base.update(overrides)
         return SimpleNamespace(**base)
@@ -356,7 +407,12 @@ class MapAuditZorderCliTests(unittest.TestCase):
         with open(os.path.join(self.tmpdir.name, "BASETILE"), "wb") as f:
             f.write(bytes(basetile))
         with open(os.path.join(self.tmpdir.name, "LOOK.LZD"), "wb") as f:
-            f.write(struct.pack("<H", 20) + b"apple\x00" + struct.pack("<H", 21) + b"banana\x00")
+            f.write(
+                struct.pack("<H", 20)
+                + b"apple\x00"
+                + struct.pack("<H", 21)
+                + b"banana\x00"
+            )
 
         # Two distinct objects (obj_n=10, obj_n=11) at the identical position
         # (5,5,0) -- an ordinary stack overlap, replacing the base fixture's
@@ -372,8 +428,11 @@ class MapAuditZorderCliTests(unittest.TestCase):
 
     def _args(self, **overrides):
         base = dict(
-            gamedir=self.tmpdir.name, min_winner_opacity=0.60, min_loser_opacity=0.10,
-            limit=200, dungeons=False,
+            gamedir=self.tmpdir.name,
+            min_winner_opacity=0.60,
+            min_loser_opacity=0.10,
+            limit=200,
+            dungeons=False,
         )
         base.update(overrides)
         return SimpleNamespace(**base)
@@ -432,7 +491,7 @@ class DoubleSizeObjectRenderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -448,10 +507,18 @@ class DoubleSizeObjectRenderTests(unittest.TestCase):
 
     def test_extra_cell_is_composited(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
@@ -459,10 +526,14 @@ class DoubleSizeObjectRenderTests(unittest.TestCase):
         black = (0, 0, 0)
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5) within it.
         self.assertEqual(img.getpixel((5 * 16, 5 * 16)), red)  # anchor cell
-        self.assertEqual(img.getpixel((4 * 16, 5 * 16)), red)  # is_double_h: cell to the left
+        self.assertEqual(
+            img.getpixel((4 * 16, 5 * 16)), red
+        )  # is_double_h: cell to the left
         self.assertEqual(img.getpixel((5 * 16, 4 * 16)), red)  # is_double_v: cell above
         self.assertEqual(img.getpixel((4 * 16, 4 * 16)), red)  # both: top-left cell
-        self.assertEqual(img.getpixel((3 * 16, 5 * 16)), black)  # untouched terrain, sanity check
+        self.assertEqual(
+            img.getpixel((3 * 16, 5 * 16)), black
+        )  # untouched terrain, sanity check
 
 
 class OverlappingObjectForegroundOrderTests(unittest.TestCase):
@@ -500,7 +571,7 @@ class OverlappingObjectForegroundOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         tile_601_offset = (601 - 512) * 256
-        objtiles[tile_601_offset:tile_601_offset + 256] = bytes([8]) * 256
+        objtiles[tile_601_offset : tile_601_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -509,8 +580,8 @@ class OverlappingObjectForegroundOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -530,10 +601,18 @@ class OverlappingObjectForegroundOrderTests(unittest.TestCase):
 
     def test_foreground_object_wins_regardless_of_file_order(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
@@ -569,7 +648,7 @@ class SupportingFlagDoesNotRankTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         tile_601_offset = (601 - 512) * 256
-        objtiles[tile_601_offset:tile_601_offset + 256] = bytes([8]) * 256
+        objtiles[tile_601_offset : tile_601_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -578,8 +657,8 @@ class SupportingFlagDoesNotRankTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -599,10 +678,18 @@ class SupportingFlagDoesNotRankTests(unittest.TestCase):
 
     def test_supporting_flag_does_not_override_stored_order(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
@@ -644,7 +731,7 @@ class ForegroundOverflowCoversAnchorTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         tile_649_offset = (649 - 512) * 256
-        objtiles[tile_649_offset:tile_649_offset + 256] = bytes([8]) * 256
+        objtiles[tile_649_offset : tile_649_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -653,8 +740,8 @@ class ForegroundOverflowCoversAnchorTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -665,7 +752,9 @@ class ForegroundOverflowCoversAnchorTests(unittest.TestCase):
         hb0, hb1, hb2 = pack_position(10, 10, 0)
         hood_b0, hood_b1, hood_b2 = pack_position(11, 10, 0)
         hammer_record = struct.pack("<BBBBBBBB", 0x00, hb0, hb1, hb2, 10, 0, 1, 0)
-        hood_record = struct.pack("<BBBBBBBB", 0x00, hood_b0, hood_b1, hood_b2, 11, 0, 1, 0)
+        hood_record = struct.pack(
+            "<BBBBBBBB", 0x00, hood_b0, hood_b1, hood_b2, 11, 0, 1, 0
+        )
         block0 = struct.pack("<H", 2) + hammer_record + hood_record
         with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
             f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
@@ -675,10 +764,18 @@ class ForegroundOverflowCoversAnchorTests(unittest.TestCase):
 
     def test_foreground_overflow_covers_ordinary_anchor(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
@@ -723,12 +820,12 @@ class OverflowCellsPreserveForegroundOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         hammer_offset = (600 - 512) * 256
-        objtiles[hammer_offset:hammer_offset + 256] = bytes([0xFF]) * 256
+        objtiles[hammer_offset : hammer_offset + 256] = bytes([0xFF]) * 256
         objtiles[hammer_offset] = 9  # top-left pixel only
         hood_overflow_offset = (649 - 512) * 256
-        objtiles[hood_overflow_offset:hood_overflow_offset + 256] = bytes([7]) * 256
+        objtiles[hood_overflow_offset : hood_overflow_offset + 256] = bytes([7]) * 256
         fire_overflow_offset = (699 - 512) * 256
-        objtiles[fire_overflow_offset:fire_overflow_offset + 256] = bytes([8]) * 256
+        objtiles[fire_overflow_offset : fire_overflow_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -737,9 +834,9 @@ class OverflowCellsPreserveForegroundOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([0, 63, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
-        pal[9 * 3:9 * 3 + 3] = bytes([63, 63, 0])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([0, 63, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
+        pal[9 * 3 : 9 * 3 + 3] = bytes([63, 63, 0])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -749,8 +846,12 @@ class OverflowCellsPreserveForegroundOrderTests(unittest.TestCase):
         hb0, hb1, hb2 = pack_position(10, 10, 0)
         shared_b0, shared_b1, shared_b2 = pack_position(11, 10, 0)
         hammer_record = struct.pack("<BBBBBBBB", 0x00, hb0, hb1, hb2, 10, 0, 1, 0)
-        hood_record = struct.pack("<BBBBBBBB", 0x00, shared_b0, shared_b1, shared_b2, 11, 0, 1, 0)
-        fire_record = struct.pack("<BBBBBBBB", 0x00, shared_b0, shared_b1, shared_b2, 12, 0, 1, 0)
+        hood_record = struct.pack(
+            "<BBBBBBBB", 0x00, shared_b0, shared_b1, shared_b2, 11, 0, 1, 0
+        )
+        fire_record = struct.pack(
+            "<BBBBBBBB", 0x00, shared_b0, shared_b1, shared_b2, 12, 0, 1, 0
+        )
         block0 = struct.pack("<H", 3) + hammer_record + hood_record + fire_record
         with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
             f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
@@ -760,17 +861,29 @@ class OverflowCellsPreserveForegroundOrderTests(unittest.TestCase):
 
     def test_foreground_hood_overflow_covers_fire_and_hammer(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (0, 255, 0))  # native foreground overflow wins
-        self.assertEqual(img.getpixel((88, 88)), (0, 255, 0))  # hammer transparent here: hood (green), not fire (blue)
+        self.assertEqual(
+            img.getpixel((80, 80)), (0, 255, 0)
+        )  # native foreground overflow wins
+        self.assertEqual(
+            img.getpixel((88, 88)), (0, 255, 0)
+        )  # hammer transparent here: hood (green), not fire (blue)
 
 
 class WarmObjectRecordOrderTests(unittest.TestCase):
@@ -802,9 +915,9 @@ class WarmObjectRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         fire_offset = (600 - 512) * 256
-        objtiles[fire_offset:fire_offset + 256] = bytes([7]) * 256
+        objtiles[fire_offset : fire_offset + 256] = bytes([7]) * 256
         pliers_offset = (601 - 512) * 256
-        objtiles[pliers_offset:pliers_offset + 256] = bytes([0xFF]) * 256
+        objtiles[pliers_offset : pliers_offset + 256] = bytes([0xFF]) * 256
         objtiles[pliers_offset] = 8
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
@@ -813,8 +926,8 @@ class WarmObjectRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([0, 0, 63])
-        pal[8 * 3:8 * 3 + 3] = bytes([63, 0, 0])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([0, 0, 63])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([63, 0, 0])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -833,17 +946,29 @@ class WarmObjectRecordOrderTests(unittest.TestCase):
 
     def test_pliers_stay_visible_over_the_fire(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # pliers' opaque pixel wins over the fire
-        self.assertEqual(img.getpixel((88, 88)), (0, 0, 255))  # pliers transparent here: the fire still shows through
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # pliers' opaque pixel wins over the fire
+        self.assertEqual(
+            img.getpixel((88, 88)), (0, 0, 255)
+        )  # pliers transparent here: the fire still shows through
 
 
 class BackgroundAnchorYieldsToForeignOverflowCellTests(unittest.TestCase):
@@ -887,9 +1012,9 @@ class BackgroundAnchorYieldsToForeignOverflowCellTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         fabric_offset = (649 - 512) * 256
-        objtiles[fabric_offset:fabric_offset + 256] = bytes([7]) * 256
+        objtiles[fabric_offset : fabric_offset + 256] = bytes([7]) * 256
         carpet_offset = (700 - 512) * 256
-        objtiles[carpet_offset:carpet_offset + 256] = bytes([8]) * 256
+        objtiles[carpet_offset : carpet_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -897,8 +1022,8 @@ class BackgroundAnchorYieldsToForeignOverflowCellTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -906,7 +1031,9 @@ class BackgroundAnchorYieldsToForeignOverflowCellTests(unittest.TestCase):
         # overflow cell lands on the carpet's own anchor tile.
         carpet_b0, carpet_b1, carpet_b2 = pack_position(10, 10, 0)
         bed_b0, bed_b1, bed_b2 = pack_position(11, 10, 0)
-        carpet_record = struct.pack("<BBBBBBBB", 0x00, carpet_b0, carpet_b1, carpet_b2, 11, 0, 1, 0)
+        carpet_record = struct.pack(
+            "<BBBBBBBB", 0x00, carpet_b0, carpet_b1, carpet_b2, 11, 0, 1, 0
+        )
         bed_record = struct.pack("<BBBBBBBB", 0x00, bed_b0, bed_b1, bed_b2, 10, 0, 1, 0)
         block0 = struct.pack("<H", 2) + carpet_record + bed_record
         with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
@@ -917,16 +1044,26 @@ class BackgroundAnchorYieldsToForeignOverflowCellTests(unittest.TestCase):
 
     def test_bed_fabric_stays_visible_over_the_carpet(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # bed fabric wins over the carpet's anchor
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # bed fabric wins over the carpet's anchor
 
 
 class UnflaggedCarpetRecordOrderTests(unittest.TestCase):
@@ -951,9 +1088,9 @@ class UnflaggedCarpetRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         candle_offset = (601 - 512) * 256
-        objtiles[candle_offset:candle_offset + 256] = bytes([7]) * 256
+        objtiles[candle_offset : candle_offset + 256] = bytes([7]) * 256
         carpet_offset = (750 - 512) * 256
-        objtiles[carpet_offset:carpet_offset + 256] = bytes([8]) * 256
+        objtiles[carpet_offset : carpet_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -961,8 +1098,8 @@ class UnflaggedCarpetRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -983,16 +1120,26 @@ class UnflaggedCarpetRecordOrderTests(unittest.TestCase):
 
     def test_candle_stays_visible_over_unflagged_carpet_frame(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # candle wins over the unflagged carpet frame
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # candle wins over the unflagged carpet frame
 
 
 class AnimatedPlaceholderObjectCellTests(unittest.TestCase):
@@ -1039,16 +1186,16 @@ class AnimatedPlaceholderObjectCellTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         placeholder_offset = (600 - 512) * 256
-        objtiles[placeholder_offset:placeholder_offset + 256] = bytes([0xFF]) * 256
+        objtiles[placeholder_offset : placeholder_offset + 256] = bytes([0xFF]) * 256
         real_offset = (601 - 512) * 256
-        objtiles[real_offset:real_offset + 256] = bytes([7]) * 256
+        objtiles[real_offset : real_offset + 256] = bytes([7]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1063,16 +1210,26 @@ class AnimatedPlaceholderObjectCellTests(unittest.TestCase):
 
     def test_placeholder_object_cell_resolves_to_its_real_frame(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # resolved to tile 601, not left blank
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # resolved to tile 601, not left blank
 
 
 class CookfireRecordOrderTests(unittest.TestCase):
@@ -1094,9 +1251,9 @@ class CookfireRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         cookfire_offset = (1132 - 512) * 256
-        objtiles[cookfire_offset:cookfire_offset + 256] = bytes([7]) * 256
+        objtiles[cookfire_offset : cookfire_offset + 256] = bytes([7]) * 256
         logs_offset = (600 - 512) * 256
-        objtiles[logs_offset:logs_offset + 256] = bytes([8]) * 256
+        objtiles[logs_offset : logs_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1104,8 +1261,8 @@ class CookfireRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1124,16 +1281,26 @@ class CookfireRecordOrderTests(unittest.TestCase):
 
     def test_cookfire_stays_visible_over_the_logs(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # cookfire wins over the logs
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # cookfire wins over the logs
 
 
 class BodyAndBonesRecordOrderTests(unittest.TestCase):
@@ -1157,9 +1324,9 @@ class BodyAndBonesRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         body_offset = (1262 - 512) * 256
-        objtiles[body_offset:body_offset + 256] = bytes([7]) * 256
+        objtiles[body_offset : body_offset + 256] = bytes([7]) * 256
         bones_offset = (1271 - 512) * 256
-        objtiles[bones_offset:bones_offset + 256] = bytes([8]) * 256
+        objtiles[bones_offset : bones_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1167,8 +1334,8 @@ class BodyAndBonesRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1187,16 +1354,26 @@ class BodyAndBonesRecordOrderTests(unittest.TestCase):
 
     def test_dead_body_stays_visible_over_the_bones(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # dead body wins over the bones
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # dead body wins over the bones
 
 
 class UtensilAndBloodRecordOrderTests(unittest.TestCase):
@@ -1220,9 +1397,9 @@ class UtensilAndBloodRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         blood_offset = (1259 - 512) * 256
-        objtiles[blood_offset:blood_offset + 256] = bytes([7]) * 256
+        objtiles[blood_offset : blood_offset + 256] = bytes([7]) * 256
         cleaver_offset = (637 - 512) * 256
-        objtiles[cleaver_offset:cleaver_offset + 256] = bytes([8]) * 256
+        objtiles[cleaver_offset : cleaver_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1230,8 +1407,8 @@ class UtensilAndBloodRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1250,16 +1427,26 @@ class UtensilAndBloodRecordOrderTests(unittest.TestCase):
 
     def test_cleaver_stays_visible_over_the_blood(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # cleaver (foreground) wins over blood (plain)
+        self.assertEqual(
+            img.getpixel((80, 80)), (0, 0, 255)
+        )  # cleaver (foreground) wins over blood (plain)
 
 
 class BowAndMapRecordOrderTests(unittest.TestCase):
@@ -1283,9 +1470,9 @@ class BowAndMapRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         map_offset = (1757 - 512) * 256
-        objtiles[map_offset:map_offset + 256] = bytes([7]) * 256
+        objtiles[map_offset : map_offset + 256] = bytes([7]) * 256
         bow_offset = (565 - 512) * 256
-        objtiles[bow_offset:bow_offset + 256] = bytes([8]) * 256
+        objtiles[bow_offset : bow_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1293,8 +1480,8 @@ class BowAndMapRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1313,16 +1500,26 @@ class BowAndMapRecordOrderTests(unittest.TestCase):
 
     def test_bow_stays_visible_over_the_map(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # bow (foreground) wins over the map (plain)
+        self.assertEqual(
+            img.getpixel((80, 80)), (0, 0, 255)
+        )  # bow (foreground) wins over the map (plain)
 
 
 class SignStackOrderIsCoordinateIndependentTests(unittest.TestCase):
@@ -1343,9 +1540,9 @@ class SignStackOrderIsCoordinateIndependentTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         post_offset = (1246 - 512) * 256
-        objtiles[post_offset:post_offset + 256] = bytes([7]) * 256
+        objtiles[post_offset : post_offset + 256] = bytes([7]) * 256
         sign_offset = (1243 - 512) * 256
-        objtiles[sign_offset:sign_offset + 256] = bytes([8]) * 256
+        objtiles[sign_offset : sign_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1353,8 +1550,8 @@ class SignStackOrderIsCoordinateIndependentTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1366,7 +1563,13 @@ class SignStackOrderIsCoordinateIndependentTests(unittest.TestCase):
         c0, c1, c2 = pack_position(50, 50, 0)
         post_record2 = struct.pack("<BBBBBBBB", 0x00, c0, c1, c2, 10, 0, 1, 0)
         sign_record2 = struct.pack("<BBBBBBBB", 0x00, c0, c1, c2, 11, 0, 1, 0)
-        block0 = struct.pack("<H", 4) + post_record + sign_record + post_record2 + sign_record2
+        block0 = (
+            struct.pack("<H", 4)
+            + post_record
+            + sign_record
+            + post_record2
+            + sign_record2
+        )
         with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
             f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
 
@@ -1375,27 +1578,47 @@ class SignStackOrderIsCoordinateIndependentTests(unittest.TestCase):
 
     def test_north_plaque_loses_to_post_at_the_real_double_plaque_coordinate(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="290,403,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="290,403,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region (290,403,10,10) -> world (294,407) is pixel-tile (4,4), origin (64, 64).
-        self.assertEqual(img.getpixel((64, 64)), (255, 0, 0))  # post wins over the north plaque
+        self.assertEqual(
+            img.getpixel((64, 64)), (255, 0, 0)
+        )  # post wins over the north plaque
 
     def test_post_also_beats_later_north_plaque_at_unrelated_coordinate(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="45,45,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="45,45,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region (45,45,10,10) -> world (50,50) is pixel-tile (5,5), origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # earlier post wins here too
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # earlier post wins here too
 
 
 class SouthAndNorthSignRecordOrderTests(unittest.TestCase):
@@ -1419,9 +1642,9 @@ class SouthAndNorthSignRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         north_offset = (1243 - 512) * 256
-        objtiles[north_offset:north_offset + 256] = bytes([7]) * 256
+        objtiles[north_offset : north_offset + 256] = bytes([7]) * 256
         south_offset = (1241 - 512) * 256
-        objtiles[south_offset:south_offset + 256] = bytes([8]) * 256
+        objtiles[south_offset : south_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1429,8 +1652,8 @@ class SouthAndNorthSignRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1449,16 +1672,26 @@ class SouthAndNorthSignRecordOrderTests(unittest.TestCase):
 
     def test_south_sign_stays_visible_over_the_north_sign(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (0, 0, 255))  # earlier south record wins over later north record
+        self.assertEqual(
+            img.getpixel((80, 80)), (0, 0, 255)
+        )  # earlier south record wins over later north record
 
 
 class ArmorAndFurnitureRecordOrderTests(unittest.TestCase):
@@ -1489,9 +1722,9 @@ class ArmorAndFurnitureRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         armor_offset = (529 - 512) * 256
-        objtiles[armor_offset:armor_offset + 256] = bytes([7]) * 256
+        objtiles[armor_offset : armor_offset + 256] = bytes([7]) * 256
         table_offset = (600 - 512) * 256
-        objtiles[table_offset:table_offset + 256] = bytes([8]) * 256
+        objtiles[table_offset : table_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1499,8 +1732,8 @@ class ArmorAndFurnitureRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1519,16 +1752,26 @@ class ArmorAndFurnitureRecordOrderTests(unittest.TestCase):
 
     def test_armor_stays_visible_over_the_table(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # armor (plain) wins over the table (supporting)
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # armor (plain) wins over the table (supporting)
 
 
 class GrapesAndBasketRecordOrderTests(unittest.TestCase):
@@ -1553,9 +1796,9 @@ class GrapesAndBasketRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         grapes_offset = (600 - 512) * 256
-        objtiles[grapes_offset:grapes_offset + 256] = bytes([7]) * 256
+        objtiles[grapes_offset : grapes_offset + 256] = bytes([7]) * 256
         basket_offset = (758 - 512) * 256
-        objtiles[basket_offset:basket_offset + 256] = bytes([8]) * 256
+        objtiles[basket_offset : basket_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1563,8 +1806,8 @@ class GrapesAndBasketRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1584,16 +1827,26 @@ class GrapesAndBasketRecordOrderTests(unittest.TestCase):
 
     def test_grapes_stay_visible_over_the_basket(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # grapes win over the basket
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # grapes win over the basket
 
 
 class SignAndPostRecordOrderTests(unittest.TestCase):
@@ -1618,9 +1871,9 @@ class SignAndPostRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         sign_offset = (1242 - 512) * 256
-        objtiles[sign_offset:sign_offset + 256] = bytes([7]) * 256
+        objtiles[sign_offset : sign_offset + 256] = bytes([7]) * 256
         post_offset = (1246 - 512) * 256
-        objtiles[post_offset:post_offset + 256] = bytes([8]) * 256
+        objtiles[post_offset : post_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1628,8 +1881,8 @@ class SignAndPostRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1649,16 +1902,26 @@ class SignAndPostRecordOrderTests(unittest.TestCase):
 
     def test_sign_stays_visible_over_the_signpost(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # sign wins over the signpost
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # sign wins over the signpost
 
 
 class Frame7SignRecordOrderTests(unittest.TestCase):
@@ -1682,9 +1945,9 @@ class Frame7SignRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         sign_offset = (1247 - 512) * 256
-        objtiles[sign_offset:sign_offset + 256] = bytes([7]) * 256
+        objtiles[sign_offset : sign_offset + 256] = bytes([7]) * 256
         post_offset = (1246 - 512) * 256
-        objtiles[post_offset:post_offset + 256] = bytes([8]) * 256
+        objtiles[post_offset : post_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1692,8 +1955,8 @@ class Frame7SignRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1712,16 +1975,26 @@ class Frame7SignRecordOrderTests(unittest.TestCase):
 
     def test_frame7_sign_stays_visible_over_the_signpost(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # sign wins over the signpost
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # sign wins over the signpost
 
 
 class PictureAndSecretDoorRecordOrderTests(unittest.TestCase):
@@ -1746,9 +2019,9 @@ class PictureAndSecretDoorRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         picture_offset = (601 - 512) * 256
-        objtiles[picture_offset:picture_offset + 256] = bytes([7]) * 256
+        objtiles[picture_offset : picture_offset + 256] = bytes([7]) * 256
         door_offset = (750 - 512) * 256
-        objtiles[door_offset:door_offset + 256] = bytes([8]) * 256
+        objtiles[door_offset : door_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1756,8 +2029,8 @@ class PictureAndSecretDoorRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1778,16 +2051,26 @@ class PictureAndSecretDoorRecordOrderTests(unittest.TestCase):
 
     def test_picture_stays_visible_over_the_secret_door(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # picture wins over the secret door
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # picture wins over the secret door
 
 
 class DoorAndDoorwayRecordOrderTests(unittest.TestCase):
@@ -1819,9 +2102,9 @@ class DoorAndDoorwayRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         door_offset = (601 - 512) * 256
-        objtiles[door_offset:door_offset + 256] = bytes([7]) * 256
+        objtiles[door_offset : door_offset + 256] = bytes([7]) * 256
         doorway_offset = (750 - 512) * 256
-        objtiles[doorway_offset:doorway_offset + 256] = bytes([8]) * 256
+        objtiles[doorway_offset : doorway_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1829,8 +2112,8 @@ class DoorAndDoorwayRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1840,7 +2123,9 @@ class DoorAndDoorwayRecordOrderTests(unittest.TestCase):
         # same as the 30+ real instances the audit found.
         b0, b1, b2 = pack_position(10, 10, 0)
         door_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 10, 0, 1, 0)
-        doorway_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 301 & 0xFF, (301 >> 8) & 0x03, 1, 0)
+        doorway_record = struct.pack(
+            "<BBBBBBBB", 0x00, b0, b1, b2, 301 & 0xFF, (301 >> 8) & 0x03, 1, 0
+        )
         block0 = struct.pack("<H", 2) + door_record + doorway_record
         with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
             f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
@@ -1850,16 +2135,26 @@ class DoorAndDoorwayRecordOrderTests(unittest.TestCase):
 
     def test_door_stays_visible_over_the_doorway(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # door wins over the doorway
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # door wins over the doorway
 
 
 class SwordAndWallMountRecordOrderTests(unittest.TestCase):
@@ -1884,9 +2179,9 @@ class SwordAndWallMountRecordOrderTests(unittest.TestCase):
         with open(objtiles_path, "rb") as f:
             objtiles = bytearray(f.read())
         sword_offset = (601 - 512) * 256
-        objtiles[sword_offset:sword_offset + 256] = bytes([7]) * 256
+        objtiles[sword_offset : sword_offset + 256] = bytes([7]) * 256
         mount_offset = (750 - 512) * 256
-        objtiles[mount_offset:mount_offset + 256] = bytes([8]) * 256
+        objtiles[mount_offset : mount_offset + 256] = bytes([8]) * 256
         with open(objtiles_path, "wb") as f:
             f.write(bytes(objtiles))
 
@@ -1894,8 +2189,8 @@ class SwordAndWallMountRecordOrderTests(unittest.TestCase):
         pal_path = os.path.join(self.tmpdir.name, "U6PAL")
         with open(pal_path, "rb") as f:
             pal = bytearray(f.read())
-        pal[7 * 3:7 * 3 + 3] = bytes([63, 0, 0])
-        pal[8 * 3:8 * 3 + 3] = bytes([0, 0, 63])
+        pal[7 * 3 : 7 * 3 + 3] = bytes([63, 0, 0])
+        pal[8 * 3 : 8 * 3 + 3] = bytes([0, 0, 63])
         with open(pal_path, "wb") as f:
             f.write(bytes(pal))
 
@@ -1905,7 +2200,9 @@ class SwordAndWallMountRecordOrderTests(unittest.TestCase):
         # would let it paint over the sword and hide it.
         b0, b1, b2 = pack_position(10, 10, 0)
         sword_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 10, 0, 1, 0)
-        mount_record = struct.pack("<BBBBBBBB", 0x00, b0, b1, b2, 140 & 0xFF, (140 >> 8) & 0x03, 1, 0)
+        mount_record = struct.pack(
+            "<BBBBBBBB", 0x00, b0, b1, b2, 140 & 0xFF, (140 >> 8) & 0x03, 1, 0
+        )
         block0 = struct.pack("<H", 2) + sword_record + mount_record
         with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
             f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
@@ -1915,16 +2212,26 @@ class SwordAndWallMountRecordOrderTests(unittest.TestCase):
 
     def test_sword_stays_visible_over_the_wall_mount(self):
         out_path = os.path.join(self.tmpdir.name, "out.png")
-        rc = cmd_map_render(SimpleNamespace(
-            gamedir=self.tmpdir.name, palette=None, region="5,5,10,10", dungeon=None,
-            full=False, tick=0, objects=True, output=out_path,
-        ))
+        rc = cmd_map_render(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name,
+                palette=None,
+                region="5,5,10,10",
+                dungeon=None,
+                full=False,
+                tick=0,
+                objects=True,
+                output=out_path,
+            )
+        )
         self.assertEqual(rc, 0)
 
         img = Image.open(out_path).convert("RGB")
         # region is (5,5,10,10) -> world (10,10) is pixel-tile (5,5), i.e.
         # pixel origin (80, 80).
-        self.assertEqual(img.getpixel((80, 80)), (255, 0, 0))  # sword wins over the wall mount
+        self.assertEqual(
+            img.getpixel((80, 80)), (255, 0, 0)
+        )  # sword wins over the wall mount
 
 
 class EggListCliTests(unittest.TestCase):
@@ -1946,9 +2253,17 @@ class EggListCliTests(unittest.TestCase):
         egg_obj_n_lo = EGG_OBJ_N & 0xFF
         egg_obj_n_hi = (EGG_OBJ_N >> 8) & 0x03  # frame_n=0, so no high bits to OR in
         egg = struct.pack(
-            "<BBBBBBBB", 0x00, *pack_position(20, 20, 0), egg_obj_n_lo, egg_obj_n_hi, 75, 4,
+            "<BBBBBBBB",
+            0x00,
+            *pack_position(20, 20, 0),
+            egg_obj_n_lo,
+            egg_obj_n_hi,
+            75,
+            4,
         )
-        spawn = struct.pack("<BBBBBBBB", 0x08, 0, 0, 0, 50, 0, 8, 8)  # container index 0 -> the egg
+        spawn = struct.pack(
+            "<BBBBBBBB", 0x08, 0, 0, 0, 50, 0, 8, 8
+        )  # container index 0 -> the egg
         block0 = struct.pack("<H", 2) + egg + spawn
         with open(os.path.join(self.tmpdir.name, "LZOBJBLK"), "wb") as f:
             f.write(block0 + bytes(2) * (SURFACE_SUPERCHUNKS - 1))
@@ -1958,17 +2273,27 @@ class EggListCliTests(unittest.TestCase):
 
     def test_missing_gamedir_errors(self):
         with self.assertRaises(SystemExit):
-            cmd_egg_list(SimpleNamespace(gamedir=None, block=None, dungeon=None, limit=200))
+            cmd_egg_list(
+                SimpleNamespace(gamedir=None, block=None, dungeon=None, limit=200)
+            )
 
     def test_missing_look_lzd_errors(self):
         os.remove(os.path.join(self.tmpdir.name, "LOOK.LZD"))
-        rc = cmd_egg_list(SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=None, limit=200))
+        rc = cmd_egg_list(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name, block=None, dungeon=None, limit=200
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_lists_the_seeded_egg_with_its_spawn_target(self):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            rc = cmd_egg_list(SimpleNamespace(gamedir=self.tmpdir.name, block=0, dungeon=None, limit=200))
+            rc = cmd_egg_list(
+                SimpleNamespace(
+                    gamedir=self.tmpdir.name, block=0, dungeon=None, limit=200
+                )
+            )
         self.assertEqual(rc, 0)
         output = buf.getvalue()
         self.assertIn("1 egg(s)", output)
@@ -1976,7 +2301,9 @@ class EggListCliTests(unittest.TestCase):
         self.assertIn("wolf", output)
 
     def test_invalid_dungeon_errors(self):
-        rc = cmd_egg_list(SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=9, limit=200))
+        rc = cmd_egg_list(
+            SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=9, limit=200)
+        )
         self.assertEqual(rc, 1)
 
 
@@ -1990,26 +2317,42 @@ class ObjectListCliTests(unittest.TestCase):
 
     def test_missing_gamedir_errors(self):
         with self.assertRaises(SystemExit):
-            cmd_object_list(SimpleNamespace(gamedir=None, block=None, dungeon=None, limit=200))
+            cmd_object_list(
+                SimpleNamespace(gamedir=None, block=None, dungeon=None, limit=200)
+            )
 
     def test_lists_surface_block_with_the_one_seeded_object(self):
-        rc = cmd_object_list(SimpleNamespace(gamedir=self.tmpdir.name, block=0, dungeon=None, limit=200))
+        rc = cmd_object_list(
+            SimpleNamespace(gamedir=self.tmpdir.name, block=0, dungeon=None, limit=200)
+        )
         self.assertEqual(rc, 0)
 
     def test_invalid_block_errors(self):
-        rc = cmd_object_list(SimpleNamespace(gamedir=self.tmpdir.name, block=9999, dungeon=None, limit=200))
+        rc = cmd_object_list(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name, block=9999, dungeon=None, limit=200
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_invalid_dungeon_errors(self):
-        rc = cmd_object_list(SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=9, limit=200))
+        rc = cmd_object_list(
+            SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=9, limit=200)
+        )
         self.assertEqual(rc, 1)
 
     def test_dungeon_level_lists_successfully(self):
-        rc = cmd_object_list(SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=0, limit=200))
+        rc = cmd_object_list(
+            SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=0, limit=200)
+        )
         self.assertEqual(rc, 0)
 
     def test_no_filter_lists_all_surface_blocks(self):
-        rc = cmd_object_list(SimpleNamespace(gamedir=self.tmpdir.name, block=None, dungeon=None, limit=200))
+        rc = cmd_object_list(
+            SimpleNamespace(
+                gamedir=self.tmpdir.name, block=None, dungeon=None, limit=200
+            )
+        )
         self.assertEqual(rc, 0)
 
 
@@ -2044,7 +2387,7 @@ class GamestateDumpCliTests(unittest.TestCase):
         tail = bytearray(GAMESTATE_REQUIRED_SIZE)
         tail[OFFSET_NUM_IN_PARTY] = 1
         name = b"Avatar\x00"
-        tail[OFFSET_PARTY_NAMES:OFFSET_PARTY_NAMES + len(name)] = name
+        tail[OFFSET_PARTY_NAMES : OFFSET_PARTY_NAMES + len(name)] = name
         tail[OFFSET_PARTY_ROSTER] = 1
         with open(os.path.join(self.tmpdir.name, "LZDNGBLK"), "wb") as f:
             f.write(bytes(2) * DUNGEON_LEVELS + bytes(tail))
@@ -2086,21 +2429,35 @@ class FlagsCliTests(unittest.TestCase):
 
     def test_dump_missing_source_errors(self):
         with self.assertRaises(SystemExit):
-            cmd_flags_dump(SimpleNamespace(source=self.tmpdir_a.name + "_nope", all=True))
+            cmd_flags_dump(
+                SimpleNamespace(source=self.tmpdir_a.name + "_nope", all=True)
+            )
 
     def test_compare_finds_the_seeded_difference(self):
-        rc = cmd_flags_compare(SimpleNamespace(source_a=self.tmpdir_a.name, source_b=self.tmpdir_b.name))
+        rc = cmd_flags_compare(
+            SimpleNamespace(source_a=self.tmpdir_a.name, source_b=self.tmpdir_b.name)
+        )
         self.assertEqual(rc, 0)
 
     def test_compare_identical_sources_finds_nothing(self):
-        rc = cmd_flags_compare(SimpleNamespace(source_a=self.tmpdir_a.name, source_b=self.tmpdir_a.name))
+        rc = cmd_flags_compare(
+            SimpleNamespace(source_a=self.tmpdir_a.name, source_b=self.tmpdir_a.name)
+        )
         self.assertEqual(rc, 0)
 
     def test_set_writes_new_file_by_default(self):
-        rc = cmd_flags_set(SimpleNamespace(
-            savegame=self.tmpdir_a.name, actor=9, flag=2, value=1,
-            quest_flag=None, gargish=None, output=None, in_place=False,
-        ))
+        rc = cmd_flags_set(
+            SimpleNamespace(
+                savegame=self.tmpdir_a.name,
+                actor=9,
+                flag=2,
+                value=1,
+                quest_flag=None,
+                gargish=None,
+                output=None,
+                in_place=False,
+            )
+        )
         self.assertEqual(rc, 0)
         new_path = os.path.join(self.tmpdir_a.name, "OBJLIST.new")
         self.assertTrue(os.path.isfile(new_path))
@@ -2116,10 +2473,18 @@ class FlagsCliTests(unittest.TestCase):
         original_path = os.path.join(self.tmpdir_a.name, "OBJLIST")
         with open(original_path, "rb") as f:
             original = f.read()
-        rc = cmd_flags_set(SimpleNamespace(
-            savegame=self.tmpdir_a.name, actor=1, flag=0, value=1,
-            quest_flag=None, gargish=None, output=None, in_place=True,
-        ))
+        rc = cmd_flags_set(
+            SimpleNamespace(
+                savegame=self.tmpdir_a.name,
+                actor=1,
+                flag=0,
+                value=1,
+                quest_flag=None,
+                gargish=None,
+                output=None,
+                in_place=True,
+            )
+        )
         self.assertEqual(rc, 0)
         backup_path = original_path + ".bak"
         self.assertTrue(os.path.isfile(backup_path))
@@ -2130,31 +2495,63 @@ class FlagsCliTests(unittest.TestCase):
         self.assertEqual(modified[OFFSET_TALK_FLAGS + 1], 0b00000001)
 
     def test_set_quest_flag(self):
-        rc = cmd_flags_set(SimpleNamespace(
-            savegame=self.tmpdir_a.name, actor=None, flag=None, value=None,
-            quest_flag=1, gargish=None, output=None, in_place=False,
-        ))
+        rc = cmd_flags_set(
+            SimpleNamespace(
+                savegame=self.tmpdir_a.name,
+                actor=None,
+                flag=None,
+                value=None,
+                quest_flag=1,
+                gargish=None,
+                output=None,
+                in_place=False,
+            )
+        )
         self.assertEqual(rc, 0)
 
     def test_set_missing_objlist_errors(self):
-        rc = cmd_flags_set(SimpleNamespace(
-            savegame=self.tmpdir_a.name + "_nope", actor=1, flag=0, value=1,
-            quest_flag=None, gargish=None, output=None, in_place=False,
-        ))
+        rc = cmd_flags_set(
+            SimpleNamespace(
+                savegame=self.tmpdir_a.name + "_nope",
+                actor=1,
+                flag=0,
+                value=1,
+                quest_flag=None,
+                gargish=None,
+                output=None,
+                in_place=False,
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_set_actor_without_flag_and_value_errors(self):
-        rc = cmd_flags_set(SimpleNamespace(
-            savegame=self.tmpdir_a.name, actor=1, flag=None, value=None,
-            quest_flag=None, gargish=None, output=None, in_place=False,
-        ))
+        rc = cmd_flags_set(
+            SimpleNamespace(
+                savegame=self.tmpdir_a.name,
+                actor=1,
+                flag=None,
+                value=None,
+                quest_flag=None,
+                gargish=None,
+                output=None,
+                in_place=False,
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_set_nothing_specified_errors(self):
-        rc = cmd_flags_set(SimpleNamespace(
-            savegame=self.tmpdir_a.name, actor=None, flag=None, value=None,
-            quest_flag=None, gargish=None, output=None, in_place=False,
-        ))
+        rc = cmd_flags_set(
+            SimpleNamespace(
+                savegame=self.tmpdir_a.name,
+                actor=None,
+                flag=None,
+                value=None,
+                quest_flag=None,
+                gargish=None,
+                output=None,
+                in_place=False,
+            )
+        )
         self.assertEqual(rc, 1)
 
 
@@ -2172,28 +2569,52 @@ class ConverseDumpCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_errors(self):
-        rc = cmd_converse_dump(SimpleNamespace(
-            file="/nope", item=None, entry_size=4, size_header=False, output=None,
-        ))
+        rc = cmd_converse_dump(
+            SimpleNamespace(
+                file="/nope",
+                item=None,
+                entry_size=4,
+                size_header=False,
+                output=None,
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_out_of_range_item_errors(self):
-        rc = cmd_converse_dump(SimpleNamespace(
-            file=self.path, item=99, entry_size=4, size_header=False, output=None,
-        ))
+        rc = cmd_converse_dump(
+            SimpleNamespace(
+                file=self.path,
+                item=99,
+                entry_size=4,
+                size_header=False,
+                output=None,
+            )
+        )
         self.assertEqual(rc, 1)
 
     def test_dumps_single_item_to_stdout(self):
-        rc = cmd_converse_dump(SimpleNamespace(
-            file=self.path, item=0, entry_size=4, size_header=False, output=None,
-        ))
+        rc = cmd_converse_dump(
+            SimpleNamespace(
+                file=self.path,
+                item=0,
+                entry_size=4,
+                size_header=False,
+                output=None,
+            )
+        )
         self.assertEqual(rc, 0)
 
     def test_dumps_all_items_to_output_dir(self):
         outdir = os.path.join(self.tmpdir.name, "out")
-        rc = cmd_converse_dump(SimpleNamespace(
-            file=self.path, item=None, entry_size=4, size_header=False, output=outdir,
-        ))
+        rc = cmd_converse_dump(
+            SimpleNamespace(
+                file=self.path,
+                item=None,
+                entry_size=4,
+                size_header=False,
+                output=outdir,
+            )
+        )
         self.assertEqual(rc, 0)
         self.assertTrue(os.path.isfile(os.path.join(outdir, "0000_CONVERSE.A.txt")))
 
@@ -2209,19 +2630,25 @@ class FontExportCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_errors(self):
-        rc = cmd_font_export(SimpleNamespace(file="/nope", text=None, scale=3, output=None))
+        rc = cmd_font_export(
+            SimpleNamespace(file="/nope", text=None, scale=3, output=None)
+        )
         self.assertEqual(rc, 1)
 
     def test_exports_both_font_sheets(self):
         outdir = os.path.join(self.tmpdir.name, "out")
-        rc = cmd_font_export(SimpleNamespace(file=self.path, text=None, scale=1, output=outdir))
+        rc = cmd_font_export(
+            SimpleNamespace(file=self.path, text=None, scale=1, output=outdir)
+        )
         self.assertEqual(rc, 0)
         self.assertTrue(os.path.isfile(os.path.join(outdir, "font_english.png")))
         self.assertTrue(os.path.isfile(os.path.join(outdir, "font_runic_gargoyle.png")))
 
     def test_exports_sample_text_when_given(self):
         outdir = os.path.join(self.tmpdir.name, "out")
-        rc = cmd_font_export(SimpleNamespace(file=self.path, text="HI", scale=1, output=outdir))
+        rc = cmd_font_export(
+            SimpleNamespace(file=self.path, text="HI", scale=1, output=outdir)
+        )
         self.assertEqual(rc, 0)
         self.assertTrue(os.path.isfile(os.path.join(outdir, "text_english.png")))
         self.assertTrue(os.path.isfile(os.path.join(outdir, "text_runic_gargoyle.png")))
@@ -2303,7 +2730,9 @@ class ScheduleDumpCliTests(unittest.TestCase):
 
     def test_dump_to_file(self):
         outdir = os.path.join(self.tmpdir.name, "out")
-        rc = cmd_schedule_dump(SimpleNamespace(file=self.path, actor=None, output=outdir))
+        rc = cmd_schedule_dump(
+            SimpleNamespace(file=self.path, actor=None, output=outdir)
+        )
         self.assertEqual(rc, 0)
         self.assertTrue(os.path.isfile(os.path.join(outdir, "schedule_dump.txt")))
 

@@ -86,8 +86,14 @@ def test_player_repaints_colours_pauses_resumes_and_changes_speed(monkeypatch):
             (lambda t: "Playing" in t and "Frame 1" in t, lambda: pipe.send_text(" ")),
             # Time passing while paused must not move the frame.
             (lambda t: "Paused" in t, lambda: (advance(0.5), pipe.send_text("-"))),
-            (lambda t: "Paused" in t and "40 ms/step" in t, lambda: pipe.send_text(" +")),
-            (lambda t: "Playing" in t and "20 ms/step" in t, lambda: pipe.send_text("q")),
+            (
+                lambda t: "Paused" in t and "40 ms/step" in t,
+                lambda: pipe.send_text(" +"),
+            ),
+            (
+                lambda t: "Playing" in t and "20 ms/step" in t,
+                lambda: pipe.send_text("q"),
+            ),
         ]
 
         def after_render(application):

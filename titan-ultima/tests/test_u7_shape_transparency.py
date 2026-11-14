@@ -50,7 +50,9 @@ class RleRoundTripTests(unittest.TestCase):
         decoded_pixels = decoded.frames[0].pixels
 
         self.assertEqual(decoded_pixels[0, 1], 5)
-        self.assertTrue(np.all(np.where(decoded_pixels == 5, True, decoded_pixels == 0xFF)))
+        self.assertTrue(
+            np.all(np.where(decoded_pixels == 5, True, decoded_pixels == 0xFF))
+        )
 
     def test_fully_transparent_frame_round_trips(self):
         pixels = np.full((3, 3), 0xFF, dtype=np.uint8)

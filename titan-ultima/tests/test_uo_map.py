@@ -65,7 +65,9 @@ def _uop(entries: list[tuple[str, bytes]]) -> bytes:
             0,
         )
         payloads += payload
-    header = struct.pack("<IIIQII", 0x0050594D, 5, 0xFD23EC43, table_offset, 1, len(entries))
+    header = struct.pack(
+        "<IIIQII", 0x0050594D, 5, 0xFD23EC43, table_offset, 1, len(entries)
+    )
     return header + table + payloads
 
 

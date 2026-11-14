@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from titan.u7.cli import cmd_shape_frame_report
+from titan.u7.cli.shapes import cmd_shape_frame_report
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 from titan.u7.shape_frame_report import build_u7_shape_frame_report

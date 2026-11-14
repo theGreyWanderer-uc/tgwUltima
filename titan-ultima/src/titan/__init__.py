@@ -1,12 +1,16 @@
 """
 TITAN -- Tool for Interpreting and Transforming Archival Nodes.
 
-A Python toolkit for working with Ultima file formats (U8, U7).
+A Python toolkit for working with Ultima file formats. Each game has its own
+subpackage (``titan.u6``, ``titan.u7``, ``titan.u8``, ``titan.u9``, ``titan.md``,
+``titan.uw1``, ``titan.uw2``, ``titan.uo``, ``titan.u3``); import from the module
+that defines a name. The names re-exported here are the original U8 and U7
+set, kept for existing code.
 
 Library usage::
 
     from titan.flex import FlexArchive
-    from titan.palette import U8Palette
+    from titan.u8.palette import U8Palette
     from titan.u8.shape import U8Shape    # canonical U8 import path
     from titan.shape import U8Shape       # backward-compat shim (also works)
 
@@ -26,10 +30,10 @@ from ._version import TITAN_VERSION, __version__
 
 # Shared / game-agnostic modules
 from .flex import FlexArchive, detect_record_type, get_extension_for_flex
-from .palette import U8Palette
 from .music import XMIDIConverter
 
 # U8-specific modules (canonical paths are titan.u8.*)
+from .u8.palette import U8Palette
 from .u8.shape import U8Shape
 from .u8.sound import SonarcDecoder
 from .u8.save import U8SaveArchive

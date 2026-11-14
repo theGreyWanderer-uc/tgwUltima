@@ -44,9 +44,9 @@ def rotate_range(
     if steps == 0:
         return result
 
-    window = result[start:start + length]
+    window = result[start : start + length]
     rotated = window[-steps:] + window[:-steps]
-    result[start:start + length] = rotated
+    result[start : start + length] = rotated
     return result
 
 

@@ -45,7 +45,7 @@ def _set_party(buf: bytearray, members: list[tuple[str, int]]) -> None:
     for i, (name, actor_id) in enumerate(members):
         off = OFFSET_PARTY_NAMES + i * PARTY_NAME_SLOT_SIZE
         name_bytes = name.encode("latin-1") + b"\x00"
-        buf[off:off + len(name_bytes)] = name_bytes
+        buf[off : off + len(name_bytes)] = name_bytes
         buf[OFFSET_PARTY_ROSTER + i] = actor_id
 
 
@@ -61,7 +61,9 @@ class PartyTests(unittest.TestCase):
         state = U6GameState.parse(bytes(buf))
         self.assertEqual(state.party.num_members, 4)
         names = [(m.name, m.actor_id) for m in state.party.members]
-        self.assertEqual(names, [("Avatar", 1), ("Dupre", 2), ("Shamino", 3), ("Iolo", 4)])
+        self.assertEqual(
+            names, [("Avatar", 1), ("Dupre", 2), ("Shamino", 3), ("Iolo", 4)]
+        )
 
     def test_combat_mode_flag(self):
         buf = _make_objlist()
@@ -81,7 +83,9 @@ class PartyTests(unittest.TestCase):
 class ClockTests(unittest.TestCase):
     def test_gametime_decodes_correctly(self):
         buf = _make_objlist()
-        buf[OFFSET_GAMETIME:OFFSET_GAMETIME + 4] = bytes([0, 8, 4, 7])  # minute,hour,day,month
+        buf[OFFSET_GAMETIME : OFFSET_GAMETIME + 4] = bytes(
+            [0, 8, 4, 7]
+        )  # minute,hour,day,month
         struct.pack_into("<H", buf, OFFSET_GAMETIME + 4, 161)
         state = U6GameState.parse(bytes(buf))
         self.assertEqual(state.clock.date_string(), "July 4, year 161")
@@ -95,7 +99,7 @@ class ClockTests(unittest.TestCase):
 
     def test_unknown_month_falls_back_to_number(self):
         buf = _make_objlist()
-        buf[OFFSET_GAMETIME:OFFSET_GAMETIME + 4] = bytes([0, 0, 1, 99])
+        buf[OFFSET_GAMETIME : OFFSET_GAMETIME + 4] = bytes([0, 0, 1, 99])
         state = U6GameState.parse(bytes(buf))
         self.assertIn("99", state.clock.date_string())
 

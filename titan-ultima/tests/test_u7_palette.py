@@ -13,7 +13,11 @@ import shutil
 import tempfile
 import unittest
 
-from titan.u7.palette import PaletteRecordEmptyError, PaletteRecordInvalidError, U7Palette
+from titan.u7.palette import (
+    PaletteRecordEmptyError,
+    PaletteRecordInvalidError,
+    U7Palette,
+)
 
 from tests._fixtures import (
     make_6bit_palette_bytes,
@@ -23,6 +27,11 @@ from tests._fixtures import (
     make_si_shaped_archive,
     make_truncated_archive_bytes,
 )
+from pathlib import Path
+from types import SimpleNamespace
+import pytest
+from PIL import Image
+from titan.u7.cli.palettes import cmd_palette_export
 
 
 class _TempDirCase(unittest.TestCase):
@@ -107,6 +116,7 @@ class EmptyVsInvalidTests(_TempDirCase):
         header = bytearray(128)
         header[0x50:0x54] = b"\x00\x1a\xff\xff"
         import struct
+
         struct.pack_into("<I", header, 0x54, 5)  # declares 5 slots
         path = os.path.join(self.tmpdir, "short.flx")
         with open(path, "wb") as f:
@@ -126,7 +136,9 @@ class RoundTripTests(_TempDirCase):
         path = make_bg_shaped_archive(os.path.join(self.tmpdir, "bg.flx"))
         pal = U7Palette.from_file(path, palette_index=0)
         raw = pal.to_raw_bytes()
-        self.assertEqual((raw[255 * 3], raw[255 * 3 + 1], raw[255 * 3 + 2]), (250, 64, 1))
+        self.assertEqual(
+            (raw[255 * 3], raw[255 * 3 + 1], raw[255 * 3 + 2]), (250, 64, 1)
+        )
 
     def test_flex_index_and_source_recorded(self):
         path = make_bg_shaped_archive(os.path.join(self.tmpdir, "bg.flx"))
@@ -169,3 +181,47 @@ class DoublePaletteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize(
+    "encoding,component", [("auto", 64), ("6bit", 64), ("8bit", 16)]
+)
+def test_palette_export_keeps_requested_component_encoding(
+    tmp_path: Path,
+    encoding: str,
+    component: int,
+) -> None:
+    source = tmp_path / "palette.pal"
+    source.write_bytes(bytes([16]) * 768)
+    output = tmp_path / "export"
+    status = cmd_palette_export(
+        SimpleNamespace(
+            file=str(source),
+            output=str(output),
+            index=None,
+            encoding=encoding,
+        )
+    )
+    assert status == 0
+    with Image.open(output / "palette_swatch.png") as image:
+        assert image.convert("RGB").getpixel((0, 0)) == (component,) * 3
+
+
+def test_palette_export_reports_invalid_encoding(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "palette.pal"
+    source.write_bytes(bytes(768))
+    output = tmp_path / "export"
+    status = cmd_palette_export(
+        SimpleNamespace(
+            file=str(source),
+            output=str(output),
+            index=None,
+            encoding="9bit",
+        )
+    )
+    assert status == 1
+    assert "Unknown encoding '9bit'" in capsys.readouterr().err
+    assert not list(output.iterdir())

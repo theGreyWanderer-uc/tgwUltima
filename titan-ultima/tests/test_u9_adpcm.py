@@ -30,7 +30,9 @@ from titan.u9.adpcm import (
 )
 
 
-def _block(coeff_l: int, coeff_r: int, shift_l: int, shift_r: int, step_bytes: list[int]) -> bytes:
+def _block(
+    coeff_l: int, coeff_r: int, shift_l: int, shift_r: int, step_bytes: list[int]
+) -> bytes:
     assert len(step_bytes) == BLOCK_SIZE_IN - 2
     header = bytes([(coeff_l << 4) | coeff_r, (shift_l << 4) | shift_r])
     return header + bytes(step_bytes)
@@ -49,7 +51,7 @@ class DecodeStereoZeroCoefficientTests(unittest.TestCase):
         # nibble 0x1 in every position, both channels, coeff/shift all 0.
         block = _block(0, 0, 0, 0, [0x11] * (BLOCK_SIZE_IN - 2))
         pcm = decode_stereo(block)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertEqual(len(samples), 56)  # 14 steps * 4 samples (L.a, R.a, L.b, R.b)
         self.assertTrue(all(s == 4096 for s in samples))
 
@@ -57,14 +59,14 @@ class DecodeStereoZeroCoefficientTests(unittest.TestCase):
         # nibble 0xF (sign-extends to -1) in every position.
         block = _block(0, 0, 0, 0, [0xFF] * (BLOCK_SIZE_IN - 2))
         pcm = decode_stereo(block)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertTrue(all(s == -4096 for s in samples))
 
     def test_left_right_channels_decoded_independently(self) -> None:
         # left nibbles = 1 (-> +4096), right nibbles = 0xF (-> -4096); byte 0x1F per step.
         block = _block(0, 0, 0, 0, [0x1F] * (BLOCK_SIZE_IN - 2))
         pcm = decode_stereo(block)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         # interleave order is L.osa, R.osa, L.osb, R.osb per step.
         left = samples[0::2]
         right = samples[1::2]
@@ -87,7 +89,9 @@ class DecodeStereoEdgeCaseTests(unittest.TestCase):
         self.assertEqual(len(pcm), 56 * 2)  # only the one full block decodes
 
     def test_invalid_coefficient_index_raises(self) -> None:
-        bad_block = _block(4, 0, 0, 0, [0x00] * (BLOCK_SIZE_IN - 2))  # 4 is out of 0-3 range
+        bad_block = _block(
+            4, 0, 0, 0, [0x00] * (BLOCK_SIZE_IN - 2)
+        )  # 4 is out of 0-3 range
         with self.assertRaises(AdpcmDecodeError):
             decode_stereo(bad_block)
 
@@ -101,7 +105,7 @@ class DecodeStereoEdgeCaseTests(unittest.TestCase):
         block1 = _block(1, 1, 0, 0, [0x11] * (BLOCK_SIZE_IN - 2))
         block2 = _block(1, 1, 0, 0, [0x11] * (BLOCK_SIZE_IN - 2))
         pcm = decode_stereo(block1 + block2)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertEqual(len(samples), 112)
         # with nonzero feedback, later samples should differ from the very
         # first (all-zero-state) sample -- i.e. the filter is actually doing
@@ -115,14 +119,14 @@ class DecodeMonoZeroCoefficientTests(unittest.TestCase):
     def test_positive_nibble_one_decodes_to_4096(self) -> None:
         block = _block_mono(0, 0, [0x11] * (BLOCK_SIZE_IN_MONO - 1))
         pcm = decode_mono(block)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertEqual(len(samples), 28)  # 14 bytes * 2 samples each
         self.assertTrue(all(s == 4096 for s in samples))
 
     def test_negative_nibble_decodes_to_negative_4096(self) -> None:
         block = _block_mono(0, 0, [0xFF] * (BLOCK_SIZE_IN_MONO - 1))
         pcm = decode_mono(block)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertTrue(all(s == -4096 for s in samples))
 
     def test_high_nibble_decoded_before_low_nibble(self) -> None:
@@ -130,7 +134,7 @@ class DecodeMonoZeroCoefficientTests(unittest.TestCase):
         # low nibble 0xF (-> -4096) is the next.
         block = _block_mono(0, 0, [0x1F] * (BLOCK_SIZE_IN_MONO - 1))
         pcm = decode_mono(block)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertEqual(samples[0::2], (4096,) * 14)
         self.assertEqual(samples[1::2], (-4096,) * 14)
 
@@ -150,7 +154,9 @@ class DecodeMonoEdgeCaseTests(unittest.TestCase):
         self.assertEqual(len(pcm), 28 * 2)  # only the one full block decodes
 
     def test_invalid_coefficient_index_raises(self) -> None:
-        bad_block = _block_mono(4, 0, [0x00] * (BLOCK_SIZE_IN_MONO - 1))  # 4 is out of 0-3 range
+        bad_block = _block_mono(
+            4, 0, [0x00] * (BLOCK_SIZE_IN_MONO - 1)
+        )  # 4 is out of 0-3 range
         with self.assertRaises(AdpcmDecodeError):
             decode_mono(bad_block)
 
@@ -161,7 +167,7 @@ class DecodeMonoEdgeCaseTests(unittest.TestCase):
         block1 = _block_mono(1, 0, [0x11] * (BLOCK_SIZE_IN_MONO - 1))
         block2 = _block_mono(1, 0, [0x11] * (BLOCK_SIZE_IN_MONO - 1))
         pcm = decode_mono(block1 + block2)
-        samples = struct.unpack(f"<{len(pcm)//2}h", pcm)
+        samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
         self.assertEqual(len(samples), 56)
         self.assertNotEqual(samples[0], samples[-1])
 

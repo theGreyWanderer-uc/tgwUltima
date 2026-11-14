@@ -230,8 +230,9 @@ def get_preset(slot: int) -> dict:
     Raises ``KeyError`` if the slot number is not a known preset.
     """
     if slot not in FONT_SHAPES:
-        raise KeyError(f"No preset for font slot {slot}. "
-                       f"Known slots: {sorted(FONT_SHAPES)}")
+        raise KeyError(
+            f"No preset for font slot {slot}. Known slots: {sorted(FONT_SHAPES)}"
+        )
     return FONT_SHAPES[slot]
 
 

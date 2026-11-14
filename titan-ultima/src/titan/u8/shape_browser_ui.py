@@ -13,7 +13,7 @@ from titan import _wizard_ui as ui
 from titan._config import cfg
 from titan._image_preview import open_preview
 from titan._terminal_image import checkerboard, play_terminal, terminal_image
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.anim import DIRECTION_NAMES
 from titan.u8.shape_browser import (
     U8_BROWSER_OUTPUT,
@@ -39,11 +39,7 @@ from titan.u8.shape_browser import (
 PAGE_SIZE = 30
 
 
-def _menu(message: str, labels: dict[str, str], default: str) -> str:
-    ui.legacy_menu(message, *(f"  [{key}] {label}" for key, label in labels.items()))
-    return ui.choice(
-        "> ", list(labels), default, labels=labels, message=message, hotkeys=True
-    )
+_menu = ui.menu
 
 
 def _integer(message: str, default: int, low: int, high: int) -> int:

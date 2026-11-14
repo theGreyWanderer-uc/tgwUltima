@@ -59,7 +59,9 @@ def _build_typenames(entries_data: list[bytes]) -> U9TypeNames:
 
 
 def _types_record(default_model_id: int) -> bytes:
-    return struct.pack(TYPES_DAT_RECORD_STRUCT, 0, 0, default_model_id, 0, 0, 0, 0, 0, 0)
+    return struct.pack(
+        TYPES_DAT_RECORD_STRUCT, 0, 0, default_model_id, 0, 0, 0, 0, 0, 0
+    )
 
 
 def _build_types(default_model_ids: list[int]) -> U9TypesDat:
@@ -89,7 +91,9 @@ class NamesForModelTests(unittest.TestCase):
     def test_single_named_type_claims_model(self) -> None:
         # type_id 1 -> model 1805, named "Lord British" (real-data scenario).
         types = _build_types([0, 1805])
-        typenames = _build_typenames([_typename_entry(None), _typename_entry("Lord British")])
+        typenames = _build_typenames(
+            [_typename_entry(None), _typename_entry("Lord British")]
+        )
 
         self.assertEqual(names_for_model(1805, types, typenames), ["Lord British"])
         self.assertEqual(label_for_model(1805, types, typenames), "lord-british")
@@ -97,14 +101,21 @@ class NamesForModelTests(unittest.TestCase):
     def test_multiple_named_types_share_one_model(self) -> None:
         # type_ids 1,2,3 all -> model 3448 (real-data scenario: 6 named types share one model).
         types = _build_types([3448, 3448, 3448])
-        typenames = _build_typenames([
-            _typename_entry("Valkadesh"),
-            _typename_entry("Wislem"),
-            _typename_entry("Winged Gargoyle"),
-        ])
+        typenames = _build_typenames(
+            [
+                _typename_entry("Valkadesh"),
+                _typename_entry("Wislem"),
+                _typename_entry("Winged Gargoyle"),
+            ]
+        )
 
-        self.assertEqual(names_for_model(3448, types, typenames), ["Valkadesh", "Wislem", "Winged Gargoyle"])
-        self.assertEqual(label_for_model(3448, types, typenames), "valkadesh-wislem-winged-gargoyle")
+        self.assertEqual(
+            names_for_model(3448, types, typenames),
+            ["Valkadesh", "Wislem", "Winged Gargoyle"],
+        )
+        self.assertEqual(
+            label_for_model(3448, types, typenames), "valkadesh-wislem-winged-gargoyle"
+        )
 
     def test_unnamed_type_contributes_nothing(self) -> None:
         types = _build_types([42])
@@ -154,7 +165,9 @@ class LabelLengthRegressionTests(unittest.TestCase):
 
     def test_short_label_is_untouched(self) -> None:
         types = _build_types([0, 1805])
-        typenames = _build_typenames([_typename_entry(None), _typename_entry("Lord British")])
+        typenames = _build_typenames(
+            [_typename_entry(None), _typename_entry("Lord British")]
+        )
         self.assertEqual(label_for_model(1805, types, typenames), "lord-british")
 
     def test_max_length_is_overridable(self) -> None:

@@ -22,6 +22,11 @@ else:
 ROOT = Path(__file__).resolve().parents[1]
 FIRST_PARTY = {"titan", "tests", "__future__"}
 
+# Standard-library modules that the oldest supported Python does not have yet.
+# Code imports them behind a version check or with a fallback, so they are not
+# third-party even where ``sys.stdlib_module_names`` does not list them.
+STDLIB_IN_NEWER_PYTHONS = {"tomllib"}
+
 # Unguarded imports that only run after a guarded import of the package that
 # provides them has already succeeded.
 REACHED_ONLY_VIA_OPTIONAL = {
@@ -87,6 +92,7 @@ def _third_party_imports(folder: str) -> dict[str, list[str]]:
             if (
                 not guarded
                 and top not in sys.stdlib_module_names
+                and top not in STDLIB_IN_NEWER_PYTHONS
                 and top not in FIRST_PARTY
                 and top not in local_modules
             ):

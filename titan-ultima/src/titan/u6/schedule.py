@@ -82,7 +82,9 @@ class U6Schedules:
         return self.per_actor[actor_id]
 
     @classmethod
-    def from_file(cls, filepath: str | os.PathLike[str], num_actors: int = NUM_ACTORS) -> U6Schedules:
+    def from_file(
+        cls, filepath: str | os.PathLike[str], num_actors: int = NUM_ACTORS
+    ) -> U6Schedules:
         with open(filepath, "rb") as f:
             data = f.read()
         return cls.parse(data, num_actors=num_actors)
@@ -91,7 +93,9 @@ class U6Schedules:
     def parse(cls, data: bytes, num_actors: int = NUM_ACTORS) -> U6Schedules:
         header_size = num_actors * 2 + 2
         if len(data) < header_size:
-            raise U6ScheduleError(f"SCHEDULE data too short: {len(data)} bytes, need at least {header_size}")
+            raise U6ScheduleError(
+                f"SCHEDULE data too short: {len(data)} bytes, need at least {header_size}"
+            )
 
         offsets = struct.unpack_from(f"<{num_actors}H", data, 0)
         total = struct.unpack_from("<H", data, num_actors * 2)[0]
@@ -99,14 +103,20 @@ class U6Schedules:
         entries_start = header_size
         needed = entries_start + total * ENTRY_SIZE
         if len(data) < needed:
-            raise U6ScheduleError(f"SCHEDULE data too short for {total} entries: {len(data)} bytes, need {needed}")
+            raise U6ScheduleError(
+                f"SCHEDULE data too short for {total} entries: {len(data)} bytes, need {needed}"
+            )
 
         entries: list[U6ScheduleEntry] = []
         for i in range(total):
             off = entries_start + i * ENTRY_SIZE
-            b0, b1, h, p1, p2 = data[off:off + ENTRY_SIZE]
+            b0, b1, h, p1, p2 = data[off : off + ENTRY_SIZE]
             x, y, z = unpack_position(h, p1, p2)
-            entries.append(U6ScheduleEntry(hour=b0 & 0x1F, day_of_week=b0 >> 5, worktype=b1, x=x, y=y, z=z))
+            entries.append(
+                U6ScheduleEntry(
+                    hour=b0 & 0x1F, day_of_week=b0 >> 5, worktype=b1, x=x, y=y, z=z
+                )
+            )
 
         per_actor: list[list[U6ScheduleEntry]] = []
         for i in range(num_actors):
