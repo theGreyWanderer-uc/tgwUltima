@@ -13,7 +13,7 @@ from titan import _wizard_ui as ui
 from titan._config import cfg
 from titan._image_preview import open_preview
 from titan._terminal_image import checkerboard, play_terminal, terminal_image
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.anim import DIRECTION_NAMES
 from titan.u8.shape_browser import (
     U8_BROWSER_OUTPUT,

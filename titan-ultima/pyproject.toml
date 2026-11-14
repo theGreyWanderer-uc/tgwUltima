@@ -5,13 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "titan-ultima"
 dynamic = ["version"]
-description = "TITAN – Tool for Interpreting and Transforming Archival Nodes. CLI and library for Ultima file formats (U8: Pagan, U7: Black Gate & Serpent Isle)."
+description = "TITAN – Tool for Interpreting and Transforming Archival Nodes. CLI and library for Ultima file formats: Ultima 6, 7, 8 and 9, Martian Dreams, Ultima Underworld I and II, Ultima Online and Ultima 3 (NES)."
 readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "theGreyWanderer", email = "196163911+theGreyWanderer-uc@users.noreply.github.com" }]
 keywords = [
     "ultima", "ultima8", "ultima7", "u8", "u7", "pagan", "black-gate", "serpent-isle",
+    "ultima6", "ultima9", "u6", "u9", "martian-dreams", "ultima-underworld", "ultima-online",
     "game-modding", "mod-tools", "asset-extraction", "file-formats",
     "flex", "shapes", "xmidi",
     "cli", "batch-processing",

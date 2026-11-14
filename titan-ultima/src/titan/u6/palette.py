@@ -60,7 +60,7 @@ class U6Palette:
         raw = data[:PALETTE_DATA_SIZE]
         for i in range(256):
             r, g, b = raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2]
-            # VGA 6-bit (0-63) -> 8-bit (0-255), matching titan.palette.U8Palette's scaling.
+            # VGA 6-bit (0-63) -> 8-bit (0-255), matching titan.u8.palette.U8Palette's scaling.
             pal.colors[i] = ((r * 255) // 63, (g * 255) // 63, (b * 255) // 63)
         pal.trailing = data[PALETTE_DATA_SIZE:TOTAL_SIZE]
         return pal

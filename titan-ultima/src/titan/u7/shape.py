@@ -651,7 +651,7 @@ class U7Shape:
         palette:
             A palette object with a ``to_flat_rgb()`` method (returns
             768 bytes of R,G,B triples) and a ``transparent_index``
-            attribute.  Both :class:`~titan.palette.U8Palette` and
+            attribute.  Both :class:`~titan.u8.palette.U8Palette` and
             :class:`~titan.u7.palette.U7Palette` satisfy this.
         transparent:
             If True, transparent pixels become alpha=0.  Ignored when

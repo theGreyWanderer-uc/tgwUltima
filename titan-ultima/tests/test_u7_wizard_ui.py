@@ -607,7 +607,7 @@ def test_egg_wizard_uses_selected_mod_metadata_gamedat_and_map(
 
 
 def test_u8_extraction_uses_default_no_confirmation(tmp_path, monkeypatch):
-    from titan.u8.cli import _ensure_asset_dir
+    from titan.u8.cli.maps import _ensure_asset_dir
 
     prompts = scripted_menus(monkeypatch, [False])
     assert not _ensure_asset_dir(

@@ -23,7 +23,7 @@ import unittest
 
 import numpy as np
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.u8.shape import U8Shape

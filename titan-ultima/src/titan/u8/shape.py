@@ -7,7 +7,7 @@ shape files (.shp) extracted from U8SHAPES.FLX, U8GUMPS.FLX, U8FONTS.FLX.
 Example::
 
     from titan.u8.shape import U8Shape
-    from titan.palette import U8Palette
+    from titan.u8.palette import U8Palette
 
     pal = U8Palette.from_file("U8PAL.PAL")
     shape = U8Shape.from_file("0001.shp")
@@ -30,7 +30,7 @@ from typing import Optional
 import numpy as np
 from PIL import Image
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 
 
 class U8Shape:
@@ -228,7 +228,7 @@ class U8Shape:
         Render all frames to PIL Images using the given palette.
 
         Args:
-            palette: :class:`~titan.palette.U8Palette` for color mapping.
+            palette: :class:`~titan.u8.palette.U8Palette` for color mapping.
             transparent: If ``True``, transparent pixels become alpha=0.
 
         Returns:
@@ -273,7 +273,7 @@ class U8Shape:
 
         Args:
             rgba_img: Input RGBA image.
-            palette:  :class:`~titan.palette.U8Palette` for colour mapping.
+            palette:  :class:`~titan.u8.palette.U8Palette` for colour mapping.
 
         Returns:
             numpy uint8 array (height x width).  Index 0xFF = transparent.

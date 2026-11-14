@@ -14,7 +14,7 @@ from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan._palette_browser_ui import show_palette_colour_grid
 from titan.fonts.palette import get_gradient_preset, list_gradient_presets
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.palette_browser import (
     U8_PALETTE_BROWSER_OUTPUT,
     U8_PALETTE_EFFECTS,

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.shape_browser import configured_u8_browser_file, find_u8_browser_file
 from titan.u8.xformpal import U8_XFORM_PALETTE
 

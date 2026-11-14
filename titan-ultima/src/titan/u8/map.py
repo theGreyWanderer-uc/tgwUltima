@@ -7,7 +7,7 @@ Provides :class:`U8MapRenderer` for isometric map rendering and
 Example::
 
     from titan.u8.map import U8MapRenderer, U8MapSampler
-    from titan.palette import U8Palette
+    from titan.u8.palette import U8Palette
 
     pal = U8Palette.from_file("U8PAL.PAL")
 
@@ -34,7 +34,7 @@ from typing import Optional
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.map_items import U8MapItem, U8MapItems
 from titan.u8.shape import U8Shape
 from titan.u8.state_io import read_u8_state_bytes

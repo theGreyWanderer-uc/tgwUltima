@@ -223,7 +223,7 @@ def _quantize_to_palette(rgba_img: Image.Image, palette) -> np.ndarray:
     """Nearest-RGB quantize an RGBA image against any ``palette.colors``.
 
     Same approach as :meth:`titan.u8.shape.U8Shape.quantize_to_palette`,
-    generalized to work with either :class:`titan.palette.U8Palette` or
+    generalized to work with either :class:`titan.u8.palette.U8Palette` or
     :class:`titan.u7.palette.U7Palette` (both expose ``.colors``, a
     256-entry list of RGB tuples). Index 0xFF is the transparent marker,
     so opaque pixels are matched against indices 0-254 only.

@@ -2,7 +2,7 @@
 
 from PIL import Image
 
-from titan.palette import U8Palette
+from titan.u8.palette import U8Palette
 from titan.u8.shape import U8Shape
 from titan.u8.u7_shape_convert import _quantize_to_palette
 
