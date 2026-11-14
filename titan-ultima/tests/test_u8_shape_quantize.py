@@ -1,6 +1,5 @@
 """U8 shape import quantising never uses index 255, titan's "no pixel" marker."""
 
-import numpy as np
 from PIL import Image
 
 from titan.palette import U8Palette

@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from titan.u7 import cli
 from titan.u7.shapeinfo import U7UsecodeIndex
 from titan.u7.usecode import U7UsecodeFile, load_u7_intrinsic_names
+from titan.u7 import install as u7_install
 from tests.test_u7_usecode import (
     _extended_function_record,
     _function_record,
@@ -255,7 +256,7 @@ def test_intrinsic_table_identity_and_numeric_fallback(usecode_path, monkeypatch
         ],
     )
     assert result.exit_code == 0 and "beta_name@00" in result.output
-    monkeypatch.setattr(cli, "_resolve_ucxt_intrinsics_data", lambda *args: None)
+    monkeypatch.setattr(u7_install, "resolve_ucxt_intrinsics_data", lambda *args: None)
     numeric = CliRunner().invoke(cli.u7_app, ["usecode-disasm", str(usecode_path), "5"])
     assert numeric.exit_code == 0 and "0x0014@00" in numeric.output
 
@@ -266,13 +267,13 @@ def test_default_intrinsic_table_lookup_uses_separate_game_names(game, monkeypat
 
     expected = "u7bgintrinsics.data" if game == "bg" else "u7siintrinsics.data"
     monkeypatch.setattr(Path, "is_file", lambda path: path.name == expected)
-    selected = cli._resolve_ucxt_intrinsics_data(game)
+    selected = u7_install.resolve_ucxt_intrinsics_data(game)
     assert selected is not None and selected.endswith(expected)
 
 
 def test_intrinsic_game_validation_at_cli_and_helper(usecode_path):
     with pytest.raises(ValueError, match="must be bg or si"):
-        cli._resolve_ucxt_intrinsics_data("wrong")
+        u7_install.resolve_ucxt_intrinsics_data("wrong")
     result = CliRunner().invoke(
         cli.u7_app, ["usecode-disasm", str(usecode_path), "5", "--game", "wrong"]
     )
@@ -283,7 +284,7 @@ def test_intrinsic_game_validation_at_cli_and_helper(usecode_path):
 def test_cli_reports_permissive_prefix_and_unrecoverable_symbol_errors(
     usecode_path, command, monkeypatch
 ):
-    monkeypatch.setattr(cli, "_resolve_ucxt_intrinsics_data", lambda *args: None)
+    monkeypatch.setattr(u7_install, "resolve_ucxt_intrinsics_data", lambda *args: None)
     target = "5" if command == "usecode-disasm" else "0x14"
     usecode_path.write_bytes(usecode_path.read_bytes() + b"\xaa")
     result = CliRunner().invoke(cli.u7_app, [command, str(usecode_path), target])

@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u9.cli import cmd_dimension_csv
+from titan.u9.cli.models import cmd_dimension_csv
 from titan.u9.model_geometry import (
     COMPLETE_STORED_BOUND_COUNT,
     EXPECTED_SIZE,

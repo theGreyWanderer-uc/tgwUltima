@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from titan.u7 import cli as u7_cli
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapRenderer
+from titan.u7 import install as u7_install
 
 
 def _write_native_map_data(map_root: Path, map_number: int) -> None:
@@ -39,7 +40,7 @@ def test_patch_base_static_is_inferred_from_game_install_tree(tmp_path: Path) ->
     patch_static.mkdir(parents=True)
     (base_static / "SHAPES.VGA").write_bytes(b"placeholder")
 
-    resolved = u7_cli._resolve_u7_patch_base_static(str(patch_static), None)
+    resolved = u7_install.resolve_u7_patch_base_static(str(patch_static), None)
 
     assert resolved == str(base_static)
 
@@ -147,7 +148,7 @@ def test_map_render_cli_forwards_optional_map_root(tmp_path: Path, monkeypatch) 
         captured["map_num"] = args.map_num
         return 0
 
-    monkeypatch.setattr(u7_cli, "cmd_map_render", capture_map_render)
+    monkeypatch.setattr(u7_cli.maps, "cmd_map_render", capture_map_render)
     static_dir = tmp_path / "static-assets"
     map_root = tmp_path / "scratch-map"
 
@@ -212,8 +213,8 @@ def test_map_render_uses_configured_game_static_as_patch_base(
             return 0
 
     monkeypatch.setattr(
-        u7_cli,
-        "_resolve_u7_paths",
+        u7_install,
+        "resolve_u7_static_and_palette",
         lambda game: (str(base_static), str(palette_path)),
     )
     monkeypatch.setattr("titan.u7.map.U7MapRenderer", FakeRenderer)
@@ -222,8 +223,8 @@ def test_map_render_uses_configured_game_static_as_patch_base(
         staticmethod(lambda path: object()),
     )
 
-    result = u7_cli.cmd_map_render(
-        u7_cli.SimpleNamespace(
+    result = u7_cli.maps.cmd_map_render(
+        u7_cli.maps.SimpleNamespace(
             static=str(patch_static),
             game="si",
             map_root=None,

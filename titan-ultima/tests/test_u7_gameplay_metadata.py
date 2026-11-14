@@ -23,6 +23,7 @@ from titan.u7.monster import (
 )
 from titan.u7.save import U7ReadyTypes
 from titan.u7.shapeinfo import U7Ammos, U7Armors, U7Weapons
+from titan.u7 import install as u7_install
 
 
 READERS: list[tuple[Callable[[bytes], U7GameplayMetadata], int]] = [
@@ -252,11 +253,11 @@ def test_cli_table_diagnostics_do_not_contaminate_csv(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (tmp_path / "ARMOR.DAT").write_bytes(b"\x02" + record(10))
-    monkeypatch.setattr(cli, "_resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr(u7_install, "resolve_u7_exult_flx", lambda game: None)
     args = SimpleNamespace(
         static=str(tmp_path), kind="armor", game="si", output=None, exult_flx=None
     )
-    assert cli.cmd_static_data_dump(args) == 0
+    assert cli.gamedata.cmd_static_data_dump(args) == 0
     output = capsys.readouterr()
     assert "incomplete" in output.err
     assert len(list(csv.DictReader(io.StringIO(output.out)))) == 1

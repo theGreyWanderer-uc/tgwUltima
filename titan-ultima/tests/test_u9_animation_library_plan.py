@@ -20,7 +20,7 @@ from titan.u9.animation_library_plan import (
     build_animation_library_plan,
     write_animation_library_plan,
 )
-from titan.u9.cli import cmd_animation_library_plan
+from titan.u9.cli.animations import cmd_animation_library_plan
 
 
 class AnimationLibraryPlanTests(unittest.TestCase):

@@ -54,48 +54,6 @@ def find_config() -> Optional[Path]:
     return next((p for p in candidates if p.exists()), None)
 
 
-def _expand_u8_paths(data: dict) -> dict:
-    """Auto-expand relative STATIC / SAVEGAME paths for a U8 game section."""
-    game = data.get("game", {})
-    base = game.get("base")
-    lang = game.get("language", "ENGLISH")
-
-    if base:
-        base_p = Path(base).expanduser()
-        static_p = (base_p / lang / "STATIC") if lang else base_p
-        save_p = (base_p / "cloud_saves" / "SAVEGAME") if lang else base_p
-
-        paths = data.setdefault("paths", {})
-
-        for k in (
-            "fixed",
-            "palette",
-            "typeflag",
-            "gumpage",
-            "xformpal",
-            "ecredits",
-            "quotes",
-            "u8shapes",
-            "u8fonts",
-            "u8gumps",
-        ):
-            if (
-                k in paths
-                and isinstance(paths[k], str)
-                and not Path(paths[k]).is_absolute()
-            ):
-                paths[k] = str(static_p / paths[k])
-
-        if (
-            "nonfixed" in paths
-            and isinstance(paths["nonfixed"], str)
-            and not Path(paths["nonfixed"]).is_absolute()
-        ):
-            paths["nonfixed"] = str(save_p / paths["nonfixed"])
-
-    return data
-
-
 def load_config(config_path: Optional[str] = None) -> dict:
     """Load *titan.toml* and auto-expand relative paths.
 
@@ -105,6 +63,9 @@ def load_config(config_path: Optional[str] = None) -> dict:
     If a legacy ``[game]`` section exists it is treated as ``[u8]``.
     """
     global _config
+
+    # Imported here: the U8 package itself reads this module at import time.
+    from titan.u8.install import expand_u8_paths
 
     if _tomllib is None:
         _config = {"paths": {}}
@@ -125,7 +86,7 @@ def load_config(config_path: Optional[str] = None) -> dict:
 
     # ── Legacy format: [game] + [paths] → treat as U8 ─────────────
     if "game" in data and "u8" not in data:
-        _expand_u8_paths(data)
+        expand_u8_paths(data)
         _config = data
         return _config
 
@@ -140,7 +101,7 @@ def load_config(config_path: Optional[str] = None) -> dict:
                     **data.get(section, {}),
                     **u8_section.get(section, {}),
                 }
-        _expand_u8_paths(u8_section)
+        expand_u8_paths(u8_section)
         # Promote u8.game/u8.paths to top-level game/paths for compat
         if "game" in u8_section:
             data["game"] = u8_section["game"]

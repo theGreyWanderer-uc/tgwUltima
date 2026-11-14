@@ -42,3 +42,6 @@ venv/
 
 # Developer-only tools and server-side scripts (not part of the package)
 dev-scripts/
+
+# Local machine configuration (copy titan.toml.example)
+titan.toml

@@ -23,11 +23,8 @@ import typer
 from PIL import Image, ImageDraw
 
 from titan._config import cfg as _cfg
-from titan._version import TITAN_VERSION
 from titan.flex import (
     FlexArchive,
-    FLEX_HEADER_SIZE,
-    get_extension_for_flex,
 )
 from titan.music import XMIDIConverter
 from titan.palette import U8Palette
@@ -829,14 +826,14 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
         for name in e.flag_names():
             flagged[name] = flagged.get(name, 0) + 1
 
-    print(f"\nFamily distribution:")
+    print("\nFamily distribution:")
     for fn, count in sorted(families.items(), key=lambda x: -x[1]):
         if fn == "generic" and count > 1000:
             print(f"  {fn:<14} {count:5d}  (most shapes)")
         else:
             print(f"  {fn:<14} {count:5d}")
 
-    print(f"\nFlag counts:")
+    print("\nFlag counts:")
     for name, count in sorted(flagged.items(), key=lambda x: -x[1]):
         print(f"  {name:<18} {count:5d}")
 
@@ -889,7 +886,7 @@ def cmd_gumpinfo_dump(args: SimpleNamespace) -> int:
             non_empty += 1
 
     print(f"Wrote {non_empty}/{count} non-empty gump areas -> {out_path}")
-    print(f"(GUMPAGE.DAT defines container gump UI layout, not map data)")
+    print("(GUMPAGE.DAT defines container gump UI layout, not map data)")
     return 0
 
 

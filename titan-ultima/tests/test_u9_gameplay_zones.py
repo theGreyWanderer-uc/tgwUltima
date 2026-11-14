@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u9.cli import cmd_areas_csv
+from titan.u9.cli.zones import cmd_areas_csv
 from titan.u9.flx_archive import U9FlxArchive
 from titan.u9.gameplay_zones import (
     U9Areas,

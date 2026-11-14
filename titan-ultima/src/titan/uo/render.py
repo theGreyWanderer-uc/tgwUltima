@@ -637,7 +637,7 @@ def _blit(canvas: np.ndarray, draw: _Draw) -> None:
 
 
 def _light_for_normal(normal: tuple[float, float, float]) -> float:
-    base = max(sum(n * l for n, l in zip(normal, _LIGHT)), 0.0) / 2.0 + 0.5
+    base = max(sum(n * light for n, light in zip(normal, _LIGHT)), 0.0) / 2.0 + 0.5
     offset = base - _FLAT_LIGHT_BASE
     return base + _BRIGHTLIGHT * offset - offset
 

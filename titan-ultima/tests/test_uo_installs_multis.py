@@ -219,7 +219,7 @@ def _placement_tiledata():
 
 
 def test_placement_legal_area_and_tree_blocking():
-    from titan.uo.placement import coverage, pack_houses, placement_legality
+    from titan.uo.placement import coverage, placement_legality
 
     td = _placement_tiledata()
     multi = _ring_multi(0x64)  # 3x3 house, border reaches +-2
@@ -284,7 +284,7 @@ def test_region_layers_follow_region_find(tmp_path):
     path = tmp_path / "Regions.xml"
     path.write_text(_REGIONS, encoding="utf-8")
     layers, counts = load_region_layers(path, "Felucca", 32, 16)
-    assert [(l.z_min, l.z_max) for l in layers] == [(-128, 0), (0, 128)]
+    assert [(layer.z_min, layer.z_max) for layer in layers] == [(-128, 0), (0, 128)]
     below, ground = layers
 
     # The town only reaches down to z 0 (its zrange), so below that it allows.

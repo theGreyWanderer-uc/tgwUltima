@@ -272,7 +272,7 @@ def _options(args: SimpleNamespace, target: ArchiveTarget) -> None:
             or None
         )
         args.palette_index = _integer("Palette record", args.palette_index, 0, 65535)
-        from titan.u7.cli import _EXCLUDE_FLAG_CHOICES
+        from titan.u7.cli.maps import _EXCLUDE_FLAG_CHOICES
 
         print(
             "  Exclusions hide shapes with the selected type flags; no_building hides building parts."
@@ -393,7 +393,7 @@ def render_map(
         TextColumn,
         TimeElapsedColumn,
     )
-    from titan.u7.cli import cmd_map_render
+    from titan.u7.cli.maps import cmd_map_render
 
     render_args = SimpleNamespace(**vars(args))
     validate_sources(render_args)

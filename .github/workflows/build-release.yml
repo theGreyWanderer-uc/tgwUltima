@@ -112,6 +112,38 @@ jobs:
           path: gimp-plugin-u8/u8shp.exe
 
   # ── Titan-Ultima Python package ─────────────────────────────────────
+  # Tests on the oldest and newest Python the package claims to support.
+  # The build job below covers 3.12.
+  test-titan:
+    name: Test Titan-Ultima (Python ${{ matrix.python-version }})
+    needs: [pre-release-checks]
+    if: >-
+      !startsWith(github.ref, 'refs/tags/')
+      || startsWith(github.ref, 'refs/tags/titan/v')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.13']
+    env:
+      PIP_CONSTRAINT: ${{ github.workspace }}/titan-ultima/constraints/ci.txt
+      PIP_BUILD_CONSTRAINT: ${{ github.workspace }}/titan-ultima/constraints/ci.txt
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Titan (editable) for tests
+        working-directory: titan-ultima
+        run: pip install -e ".[glb,test]"
+
+      - name: Run Titan tests
+        working-directory: titan-ultima
+        run: python -m pytest -q
+
   build-titan:
     name: Build Titan-Ultima Python Package
     needs: [pre-release-checks]
@@ -162,7 +194,11 @@ jobs:
 
       - name: Install Titan (editable) for tests
         working-directory: titan-ultima
-        run: pip install -e ".[glb,test]"
+        run: pip install -e ".[glb,test,lint]"
+
+      - name: Lint Titan
+        working-directory: titan-ultima
+        run: python -m ruff check .
 
       - name: Run Titan tests
         working-directory: titan-ultima
@@ -240,7 +276,7 @@ jobs:
   # ── Release: Titan-Ultima ──────────────────────────────────────────
   release-titan:
     name: Release Titan-Ultima
-    needs: [build-titan]
+    needs: [build-titan, test-titan]
     if: startsWith(github.ref, 'refs/tags/titan/v')
     runs-on: ubuntu-latest
     permissions:

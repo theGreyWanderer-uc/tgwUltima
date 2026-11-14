@@ -19,8 +19,6 @@ __all__ = ["VocDecoder"]
 
 import os
 import struct
-import sys
-from pathlib import Path
 from typing import Optional
 
 

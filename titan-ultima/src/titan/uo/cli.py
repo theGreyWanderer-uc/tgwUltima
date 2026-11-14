@@ -35,7 +35,7 @@ from titan.uo.animresolve import (
     UOAnimationSequence,
     animation_entry_index,
 )
-from titan.uo.animnames import UOAnimationBodyNames, load_animation_body_names
+from titan.uo.animnames import UOAnimationBodyNames
 from titan.uo.animdata import UOAnimData, UOAnimDataEntry
 from titan.uo.art import UOArtDecoder
 from titan.uo.artdef import UOArtDef, UOArtDefEntry
@@ -1651,7 +1651,7 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
         region_counts: dict[str, int] = {}
         if server.region_rects is not None:
             layers = region_layers_from_rects(server.region_rects, facet.width, facet.height)
-            ground = next(l for l in layers if l.z_min <= 0 < l.z_max)
+            ground = next(layer for layer in layers if layer.z_min <= 0 < layer.z_max)
             blocked = ground.blocked
             seen = set()
             for key, allow, _nh, *_rest, rtype in server.region_rects:

@@ -28,7 +28,6 @@ from __future__ import annotations
 __all__ = ["app", "main"]
 
 import os
-import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -716,22 +715,44 @@ def cmd_setup(args: SimpleNamespace) -> int:
     import titan._config as _config_mod
     from titan.u7.install import (
         U7Installation,
-        exult_game_paths,
+        discover_u7_mod_sources,
+        exult_profile_dir,
+        find_exult_flx,
         inspect_install,
         install_roots,
-        install_game,
+        preferred_u7_gamedat,
+        relative_install_paths,
+        select_u7_install,
+        u7_base_correction,
+        u7_install_candidates,
+        u7_manual_setup_lines,
+        u7_setup_lines,
     )
-    from titan.u9.install import discover_u9_installs, u9_install_candidates
+    from titan.u8.install import (
+        discover_u8_installs,
+        find_u8_engine_save,
+        u8_detected_paths,
+        u8_install_candidates,
+        u8_setup_lines,
+    )
+    from titan.u9.install import (
+        discover_u9_installs,
+        u9_install_candidates,
+        u9_setup_lines,
+    )
     from titan.u6.install import (
         inspect_u6_install,
         u6_install_candidates,
         u6_resource_paths,
+        u6_setup_lines,
     )
     from titan.md.install import (
         inspect_martian_install,
         martian_install_candidates,
         martian_resource_paths,
+        martian_setup_lines,
     )
+    from titan.uo.installs import detect_uo_install
 
     explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
     toml_path = Path(explicit).expanduser() if explicit else Path.cwd() / "titan.toml"
@@ -748,175 +769,15 @@ def cmd_setup(args: SimpleNamespace) -> int:
         print("Verified U7 base corrections will be shown before saving.\n")
 
     # -- Auto-detect standard install locations --------------------
-    candidates: list[Path] = []
-
-    def _add_candidate(path: Path) -> None:
-        if path not in candidates:
-            candidates.append(path)
-
-    def _is_u8_folder_name(name: str) -> bool:
-        lowered = name.lower()
-        if "ultima" not in lowered:
-            return False
-        # Avoid nearby U7/SI installs when dynamically scanning launcher roots.
-        if "serpent" in lowered:
-            return False
-        if "ultima 7" in lowered or "ultima7" in lowered:
-            return False
-        return any(
-            token in lowered for token in ("ultima 8", "ultima8", "viii", "pagan")
-        )
-
-    def _is_u7_folder_name(name: str) -> bool:
-        lowered = name.lower()
-        if "ultima" not in lowered:
-            return False
-        return bool(re.search(r"ultima\s*vii(?!i)", lowered)) or any(
-            token in lowered
-            for token in ("ultima 7", "ultima7", "black gate", "serpent")
-        )
-
-    def _looks_like_uo_root(path: Path) -> bool:
-        return any(
-            (path / name).is_file()
-            for name in (
-                "artLegacyMUL.uop",
-                "gumpartLegacyMUL.uop",
-                "tiledata.mul",
-                "hues.mul",
-            )
-        )
-
-    # Windows: GOG Galaxy client (most common current install)
-    for drive in "CDEFG":
-        _add_candidate(
-            Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8")
-        )
-    # Windows: GOG Offline Installer + common manual redirects
-    for drive in "CDEFG":
-        for path in [
-            Path(f"{drive}:\\GOG Games\\Ultima 8"),
-            Path(f"{drive}:\\ULTIMA8"),
-            Path(f"{drive}:\\ultima8"),
-        ]:
-            _add_candidate(path)
-    # Windows: Legacy EA/Origin disc installs
-    for path in [
-        Path(r"C:\Program Files\EA Games\Ultima 8 Gold Edition"),
-        Path(r"C:\Program Files (x86)\Origin Games\Ultima 8 Gold Edition"),
-    ]:
-        _add_candidate(path)
-
-    # Linux: direct known paths
-    _add_candidate(Path.home() / "GOG Games" / "Ultima 8")
-    _add_candidate(Path.home() / "Games" / "Heroic" / "Ultima 8")
-
-    # Linux: dynamic launcher roots (discover all Ultima-* folders)
-    linux_roots = [
-        Path.home() / "GOG Games",
-        Path.home() / "Games" / "Heroic",
-    ]
-    for root in linux_roots:
-        if not root.is_dir():
-            continue
-        try:
-            for folder in root.iterdir():
-                if folder.is_dir() and _is_u8_folder_name(folder.name):
-                    _add_candidate(folder)
-        except PermissionError:
-            continue
-
-    # U7 auto-detection candidates.
-    u7_candidates: list[Path] = []
-
-    def _add_u7_candidate(path: Path) -> None:
-        if path not in u7_candidates:
-            u7_candidates.append(path)
-
-    # Existing settings and Exult support nonstandard install locations too.
-    exult_hints: dict[Path, str] = {}
-    exult_statics: dict[Path, Path] = {}
-    for game, section_key in (("BG", "u7bg"), ("SI", "u7si")):
-        previous_base = existing_config.get(section_key, {}).get("game", {}).get("base")
-        if previous_base:
-            configured_base = Path(previous_base).expanduser().resolve()
-            exult_hints[configured_base] = game
-            _add_u7_candidate(configured_base)
-        exult_paths = exult_game_paths(game)
-        if "base" in exult_paths:
-            exult_hints[exult_paths["base"].absolute()] = game
-            if "static" in exult_paths:
-                exult_statics[exult_paths["base"].absolute()] = exult_paths["static"]
-            _add_u7_candidate(exult_paths["base"])
-
-    for drive in "CDEFG":
-        for path in [
-            Path(f"{drive}:\\GOG Games\\Ultima VII"),
-            Path(f"{drive}:\\GOG Games\\Ultima VII - Complete"),
-            Path(f"{drive}:\\Ultima\\ultima7bg"),
-            Path(f"{drive}:\\Ultima\\ultima7si"),
-            Path(f"{drive}:\\Ultima\\ultima7bg_no_exult"),
-            Path(f"{drive}:\\Ultima\\ultima7si_no_exult"),
-            Path(f"{drive}:\\ULTIMA7"),
-            Path(f"{drive}:\\SERPENT"),
-        ]:
-            _add_u7_candidate(path)
-
-    for path in [
-        Path.home() / "GOG Games" / "Ultima VII",
-        Path.home() / "Games" / "Heroic" / "Ultima 7",
-        Path.home() / "Games" / "Heroic" / "Ultima 7 - Serpent Isle",
-    ]:
-        _add_u7_candidate(path)
-
-    for root in linux_roots:
-        if not root.is_dir():
-            continue
-        try:
-            for folder in root.iterdir():
-                if folder.is_dir() and _is_u7_folder_name(folder.name):
-                    _add_u7_candidate(folder)
-        except PermissionError:
-            continue
-
-    # UO auto-detection candidates.
-    uo_candidates: list[Path] = []
-
-    def _add_uo_candidate(path: Path) -> None:
-        if path not in uo_candidates:
-            uo_candidates.append(path)
-
-    for drive in "CDEFG":
-        for path in [
-            Path(
-                f"{drive}:\\Program Files (x86)\\Electronic Arts\\Ultima Online Classic"
-            ),
-            Path(f"{drive}:\\Ultima\\UltimaOnlineClassicClient"),
-            Path(f"{drive}:\\Ultima Online Classic"),
-        ]:
-            _add_uo_candidate(path)
+    candidates = u8_install_candidates()
+    # Existing settings and Exult support nonstandard U7 install locations too.
+    u7_candidates, exult_hints, exult_statics = u7_install_candidates(existing_config)
 
     detected_base: Optional[Path] = None
     detected_lang = "ENGLISH"
-    detected_u8: list[tuple[Path, str]] = []
 
     print("Searching for Ultima 8 installation...")
-    for candidate_base in candidates:
-        if not candidate_base.is_dir():
-            continue
-        if (candidate_base / "FIXED.DAT").is_file():
-            detected_u8.append((candidate_base, ""))
-            continue
-        try:
-            for folder in candidate_base.iterdir():
-                if not folder.is_dir():
-                    continue
-                static = folder / "STATIC"
-                if static.exists() and (static / "FIXED.DAT").exists():
-                    detected_u8.append((candidate_base, folder.name))
-                    break
-        except PermissionError:
-            continue
+    detected_u8 = discover_u8_installs(candidates)
 
     if detected_u8:
         detected_base, detected_lang = detected_u8[0]
@@ -994,80 +855,24 @@ def cmd_setup(args: SimpleNamespace) -> int:
     u7bg_base = (u7bg_input or bg_default).replace("\\", "/")
     u7si_base = (u7si_input or si_default).replace("\\", "/")
 
-    def _selected_u7(value: str, game: str) -> Optional[U7Installation]:
-        if not value:
-            return None
-        candidate = Path(value).expanduser().absolute()
-        roots = install_roots(candidate)
-        matching = [root for root in roots if inspect_game(root) == game]
-        root = next(iter(matching or roots), candidate)
-        # Selecting a base explicitly chooses the game even with a custom name.
-        return inspect_install(root, game, static=exult_statics.get(root))
-
-    def inspect_game(root: Path) -> str:
-        return exult_hints.get(root.absolute()) or install_game(root)
-
-    selected_bg = _selected_u7(u7bg_base, "BG")
-    selected_si = _selected_u7(u7si_base, "SI")
+    selected_bg = select_u7_install(u7bg_base, "BG", exult_hints, exult_statics)
+    selected_si = select_u7_install(u7si_base, "SI", exult_hints, exult_statics)
     if selected_bg:
         u7bg_base = selected_bg.root.as_posix()
     if selected_si:
         u7si_base = selected_si.root.as_posix()
 
-    def _relative_u7_paths(selected: Optional[U7Installation]) -> dict[str, str]:
-        if selected is None:
-            return {}
-        return {
-            key: path.relative_to(selected.root).as_posix()
-            if path.is_relative_to(selected.root)
-            else path.as_posix()
-            for key, path in selected.paths.items()
-        }
-
-    bg_paths = _relative_u7_paths(selected_bg)
-    si_paths = _relative_u7_paths(selected_si)
+    bg_paths = relative_install_paths(selected_bg)
+    si_paths = relative_install_paths(selected_si)
     setup_updates: dict = {}
     for section_key, selected in (("u7bg", selected_bg), ("u7si", selected_si)):
-        previous = existing_config.get(section_key, {}).get("game", {}).get("base")
-        if (
-            selected
-            and previous
-            and Path(str(previous)).expanduser().resolve() != selected.root.resolve()
-        ):
-            print(
-                f"  Proposed {section_key} base correction: {previous} -> {selected.root}"
-            )
-            setup_updates[section_key] = {"game": {"base": selected.root.as_posix()}}
-            # Preserve the meaning of custom relative paths when changing base.
-            previous_section = existing_config[section_key]
-            for key, value in previous_section.get("paths", {}).items():
-                old_path = resolve_config_path(value, previous)
-                if not value or Path(str(value)).expanduser().is_absolute():
-                    continue
-                standard = str(value).replace("\\", "/").upper().rstrip("/") in {
-                    "STATIC",
-                    "STATIC/SHAPES.VGA",
-                    "STATIC/PALETTES.FLX",
-                    "STATIC/TEXT.FLX",
-                    "GAMEDAT",
-                }
-                if old_path and (old_path.exists() or not standard):
-                    setup_updates[section_key].setdefault("paths", {})[key] = (
-                        old_path.absolute().as_posix()
-                    )
-                    print(f"    Preserve custom {key}: {old_path.absolute()}")
-            for mod_name, mod_config in previous_section.get("mods", {}).items():
-                preserved = {}
-                for key, value in mod_config.get("paths", {}).items():
-                    if value and not Path(str(value)).expanduser().is_absolute():
-                        preserved_path = resolve_config_path(value, previous)
-                        if preserved_path is not None:
-                            preserved[key] = preserved_path.absolute().as_posix()
-                if preserved:
-                    setup_updates[section_key].setdefault("mods", {})[mod_name] = {
-                        "paths": preserved
-                    }
-                    print(f"    Preserve custom paths for mod: {mod_name}")
+        correction, messages = u7_base_correction(
+            section_key, selected, existing_config
+        )
+        for message in messages:
+            print(message)
+        if correction:
+            setup_updates[section_key] = correction
 
     # -- U9 install detection -------------------------------------
     print("\nSearching for Ultima 9 installations...")
@@ -1172,14 +977,11 @@ def cmd_setup(args: SimpleNamespace) -> int:
         setup_updates["md"] = {"game": {"base": md_base.as_posix()}}
 
     # -- UO install detection -------------------------------------
-    detected_uo: Optional[Path] = None
     print("\nSearching for Ultima Online Classic Client installation...")
-    for uo_candidate in uo_candidates:
-        if uo_candidate.exists() and _looks_like_uo_root(uo_candidate):
-            detected_uo = uo_candidate
-            print(f"  Found UO Classic Client: {uo_candidate}")
-            break
-    if detected_uo is None:
+    detected_uo = detect_uo_install()
+    if detected_uo is not None:
+        print(f"  Found UO Classic Client: {detected_uo}")
+    else:
         print("  Not found in standard locations.")
 
     uo_default = str(detected_uo) if detected_uo else ""
@@ -1189,20 +991,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
     uo_base = (uo_input or uo_default).replace("\\", "/")
 
     # -- Third-party engine save detection -------------------------
-    appdata = os.getenv("APPDATA")
-    engine_save_file: Optional[Path] = None
-    # Windows: %APPDATA%\Pentagram\u8-save
-    if appdata:
-        pent_save = Path(appdata) / "Pentagram" / "u8-save"
-        if (pent_save / "U8SAVE.000").exists():
-            engine_save_file = pent_save / "U8SAVE.000"
-    # macOS: ~/Library/Application Support/Pentagram/u8-save
-    if engine_save_file is None:
-        mac_save = (
-            Path.home() / "Library" / "Application Support" / "Pentagram" / "u8-save"
-        )
-        if (mac_save / "U8SAVE.000").exists():
-            engine_save_file = mac_save / "U8SAVE.000"
+    engine_save_file = find_u8_engine_save()
 
     nonfixed_value = "U8SAVE.000"
     if engine_save_file:
@@ -1216,116 +1005,25 @@ def cmd_setup(args: SimpleNamespace) -> int:
             nonfixed_value = str(engine_save_file).replace("\\", "/")
 
     # -- Detection summary + confirmation -------------------------
-    u8_static_detected = (Path(base) / lang / "STATIC") if lang else Path(base)
-    u8_usecode_detected = (
-        (Path(base) / lang / "USECODE" / "EUSECODE.FLX")
-        if lang
-        else (Path(base) / "USECODE" / "EUSECODE.FLX")
-    )
+    u8_static_detected, u8_usecode_detected = u8_detected_paths(base, lang)
     u7bg_static_detected = selected_bg.paths["static"] if selected_bg else None
     u7si_static_detected = selected_si.paths["static"] if selected_si else None
-    exult_profile = (
-        Path(os.getenv("LOCALAPPDATA", "")) / "Exult"
-        if os.getenv("LOCALAPPDATA")
-        else None
+    exult_profile = exult_profile_dir()
+
+    u7bg_gamedat = (
+        preferred_u7_gamedat(u7bg_base, "blackgate", exult_profile) if u7bg_base else ""
     )
-    if exult_profile is not None and not exult_profile.is_dir():
-        exult_profile = None
-
-    def _has_runtime_npc(path: Path) -> bool:
-        return (path / "npc.dat").is_file()
-
-    def _preferred_u7_gamedat(base_value: str, slug: str) -> str:
-        candidates: list[Path] = []
-        if exult_profile is not None:
-            candidates.append(exult_profile / slug / "gamedat")
-        if base_value:
-            candidates.append(Path(base_value) / "gamedat")
-            candidates.append(Path(base_value) / "GAMEDAT")
-        for candidate in candidates:
-            if _has_runtime_npc(candidate):
-                return str(candidate).replace("\\", "/")
-        return "gamedat/"
-
-    def _discover_u7_mod_sources(base_value: str, slug: str) -> list[dict[str, str]]:
-        if not base_value:
-            return []
-        install_mods = Path(base_value) / "mods"
-        if not install_mods.is_dir():
-            return []
-
-        def _best_saves_dir(runtime_root: Optional[Path]) -> Optional[Path]:
-            if runtime_root is None or not runtime_root.is_dir():
-                return None
-            counts: dict[Path, int] = {}
-            for save_file in runtime_root.rglob("*.sav"):
-                if save_file.is_file():
-                    counts[save_file.parent] = counts.get(save_file.parent, 0) + 1
-            if not counts:
-                return None
-            return sorted(
-                counts.items(),
-                key=lambda item: (-item[1], len(str(item[0])), str(item[0]).lower()),
-            )[0][0]
-
-        sources: list[dict[str, str]] = []
-        for mod_dir in sorted(p for p in install_mods.iterdir() if p.is_dir()):
-            item: dict[str, str] = {"name": mod_dir.name}
-            runtime_root = (
-                exult_profile / slug / "mods" / mod_dir.name
-                if exult_profile is not None
-                else None
-            )
-            if runtime_root is not None and runtime_root.is_dir():
-                item["root"] = str(runtime_root).replace("\\", "/")
-            runtime_gamedat = (
-                runtime_root / "gamedat" if runtime_root is not None else None
-            )
-            install_gamedat = mod_dir / "gamedat"
-            if runtime_gamedat is not None and _has_runtime_npc(runtime_gamedat):
-                item["gamedat"] = str(runtime_gamedat).replace("\\", "/")
-            elif _has_runtime_npc(install_gamedat):
-                item["gamedat"] = str(install_gamedat).replace("\\", "/")
-            saves_dir = _best_saves_dir(runtime_root)
-            if saves_dir is not None:
-                item["saves"] = str(saves_dir).replace("\\", "/")
-            for archive in (
-                mod_dir / "patch" / "initgame.dat",
-                mod_dir / "data" / "initgame.dat",
-            ):
-                if archive.is_file():
-                    item["archive"] = str(archive).replace("\\", "/")
-                    break
-            if len(item) > 1:
-                sources.append(item)
-        return sources
-
-    u7bg_gamedat = _preferred_u7_gamedat(u7bg_base, "blackgate") if u7bg_base else ""
-    u7si_gamedat = _preferred_u7_gamedat(u7si_base, "serpentisle") if u7si_base else ""
-    u7bg_mod_sources = _discover_u7_mod_sources(u7bg_base, "blackgate")
-    u7si_mod_sources = _discover_u7_mod_sources(u7si_base, "serpentisle")
+    u7si_gamedat = (
+        preferred_u7_gamedat(u7si_base, "serpentisle", exult_profile)
+        if u7si_base
+        else ""
+    )
+    u7bg_mod_sources = discover_u7_mod_sources(u7bg_base, "blackgate", exult_profile)
+    u7si_mod_sources = discover_u7_mod_sources(u7si_base, "serpentisle", exult_profile)
 
     # -- Exult install detection (for exult_bg.flx / exult_si.flx) --------
-    def _find_exult_flx(flx_name: str) -> Optional[Path]:
-        candidates: list[Path] = []
-        for drive in "CD":
-            for layout in (
-                Path(f"{drive}:\\Program Files\\Exult\\data"),
-                Path(f"{drive}:\\Program Files (x86)\\Exult\\data"),
-                Path(f"{drive}:\\Program Files\\Exult"),
-                Path(f"{drive}:\\Program Files (x86)\\Exult"),
-            ):
-                candidates.append(layout / flx_name)
-        for share in (
-            Path("/usr/share/exult"),
-            Path("/usr/local/share/exult"),
-            Path("/opt/exult"),
-        ):
-            candidates.append(share / flx_name)
-        return next((p for p in candidates if p.exists()), None)
-
-    detected_exult_bg_flx = _find_exult_flx("exult_bg.flx")
-    detected_exult_si_flx = _find_exult_flx("exult_si.flx")
+    detected_exult_bg_flx = find_exult_flx("exult_bg.flx")
+    detected_exult_si_flx = find_exult_flx("exult_si.flx")
 
     print("\nSearching for Exult installation (exult_bg.flx / exult_si.flx)...")
     if detected_exult_bg_flx or detected_exult_si_flx:
@@ -1526,209 +1224,38 @@ def cmd_setup(args: SimpleNamespace) -> int:
             return 0
 
     # -- Build and write titan.toml --------------------------------
-    base_toml = base.replace("\\", "/")
-    nonfixed_is_abs = Path(nonfixed_value).is_absolute()
-
-    u8_static_manual_path = Path(manual_u8_static) if manual_u8_static else None
-    if manual_u8_usecode:
-        u8_usecode_path = manual_u8_usecode
-    elif u8_static_manual_path is not None:
-        u8_usecode_path = str(
-            u8_static_manual_path.parent / "USECODE" / "EUSECODE.FLX"
-        ).replace("\\", "/")
-    else:
-        u8_usecode_path = str(u8_usecode_detected).replace("\\", "/")
-
-    if u8_static_manual_path is not None:
-        u8_paths_fixed = str(u8_static_manual_path / "FIXED.DAT").replace("\\", "/")
-        u8_paths_palette = str(u8_static_manual_path / "U8PAL.PAL").replace("\\", "/")
-        u8_paths_typeflag = str(u8_static_manual_path / "TYPEFLAG.DAT").replace(
-            "\\", "/"
-        )
-        u8_paths_gumpage = str(u8_static_manual_path / "GUMPAGE.DAT").replace("\\", "/")
-        u8_paths_xformpal = str(u8_static_manual_path / "XFORMPAL.DAT").replace(
-            "\\", "/"
-        )
-        u8_paths_ecredits = str(u8_static_manual_path / "ECREDITS.DAT").replace(
-            "\\", "/"
-        )
-        u8_paths_quotes = str(u8_static_manual_path / "QUOTES.DAT").replace("\\", "/")
-        u8_paths_shapes_flx = str(u8_static_manual_path / "U8SHAPES.FLX").replace(
-            "\\", "/"
-        )
-        u8_paths_fonts_flx = str(u8_static_manual_path / "U8FONTS.FLX").replace(
-            "\\", "/"
-        )
-        u8_paths_gumps_flx = str(u8_static_manual_path / "U8GUMPS.FLX").replace(
-            "\\", "/"
-        )
-    else:
-        u8_paths_fixed = "FIXED.DAT"
-        u8_paths_palette = "U8PAL.PAL"
-        u8_paths_typeflag = "TYPEFLAG.DAT"
-        u8_paths_gumpage = "GUMPAGE.DAT"
-        u8_paths_xformpal = "XFORMPAL.DAT"
-        u8_paths_ecredits = "ECREDITS.DAT"
-        u8_paths_quotes = "QUOTES.DAT"
-        u8_paths_shapes_flx = "U8SHAPES.FLX"
-        u8_paths_fonts_flx = "U8FONTS.FLX"
-        u8_paths_gumps_flx = "U8GUMPS.FLX"
-
-    def _u7_section_from_manual(static_path: str, variant: str) -> list[str]:
-        static_norm = Path(static_path).expanduser().absolute().as_posix()
-        static_p = Path(static_norm)
-        base_guess = static_p.parent.as_posix()
-        gamedat_guess = str(static_p.parent / "gamedat").replace("\\", "/")
-        section_name = "u7bg" if variant == "blackgate" else "u7si"
-        return [
-            "",
-            f"[{section_name}.game]",
-            f'base     = "{base_guess}"',
-            f'variant  = "{variant}"',
-            "",
-            f"[{section_name}.paths]",
-            f'static   = "{static_norm}"',
-            f'shapes   = "{static_norm}/SHAPES.VGA"',
-            f'palette  = "{static_norm}/PALETTES.FLX"',
-            f'text     = "{static_norm}/TEXT.FLX"',
-            f'gamedat  = "{gamedat_guess}"',
-        ]
-
-    lines = [
-        "# titan.toml \u2014 created by `titan setup`",
-        "[u8.game]",
-        f'base     = "{base_toml}"',
-        f'language = "{lang}"',
-        "",
-        "[u8.paths]",
-        f'fixed     = "{u8_paths_fixed}"',
-        f'palette   = "{u8_paths_palette}"',
-        f'typeflag  = "{u8_paths_typeflag}"',
-        f'gumpage   = "{u8_paths_gumpage}"',
-        f'xformpal  = "{u8_paths_xformpal}"',
-        f'ecredits  = "{u8_paths_ecredits}"',
-        f'quotes    = "{u8_paths_quotes}"',
-        "",
-        f'u8shapes  = "{u8_paths_shapes_flx}"',
-        f'u8fonts   = "{u8_paths_fonts_flx}"',
-        f'u8gumps   = "{u8_paths_gumps_flx}"',
-        f'usecode   = "{u8_usecode_path}"',
-        "",
-        "# Pre-extracted directories (relative to where you run titan)",
-        'shapes    = "shapes/"',
-        'globs     = "globs/"',
-        "",
-        "# Live/dynamic objects \u2014 U8SAVE.000 from game or third-party engine",
-    ]
-    if nonfixed_is_abs:
-        lines.append(f'nonfixed  = "{nonfixed_value}"  # absolute (third-party engine)')
-    else:
-        lines.append(f'nonfixed  = "{nonfixed_value}"')
+    lines = ["# titan.toml — created by `titan setup`"]
+    lines += u8_setup_lines(
+        base,
+        lang,
+        nonfixed_value,
+        u8_usecode_detected,
+        manual_static=manual_u8_static,
+        manual_usecode=manual_u8_usecode,
+    )
 
     if manual_u7bg_static:
-        lines += _u7_section_from_manual(manual_u7bg_static, "blackgate")
+        lines += u7_manual_setup_lines(manual_u7bg_static, "blackgate")
     elif u7bg_base:
-        lines += [
-            "",
-            "[u7bg.game]",
-            f'base     = "{u7bg_base}"',
-            'variant  = "blackgate"',
-            "",
-            "[u7bg.paths]",
-            f'static   = "{bg_paths["static"]}"',
-            f'shapes   = "{bg_paths["shapes"]}"',
-            f'palette  = "{bg_paths["palette"]}"',
-            f'text     = "{bg_paths["text"]}"',
-            f'gamedat  = "{u7bg_gamedat}"',
-        ]
-        for item in u7bg_mod_sources:
-            lines += [
-                "",
-                f'[u7bg.mods."{item["name"]}".paths]',
-            ]
-            if "gamedat" in item:
-                lines.append(f'gamedat  = "{item["gamedat"]}"')
-            if "saves" in item:
-                lines.append(f'saves    = "{item["saves"]}"')
-            if "root" in item:
-                lines.append(f'root     = "{item["root"]}"')
-            if "archive" in item:
-                lines.append(f'archive  = "{item["archive"]}"')
+        lines += u7_setup_lines(
+            "u7bg", "blackgate", u7bg_base, bg_paths, u7bg_gamedat, u7bg_mod_sources
+        )
 
     if manual_u7si_static:
-        lines += _u7_section_from_manual(manual_u7si_static, "serpentisle")
+        lines += u7_manual_setup_lines(manual_u7si_static, "serpentisle")
     elif u7si_base:
-        lines += [
-            "",
-            "[u7si.game]",
-            f'base     = "{u7si_base}"',
-            'variant  = "serpentisle"',
-            "",
-            "[u7si.paths]",
-            f'static   = "{si_paths["static"]}"',
-            f'shapes   = "{si_paths["shapes"]}"',
-            f'palette  = "{si_paths["palette"]}"',
-            f'text     = "{si_paths["text"]}"',
-            f'gamedat  = "{u7si_gamedat}"',
-        ]
-        for item in u7si_mod_sources:
-            lines += [
-                "",
-                f'[u7si.mods."{item["name"]}".paths]',
-            ]
-            if "gamedat" in item:
-                lines.append(f'gamedat  = "{item["gamedat"]}"')
-            if "saves" in item:
-                lines.append(f'saves    = "{item["saves"]}"')
-            if "root" in item:
-                lines.append(f'root     = "{item["root"]}"')
-            if "archive" in item:
-                lines.append(f'archive  = "{item["archive"]}"')
+        lines += u7_setup_lines(
+            "u7si", "serpentisle", u7si_base, si_paths, u7si_gamedat, u7si_mod_sources
+        )
 
     if selected_u9:
-        import json
-
-        lines += [
-            "",
-            "[u9.game]",
-            f"base = {json.dumps(selected_u9.root.as_posix())}",
-            "",
-            "[u9.paths]",
-        ]
-        for key, resource in selected_u9.paths.items():
-            lines.append(
-                f"{key} = {json.dumps(resource.relative_to(selected_u9.root).as_posix())}"
-            )
+        lines += u9_setup_lines(selected_u9)
 
     if selected_u6:
-        import json
-
-        lines += [
-            "",
-            "[u6.game]",
-            f"base = {json.dumps(selected_u6.as_posix())}",
-            "",
-            "[u6.paths]",
-        ]
-        for key, resource in u6_resource_paths(selected_u6).items():
-            lines.append(
-                f"{key} = {json.dumps(resource.relative_to(selected_u6).as_posix())}"
-            )
+        lines += u6_setup_lines(selected_u6)
 
     if selected_md and md_base:
-        import json
-
-        lines += [
-            "",
-            "[md.game]",
-            f"base = {json.dumps(md_base.as_posix())}",
-            "",
-            "[md.paths]",
-        ]
-        for key, resource in martian_resource_paths(selected_md).items():
-            lines.append(
-                f"{key} = {json.dumps(resource.relative_to(md_base).as_posix())}"
-            )
+        lines += martian_setup_lines(selected_md, md_base)
 
     if uo_base:
         lines += [

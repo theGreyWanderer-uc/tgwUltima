@@ -12,6 +12,7 @@ from typer.testing import CliRunner
 from titan import _terminal_image as terminal
 from titan import _wizard_ui as ui
 from titan.u7 import shape_browser as browser
+from titan.u7 import shape_browser_ui as browser_ui
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
@@ -57,10 +58,10 @@ def owner(tmp_path, monkeypatch):
     write_archive(static / "palettes.flx", [bytes(colours), bytes([20]) * 768])
     write_archive(patch / "PALETTES.FLX", [b"", bytes([30]) * 768])
     target = ArchiveTarget("Standalone SI", static, patch, standalone=True)
-    monkeypatch.setattr(browser, "game_targets", lambda game: (target, []))
+    monkeypatch.setattr(browser_ui, "game_targets", lambda game: (target, []))
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
-    monkeypatch.setattr(browser, "terminal_image", lambda image, **kwargs: False)
-    monkeypatch.setattr(browser, "open_preview", lambda path: True)
+    monkeypatch.setattr(browser_ui, "terminal_image", lambda image, **kwargs: False)
+    monkeypatch.setattr(browser_ui, "open_preview", lambda path: True)
     return target
 
 
@@ -170,7 +171,7 @@ def test_indexed_export_roundtrips_indices_transparency_and_order(
     lib = library(owner)
     output = tmp_path / "frames"
     answers(monkeypatch, ["2", "1", str(output), "Y"])
-    browser._png_export(lib, lib.shape(0), 0, 0)
+    browser_ui._png_export(lib, lib.shape(0), 0, 0)
     paths = sorted(output.glob("*.png"))
     assert [p.name for p in paths] == ["shape_0000_f0000.png", "shape_0000_f0001.png"]
     with Image.open(paths[0]) as image:
@@ -197,7 +198,7 @@ def test_export_decline_does_not_create_or_replace_files(
         monkeypatch,
         ["1", "2", str(output), *(["Y", "N"] if decline == "overwrite" else ["N"])],
     )
-    browser._png_export(lib, lib.shape(0), 0, 0)
+    browser_ui._png_export(lib, lib.shape(0), 0, 0)
     assert (
         existing.read_bytes() == b"keep me"
         if decline == "overwrite"
@@ -392,19 +393,19 @@ def test_menu_paging_and_name_search(owner, monkeypatch):
     lib = library(owner)
     lib.archive.effective.records = [shape_bytes((5,)) for _ in range(65)]
     answers(monkeypatch, ["N", "N", "S64"])
-    assert browser.choose_shape(lib) == 64
+    assert browser_ui.choose_shape(lib) == 64
     answers(monkeypatch, ["N", "B", "S0"])
-    assert browser.choose_shape(lib) == 0
+    assert browser_ui.choose_shape(lib) == 0
     lib = library(owner, "SHAPES.VGA")
     answers(monkeypatch, ["F", "chest", "S150"])
-    assert browser.choose_shape(lib) == 150
+    assert browser_ui.choose_shape(lib) == 150
 
 
 def test_viewer_failure_reports_saved_preview_path(
     owner, monkeypatch, capsys, tmp_path
 ):
-    monkeypatch.setattr(browser, "open_preview", lambda _: False)
-    browser._view(tmp_path / "preview.png")
+    monkeypatch.setattr(browser_ui, "open_preview", lambda _: False)
+    browser_ui._view(tmp_path / "preview.png")
     assert "open the preview file manually" in capsys.readouterr().out
 
 
@@ -416,12 +417,12 @@ def test_gif_workflow_reviews_before_saving(owner, monkeypatch, tmp_path, save):
     previews.mkdir()
     opened = []
     monkeypatch.setattr(
-        browser, "open_preview", lambda path: opened.append(path) or True
+        browser_ui, "open_preview", lambda path: opened.append(path) or True
     )
     answers(
         monkeypatch, ["F", "2", "200", *(["Y", str(output), "Y"] if save else ["N"])]
     )
-    browser._animation(lib, lib.shape(0), 0, 0, previews)
+    browser_ui._animation(lib, lib.shape(0), 0, 0, previews)
     assert len(opened) == 1 and opened[0].is_file()
     assert output.exists() is save
     if save:
@@ -567,7 +568,7 @@ def test_actions_show_hotkeys_and_only_offer_cycles_on_affected_frame(
         return "Q"
 
     monkeypatch.setattr(ui, "choice", choice)
-    assert browser._actions(lib, lib.shape(0), 0, 0) == "Q"
+    assert browser_ui._actions(lib, lib.shape(0), 0, 0) == "Q"
     assert options[0]["hotkeys"] is True
     assert options[0]["labels"]["F"] == "Next frame"
     assert options[0]["labels"]["P"] == "Play frames in terminal"
@@ -575,7 +576,7 @@ def test_actions_show_hotkeys_and_only_offer_cycles_on_affected_frame(
     assert "C" not in options[0]["labels"]
     write_archive(owner.patch / "GUMPS.VGA", [shape_bytes((224,))])
     lib = library(owner)
-    browser._actions(lib, lib.shape(0), 0, 0)
+    browser_ui._actions(lib, lib.shape(0), 0, 0)
     assert "C" in options[1]["labels"]
 
 
@@ -596,7 +597,7 @@ def test_playback_returns_to_same_shape_and_frame_without_saving(owner, monkeypa
         monkeypatch.setattr(questionary, name, factory)
     monkeypatch.setattr(ui, "menus_enabled", lambda: True)
     monkeypatch.setattr(
-        browser,
+        browser_ui,
         "play_terminal",
         lambda provider, **kwargs: played.append(provider(0, 0)) or True,
     )

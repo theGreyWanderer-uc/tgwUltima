@@ -80,3 +80,5 @@ local.settings.json
 
 # Other
 moongate/
+# CI logs
+ci.log

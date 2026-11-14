@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image
 
-from titan.u7.cli import cmd_shape_export
+from titan.u7.cli.shapes import cmd_shape_export
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 

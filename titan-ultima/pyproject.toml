@@ -7,7 +7,7 @@ name = "titan-ultima"
 dynamic = ["version"]
 description = "TITAN – Tool for Interpreting and Transforming Archival Nodes. CLI and library for Ultima file formats (U8: Pagan, U7: Black Gate & Serpent Isle)."
 readme = {file = "README.md", content-type = "text/markdown"}
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "theGreyWanderer", email = "196163911+theGreyWanderer-uc@users.noreply.github.com" }]
 keywords = [
@@ -23,7 +23,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -56,6 +55,9 @@ glb = [
 ]
 test = [
     "pytest>=8.0",
+]
+lint = [
+    "ruff>=0.15",
 ]
 
 [project.urls]
@@ -120,3 +122,16 @@ exclude = [
 
 [project.scripts]
 titan = "titan.cli:main"
+
+[tool.pytest.ini_options]
+# Keep collection to the suite; scratch output folders may hold stray test files.
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+# Vendored third-party code keeps its upstream style.
+extend-exclude = ["src/titan/adaptive_resample/resize_right"]
+
+[tool.ruff.lint]
+# Ruff's default rule set: pycodestyle errors and Pyflakes. CI enforces it.
+select = ["E4", "E7", "E9", "F"]

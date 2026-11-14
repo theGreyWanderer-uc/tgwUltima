@@ -15,7 +15,6 @@ from __future__ import annotations
 import unittest
 
 from titan.u6.lib import U6Library, U6LibraryError
-from titan.u6.lzw import U6Lzw
 
 CLEAR_CODE = 0x100
 END_CODE = 0x101

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from titan.u7.cli import cmd_u7_flex_add_shape
+from titan.u7.cli.archives import cmd_u7_flex_add_shape
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 

@@ -128,8 +128,6 @@ def run_lint(json_dir: str) -> int:
             skipped_files.append(fname)
             continue
 
-        npc = d.get("npc", "?")
-
         # 1. Schema checks
         for key in ("npc", "sourceFile", "functions", "flags", "stats", "hasDialogue"):
             if key not in d:
@@ -188,7 +186,7 @@ def run_lint(json_dir: str) -> int:
     # Report
     issue_types = Counter(t for _, t, _ in issues)
 
-    print(f"=== Dialogue JSON Lint Report ===")
+    print("=== Dialogue JSON Lint Report ===")
     print(f"  Files checked:  {len(files)}")
     if skipped_files:
         print(f"  Files skipped:  {len(skipped_files)}")

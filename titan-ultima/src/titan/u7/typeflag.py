@@ -25,8 +25,7 @@ __all__ = ["U7TypeFlags"]
 import csv
 import io
 import os
-import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 class U7TypeFlags:

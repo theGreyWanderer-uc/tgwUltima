@@ -11,15 +11,11 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from titan.u9.cli import (
-    PALETTE_FILENAME,
-    _find_palette,
-    cmd_flx_extract,
-    cmd_flx_extract_all,
-    cmd_flx_list,
-    cmd_npc_csv,
-    cmd_palette_export,
-    cmd_palette_info,
+from titan.u9.cli._common import PALETTE_FILENAME, _find_palette
+from titan.u9.cli.archives import cmd_flx_extract, cmd_flx_extract_all, cmd_flx_list
+from titan.u9.cli.npcs import cmd_npc_csv
+from titan.u9.cli.palettes import cmd_palette_export, cmd_palette_info
+from titan.u9.cli.sound import (
     cmd_sound_extract_pcm,
     cmd_sound_association_csv,
     cmd_sound_category_csv,
@@ -28,11 +24,14 @@ from titan.u9.cli import (
     cmd_sound_environment_list,
     cmd_sound_list,
     cmd_sound_template_csv,
+)
+from titan.u9.cli.text import cmd_text_export, cmd_text_import
+from titan.u9.cli.textures import (
     cmd_texture_export,
     cmd_texture_import,
-    cmd_text_export,
-    cmd_text_import,
     cmd_texture_info,
+)
+from titan.u9.cli.typenames import (
     cmd_types_csv,
     cmd_typename_csv,
     cmd_typename_dump,

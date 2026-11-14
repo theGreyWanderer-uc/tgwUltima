@@ -43,11 +43,11 @@ __all__ = ["MAX_LABEL_LENGTH", "names_for_model", "label_for_model", "slugify"]
 
 import re
 
-MAX_LABEL_LENGTH = 64
-"""Longest label :func:`label_for_model` will return -- see its docstring."""
-
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat
+
+MAX_LABEL_LENGTH = 64
+"""Longest label :func:`label_for_model` will return -- see its docstring."""
 
 
 def names_for_model(model_id: int, types: U9TypesDat, typenames: U9TypeNames) -> list[str]:

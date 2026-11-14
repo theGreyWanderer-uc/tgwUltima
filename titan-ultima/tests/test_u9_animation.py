@@ -16,7 +16,7 @@ from titan.u9.animation import (
     U9AnimationPart,
     U9Animations,
 )
-from titan.u9.cli import cmd_animation_list, cmd_animation_show
+from titan.u9.cli.animations import cmd_animation_list, cmd_animation_show
 from titan.u9.flx_archive import U9FlxArchive
 
 FLX_DIR_OFFSET = 0x80

@@ -397,7 +397,7 @@ def _html(inv: UOMapInventory, summary: dict, statics, land, names) -> str:
             + "".join(rows) + "</tbody></table>"
         )
 
-    s, l = summary["statics"], summary["land"]
+    s, land = summary["statics"], summary["land"]
     title = f"UO map inventory: facet {inv.facet}"
     cov = ", ".join(f"{k.replace('top_', 'top ')} names {v}%" for k, v in s["coverage_by_top_names_pct"].items())
     cats = ", ".join(f"{k} {v:,}" for k, v in s["by_category"].items())
@@ -423,7 +423,7 @@ td.pic img {{ max-width:96px; max-height:96px; min-height:22px; image-rendering:
 </style></head><body>
 <h1>{html.escape(title)}</h1>
 <div class="muted">{inv.width}×{inv.height} cells. {s["placements"]:,} statics over {s["tile_ids"]:,} tile IDs and {s["names"]:,} tiledata names: {html.escape(cov)}.
-By category: {html.escape(cats)}. {l["cells"]:,} land cells over {l["tile_ids"]:,} land tile IDs.
+By category: {html.escape(cats)}. {land["cells"]:,} land cells over {land["tile_ids"]:,} land tile IDs.
 Sources: {html.escape("; ".join(f"{k}: {v}" for k, v in summary["sources"].items()))}.</div>
 <div class="bar"><button data-view="names" class="on">Statics by name</button><button data-view="statics">Statics by tile ID</button><button data-view="land">Land</button>
 <input id="q" type="search" placeholder="Filter by name, category, flag or ID" aria-label="Filter rows"><span id="cnt" class="muted"></span></div>

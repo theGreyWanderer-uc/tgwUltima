@@ -21,7 +21,7 @@ from contextlib import redirect_stdout
 from io import StringIO
 from types import SimpleNamespace
 
-from titan.u9.cli import cmd_terrain_textures
+from titan.u9.cli.regions import cmd_terrain_textures
 from titan.u9.terrain import (
     CHUNK_SIZE,
     HEADER_SIZE,

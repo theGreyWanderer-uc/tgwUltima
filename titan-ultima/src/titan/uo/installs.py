@@ -27,7 +27,14 @@ still works as the default directory.
 
 from __future__ import annotations
 
-__all__ = ["UOInstall", "configured_installs", "resolve_install"]
+__all__ = [
+    "UOInstall",
+    "configured_installs",
+    "detect_uo_install",
+    "looks_like_uo_root",
+    "resolve_install",
+    "uo_install_candidates",
+]
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -138,3 +145,40 @@ def _source_choice(value: object, name: str, key: str) -> str:
             f"[uo.installs.{name}] {key} must be one of {', '.join(_SOURCE_CHOICES)}"
         )
     return choice
+
+
+def looks_like_uo_root(path: Path) -> bool:
+    """Recognize a Classic Client folder by its core art and tile data files."""
+    return any(
+        (path / name).is_file()
+        for name in (
+            "artLegacyMUL.uop",
+            "gumpartLegacyMUL.uop",
+            "tiledata.mul",
+            "hues.mul",
+        )
+    )
+
+
+def uo_install_candidates() -> list[Path]:
+    """List the standard EA installer and manual Classic Client folders."""
+    candidates: list[Path] = []
+    for drive in "CDEFG":
+        for path in [
+            Path(
+                f"{drive}:\\Program Files (x86)\\Electronic Arts\\Ultima Online Classic"
+            ),
+            Path(f"{drive}:\\Ultima\\UltimaOnlineClassicClient"),
+            Path(f"{drive}:\\Ultima Online Classic"),
+        ]:
+            if path not in candidates:
+                candidates.append(path)
+    return candidates
+
+
+def detect_uo_install() -> Path | None:
+    """Return the first standard location that holds a Classic Client."""
+    for candidate in uo_install_candidates():
+        if candidate.exists() and looks_like_uo_root(candidate):
+            return candidate
+    return None

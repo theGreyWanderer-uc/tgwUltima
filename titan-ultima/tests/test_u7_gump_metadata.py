@@ -176,7 +176,7 @@ def test_explicit_custom_game_static_and_loose_file_inspection(tmp_path):
 
 
 def test_unavailable_bundle_never_substitutes_static(tmp_path, monkeypatch):
-    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
     (tmp_path / "container.dat").write_bytes(table())
     result = U7Containers.from_dir(str(tmp_path))
     assert not result.records and any(

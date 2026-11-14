@@ -20,7 +20,7 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image, ImageSequence
 
-from titan.u7.cli import cmd_shape_animate
+from titan.u7.cli.shapes import cmd_shape_animate
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 

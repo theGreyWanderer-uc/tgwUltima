@@ -18,8 +18,6 @@ from __future__ import annotations
 
 __all__ = ["U8TypeFlags"]
 
-import os
-import struct
 from dataclasses import dataclass
 
 

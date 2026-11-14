@@ -468,7 +468,7 @@ def build_placement_grids(
         static_starts=[padded(s, _INF) for s in blk_s],
         static_ends=[padded(e, -_INF) for e in blk_e],
         region_layers=layers,
-        region_padded=[padded(l.blocked[gy0 : gy0 + gh, gx0 : gx0 + gw], True) for l in layers],
+        region_padded=[padded(layer.blocked[gy0 : gy0 + gh, gx0 : gx0 + gw], True) for layer in layers],
         t2a=t2a,
     )
 

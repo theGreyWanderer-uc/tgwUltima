@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u9.cli import (
+from titan.u9.cli.text import (
     TEXT_KEY_CSV_COLUMNS,
     cmd_text_key_lookup,
     cmd_text_keys_export,

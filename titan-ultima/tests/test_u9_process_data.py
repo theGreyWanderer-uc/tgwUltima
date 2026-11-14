@@ -4,9 +4,9 @@ import math
 import struct
 import unittest
 
+from titan.u9.process_data.movement import MOVEMENT_CONTROLLER_STATE_SIZE
 from titan.u9.process_data import (
     HANDLE_DATA_OFFSET,
-    MOVEMENT_CONTROLLER_STATE_SIZE,
     OBJECT_REFERENCE_DATA_OFFSET,
     HEADERLESS_PROCESS_LAYOUTS,
     SIMPLE_PROCESS_LAYOUTS,

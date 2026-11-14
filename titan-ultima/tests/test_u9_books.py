@@ -17,7 +17,7 @@ from __future__ import annotations
 import struct
 import unittest
 
-from titan.u9.books import OLE2_MAGIC, U9Book, U9Books, U9BooksError
+from titan.u9.books import OLE2_MAGIC, U9Books, U9BooksError
 from titan.u9.flx_archive import U9FlxArchive
 
 FLX_DIR_OFFSET = 0x80

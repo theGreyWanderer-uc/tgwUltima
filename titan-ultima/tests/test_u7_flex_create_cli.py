@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u7.cli import cmd_u7_flex_create
+from titan.u7.cli.archives import cmd_u7_flex_create
 from titan.u7.flex import U7_FLEX_HEADER_LEN, U7FlexArchive
 
 

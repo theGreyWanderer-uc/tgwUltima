@@ -358,9 +358,9 @@ def load_query_metadata(
     )
     bundle = params.exult_flx_path
     if bundle is None:
-        from titan.u7.cli import _resolve_u7_exult_flx
+        from titan.u7.install import resolve_u7_exult_flx
 
-        bundle = _resolve_u7_exult_flx(params.game)
+        bundle = resolve_u7_exult_flx(params.game)
     selected = load_u7_text_names(
         base,
         patch_dirs=mod_dirs,

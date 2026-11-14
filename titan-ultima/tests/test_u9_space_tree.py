@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from titan.u9.cli import cmd_treedat_csv
+from titan.u9.cli.zones import cmd_treedat_csv
 from titan.u9.flx_archive import U9FlxArchive
 from titan.u9.space_tree import U9VolumeLookupCache, U9VolumeLookupError
 from titan.u9.spaces import U9Spaces

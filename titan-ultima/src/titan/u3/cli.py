@@ -29,7 +29,7 @@ def _is_interactive_terminal() -> bool:
 
 def _render_created_map(args: SimpleNamespace) -> int:
     """Render a newly created native map through Titan's U7 renderer."""
-    from titan.u7.cli import cmd_map_render
+    from titan.u7.cli.maps import cmd_map_render
 
     output = args.render_output or str(
         Path(args.output_root).resolve()

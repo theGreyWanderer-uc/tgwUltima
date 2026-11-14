@@ -11,6 +11,7 @@ import pytest
 
 from titan import _wizard_ui as ui
 from titan.u7 import shape_browser as browser
+from titan.u7 import shape_browser_ui as browser_ui
 from titan.u7 import shape_properties as props
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.flex import U7FlexArchive
@@ -81,7 +82,7 @@ def library(tmp_path, monkeypatch):
     (patch / "shape_info.txt").write_text(
         "%%section field_type\n:150/-1\n%%endsection\n%%section barge_type\n:150/3\n%%endsection\n"
     )
-    monkeypatch.setattr("titan.u7.cli._resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     return browser.load_library(target, "si", static / "SHAPES.VGA")
 
@@ -176,7 +177,7 @@ def test_search_obeys_active_filter_and_can_clear_it(library, monkeypatch):
 def test_selector_can_change_empty_filter(library, monkeypatch):
     library.property_filter = "class:12"
     actions(monkeypatch, ["O", "A", "S150"])
-    assert browser.choose_shape(library) == 150
+    assert browser_ui.choose_shape(library) == 150
 
 
 def test_generic_and_unowned_libraries_do_not_receive_world_properties(
@@ -266,11 +267,11 @@ def test_report_paging_and_export_are_read_only(library, tmp_path, monkeypatch, 
 
 
 def test_browser_properties_and_filtered_next_shape(library, monkeypatch, capsys):
-    monkeypatch.setattr(browser, "game_targets", lambda game: (library.target, []))
-    monkeypatch.setattr(browser, "select_target", lambda *a: library.target)
-    monkeypatch.setattr(browser, "terminal_image", lambda *a, **k: False)
+    monkeypatch.setattr(browser_ui, "game_targets", lambda game: (library.target, []))
+    monkeypatch.setattr(browser_ui, "select_target", lambda *a: library.target)
+    monkeypatch.setattr(browser_ui, "terminal_image", lambda *a, **k: False)
     actions(monkeypatch, ["2", "T", "Q", "O", "W", "S151", "J", "Q"])
-    assert browser.run_browser(game="si", archive=str(library.path), shape=150) == 0
+    assert browser_ui.run_browser(game="si", archive=str(library.path), shape=150) == 0
     output = capsys.readouterr().out
     assert "Shape 150 properties" in output
     assert "Shape 151" in output and "Shape 152" in output

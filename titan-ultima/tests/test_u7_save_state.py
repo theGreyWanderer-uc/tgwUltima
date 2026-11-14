@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from titan.u7.cli import cmd_gamedat_info, cmd_save_info
+from titan.u7.cli.saves import cmd_gamedat_info, cmd_save_info
 from titan.u7.save import (
     U7GameState,
     U7GlobalFlags,
@@ -262,8 +262,8 @@ def test_exult_bg_si_archive_and_cli_report_same_runtime_layouts(
 ) -> None:
     from titan.u7 import cli
 
-    monkeypatch.setattr(cli, "_load_container_shapes", lambda *args, **kwargs: None)
-    monkeypatch.setattr(cli, "_load_shape_count", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli._common, "_load_container_shapes", lambda *args, **kwargs: None)
+    monkeypatch.setattr(cli._common, "_load_shape_count", lambda *args, **kwargs: None)
     members = {
         "identity": identity,
         "usecode.dat": dense_runtime(),

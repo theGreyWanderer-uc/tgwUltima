@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map_inventory import build_u7_map_inventory, write_u7_map_inventory
+from titan.u7 import install as u7_install
 
 
 def _cell(shape: int, frame: int) -> bytes:
@@ -98,9 +99,8 @@ def test_inventory_reads_movable_objects_from_initgame(tmp_path):
 
 def test_cli_writes_inventory(tmp_path, monkeypatch):
     static = _write_world(tmp_path / "STATIC")
-    import titan.u7.cli as cli
 
-    monkeypatch.setattr(cli, "_resolve_u7_paths", lambda game: (None, None))
+    monkeypatch.setattr(u7_install, "resolve_u7_static_and_palette", lambda game: (None, None))
     out = tmp_path / "inv"
     result = CliRunner().invoke(u7_app, ["map-inventory", str(static), "--no-ireg", "--no-previews", "-o", str(out)])
     assert result.exit_code == 0, result.output
@@ -141,9 +141,8 @@ def test_area_counts_objects_whose_footprint_reaches_in(tmp_path):
 
 def test_cli_area_options_name_the_output(tmp_path, monkeypatch):
     static = _write_world(tmp_path / "STATIC")
-    import titan.u7.cli as cli
 
-    monkeypatch.setattr(cli, "_resolve_u7_paths", lambda game: (None, None))
+    monkeypatch.setattr(u7_install, "resolve_u7_static_and_palette", lambda game: (None, None))
     monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(
         u7_app, ["map-inventory", str(static), "--no-ireg", "--no-previews", "--cx0", "0", "--cy0", "0"]

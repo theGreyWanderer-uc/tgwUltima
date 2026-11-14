@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
-from titan.u7.cli import cmd_palette_export, cmd_shape_animate
+from titan.u7.cli.palettes import cmd_palette_export
+from titan.u7.cli.shapes import cmd_shape_animate
 from titan.u7.map import _frame_to_rgba, _load_map_font
 from titan.u7.shape import U7Shape
 
