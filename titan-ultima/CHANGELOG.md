@@ -19,6 +19,13 @@ work for the next release.
 - **Python 3.10 is now the minimum.** Titan already used Python 3.10
   features, so it did not run on 3.9 despite saying it did.
 
+### Fixed
+
+- **Ultima 9 commands work with newer Typer:** with Typer 0.29 or later
+  installed, U9 commands that take game files, such as `u9 fixed-objects` and
+  `u9 nonfixed-entities`, stopped with an error before doing anything. They
+  now work with both older and newer Typer.
+
 ## [0.7.9]
 
 ### Added
