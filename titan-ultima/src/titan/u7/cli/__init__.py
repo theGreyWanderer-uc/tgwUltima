@@ -31,6 +31,7 @@ from titan.u7.cli import (
     gamedata,
     usecode,
     npcs,
+    places,
     saves,
 )
 
@@ -70,6 +71,7 @@ u7_app.command("map-export-json")(maps.map_export_json_cmd)
 u7_app.command("map-render-json")(maps.map_render_json_cmd)
 u7_app.command("map-render")(maps.map_render_cmd)
 u7_app.command("map-sample")(maps.map_sample_cmd)
+u7_app.command("places-export")(places.places_export_cmd)
 u7_app.command("typeflag-dump")(gamedata.typeflag_dump_cmd)
 u7_app.command("wihh-dump")(gamedata.wihh_dump_cmd)
 u7_app.command("static-data-dump")(gamedata.static_data_dump_cmd)
