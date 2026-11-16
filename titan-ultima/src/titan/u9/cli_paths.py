@@ -17,6 +17,22 @@ from typer.core import TyperArgument, TyperCommand, TyperOption
 from titan import _config
 from titan.u9.install import U9_FILE_PATHS, configured_u9_path, existing_u9_path
 
+# Typer 0.29 vendors its own Click and converts values through a runtime
+# coercer instead of `parameter.type`; its failures may be a plain UsageError
+# (e.g. from the pydantic adapter), not only BadParameter. BadParameter
+# subclasses UsageError in both Click and Typer's copy, so take it from there.
+_USAGE_ERROR: type[Exception] = next(
+    cls for cls in typer.BadParameter.__mro__ if cls.__name__ == "UsageError"
+)
+
+
+def _convert_argument(parameter: Any, raw: Any, ctx: Any) -> Any:
+    """Convert one raw token the way the installed Typer will."""
+    runtime = getattr(parameter, "get_runtime_param", None)
+    if runtime is not None:  # typer >= 0.29
+        return runtime().coerce(raw, param=parameter, ctx=ctx)
+    return parameter.type.convert(raw, parameter, ctx)
+
 # Each mapping names the CLI parameter and its [u9.paths] resource. Literal
 # command names keep both the command and its resource mapping searchable.
 U9_COMMAND_INPUTS = {
@@ -436,8 +452,8 @@ class ConfiguredU9Command(TyperCommand):
                         continue
                     raw = tokens[cursor]
                     try:
-                        parameter.type.convert(raw, parameter, ctx)
-                    except typer.BadParameter:
+                        _convert_argument(parameter, raw, ctx)
+                    except _USAGE_ERROR:
                         break
                     assigned[name] = raw
                     cursor += 1

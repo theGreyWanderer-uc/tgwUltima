@@ -70,6 +70,24 @@ def test_every_u9_command_has_a_path_policy():
     assert set(COMMANDS) == set(U9_COMMAND_INPUTS)
 
 
+def _sample_value(parameter, tmp_path):
+    """A valid token for a user-authored parameter, on any Typer version."""
+    descriptor = getattr(parameter, "type_descriptor", None)
+    if descriptor is not None:  # typer >= 0.29: no Click ParamType on parameters
+        annotation, choices = descriptor.annotation, descriptor.choices
+    else:
+        name = type(parameter.type).__name__
+        annotation = int if name.startswith("Int") else float if name.startswith("Float") else None
+        choices = getattr(parameter.type, "choices", None)
+    if annotation is int:
+        return "1"
+    if annotation is float:
+        return "0.5"
+    if choices:
+        return str(getattr(choices[0], "value", choices[0]))
+    return str(tmp_path / f"user-{parameter.name}")
+
+
 @pytest.mark.parametrize("command", COMMANDS)
 def test_all_commands_accept_config_inputs_without_changing_user_inputs(
     configured_install, tmp_path, monkeypatch, command
@@ -87,14 +105,8 @@ def test_all_commands_accept_config_inputs_without_changing_user_inputs(
             value = "custom.flx"
         elif role in {"fixed", "terrain", "nonfixed"}:
             value = f"{role}.{8 if parameter.name == 'right' else 7}"
-        elif type(parameter.type).__name__.startswith("Int"):
-            value = "1"
-        elif type(parameter.type).__name__.startswith("Float"):
-            value = "0.5"
-        elif hasattr(parameter.type, "choices"):
-            value = str(parameter.type.choices[0])
         else:
-            value = str(tmp_path / f"user-{parameter.name}")
+            value = _sample_value(parameter, tmp_path)
         args.append(value)
     result = CliRunner().invoke(cli.u9_app, args)
     assert result.exit_code == 0, (command, args, result.output, result.exception)
