@@ -72,7 +72,19 @@ app = typer.Typer(
 
 def _version_callback(value: bool) -> None:
     if value:
-        print(f"TITAN v{TITAN_VERSION}")
+        from titan._version import is_dev_build, is_newer, latest_release
+
+        dev = is_dev_build()
+        print(f"TITAN v{TITAN_VERSION}" + (" (development build)" if dev else ""))
+        latest = latest_release()
+        if is_newer(latest):
+            if dev:
+                print(f"Newer release on PyPI: {latest}")
+            else:
+                print(
+                    f"A newer release is available: {latest}. "
+                    "Update with: pip install -U titan-ultima"
+                )
         raise typer.Exit()
 
 

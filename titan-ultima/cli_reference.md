@@ -11,7 +11,7 @@ These flags apply before any subcommand:
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--version` | | Print version and exit |
+| `--version` | | Print version and exit; mentions a newer release on PyPI (checked at most daily; `TITAN_NO_UPDATE_CHECK=1` turns it off) |
 | `--config FILE` | `-c` | Path to a `titan.toml` config file. Auto-detected from `./titan.toml` → `~/.config/titan/` → `%APPDATA%\titan\` if not given |
 | `--help` | `-h` | Show help and exit |
 

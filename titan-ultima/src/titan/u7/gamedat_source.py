@@ -11,7 +11,6 @@ from __future__ import annotations
 __all__ = ["gamedat_cache_root", "gamedat_option", "u7_gamedat_folder"]
 
 import hashlib
-import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -21,11 +20,10 @@ COMPLETE_MARKER = ".titan-complete"
 
 
 def gamedat_cache_root() -> Path:
-    """Where unpacked saves live: ``%LOCALAPPDATA%/Titan/cache/u7-saves`` on Windows."""
-    local = os.getenv("LOCALAPPDATA") if os.name == "nt" else None
-    if local:
-        return Path(local) / "Titan" / "cache" / "u7-saves"
-    return Path.home() / ".cache" / "titan" / "u7-saves"
+    """Where unpacked saves live: ``u7-saves`` in :func:`titan._config.cache_dir`."""
+    from titan._config import cache_dir
+
+    return cache_dir() / "u7-saves"
 
 
 def u7_gamedat_folder(

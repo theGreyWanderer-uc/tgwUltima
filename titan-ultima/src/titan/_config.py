@@ -16,6 +16,7 @@ populated by the root CLI callback via :func:`load_config`.
 from __future__ import annotations
 
 __all__ = [
+    "cache_dir",
     "config_search_paths",
     "data_dir",
     "find_config",
@@ -87,6 +88,18 @@ def data_dir(game: Optional[str] = None) -> Path:
         xdg = os.getenv("XDG_DATA_HOME")
         root = (Path(xdg) if xdg else Path.home() / ".local" / "share") / "titan"
     return root / game if game else root
+
+
+def cache_dir() -> Path:
+    """Return titan's cache folder: files titan can always recreate.
+
+    ``%LOCALAPPDATA%\\Titan\\cache`` on Windows, otherwise
+    ``$XDG_CACHE_HOME/titan`` (``~/.cache/titan``). The folder may not exist yet.
+    """
+    if sys.platform == "win32" and os.getenv("LOCALAPPDATA"):
+        return Path(os.environ["LOCALAPPDATA"]) / "Titan" / "cache"
+    xdg = os.getenv("XDG_CACHE_HOME")
+    return (Path(xdg) if xdg else Path.home() / ".cache") / "titan"
 
 
 def config_search_paths() -> list[Path]:

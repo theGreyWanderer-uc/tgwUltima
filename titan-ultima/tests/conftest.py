@@ -14,6 +14,8 @@ os.environ["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
 os.environ["NO_COLOR"] = "1"
 os.environ.pop("FORCE_COLOR", None)
 os.environ.pop("PY_COLORS", None)
+# No test may ask PyPI for the latest release; tests of the check unset this.
+os.environ["TITAN_NO_UPDATE_CHECK"] = "1"
 
 import typer.rich_utils  # noqa: E402  (must follow the env pinning above)
 

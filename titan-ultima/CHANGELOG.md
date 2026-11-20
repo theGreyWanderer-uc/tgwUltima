@@ -6,6 +6,16 @@ work for the next release.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Update check:** `titan --version` now tells you when a newer titan is
+  on PyPI, and how to update. It asks PyPI at most once a day, sends nothing
+  about you, and gives up quickly when you're offline. Ordinary commands
+  never check. Set `TITAN_NO_UPDATE_CHECK=1` to turn it off. Front ends can
+  ask too, with `latest_release()` and `is_dev_build()` in `titan._version`.
+
 ## [0.8.0]
 
 ### Added
