@@ -33,6 +33,7 @@ def _convert_argument(parameter: Any, raw: Any, ctx: Any) -> Any:
         return runtime().coerce(raw, param=parameter, ctx=ctx)
     return parameter.type.convert(raw, parameter, ctx)
 
+
 # Each mapping names the CLI parameter and its [u9.paths] resource. Literal
 # command names keep both the command and its resource mapping searchable.
 U9_COMMAND_INPUTS = {
