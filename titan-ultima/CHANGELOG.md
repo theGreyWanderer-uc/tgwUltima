@@ -39,25 +39,6 @@ work for the next release.
   `U8SAVE.003` from your save folder. `u8 save-browse 3 --compare 0` compares
   two slots. File names and full paths still work.
 
-#### For front ends
-
-titan now describes itself to tools like titan-desktop, so they can show
-proper forms and results instead of a terminal:
-
-- which games and platforms titan supports, and where its config lives;
-- which commands ask questions, and which options skip the questions;
-- what each option means (a save, a palette, an output file or folder) and
-  what each command produces (an image, a table, JSON, text or files);
-- each game's saves, with their in-game names (Ultima 7, 8 and 9; the one
-  save of Ultima 6 and Martian Dreams);
-- what each `titan.toml` path is: a game file, a save, or a working folder
-  titan creates;
-- every setting in the `u7 font-create` and `u7 shape-create` recipes, so a
-  front end can build the wizard as a form.
-
-This lives in `titan._meta`, plus `user_config_path()` and `data_dir()` in
-`titan._config`.
-
 ### Changed
 
 - **Python 3.10 or newer is required.** titan already needed it and
