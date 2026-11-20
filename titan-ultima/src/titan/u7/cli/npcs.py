@@ -24,6 +24,7 @@ import typer
 
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan._meta import meta
 
 
 def cmd_npc_dump(args: SimpleNamespace) -> int:
@@ -517,6 +518,7 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(interactive=True)
 def monster_browse_cmd(
     source: Annotated[
         Optional[str],
@@ -538,6 +540,7 @@ def monster_browse_cmd(
     raise SystemExit(run_browser(game=game, source=source, shape=shape))
 
 
+@meta(interactive=True)
 def npc_browse_cmd(
     source: Annotated[
         Optional[str],
@@ -582,6 +585,7 @@ def npc_browse_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def npc_dump_cmd(
     file: Annotated[
         str,
@@ -625,6 +629,7 @@ def npc_dump_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def schedule_dump_cmd(
     file: Annotated[
         str,
@@ -674,6 +679,7 @@ def schedule_dump_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def monster_defs_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to MONSTERS.DAT or STATIC directory")
@@ -719,6 +725,7 @@ def monster_defs_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def monster_dump_cmd(
     file: Annotated[
         str,
@@ -757,6 +764,7 @@ def monster_dump_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def monster_equipment_cmd(
     static: Annotated[
         Optional[str],
@@ -806,6 +814,7 @@ def monster_equipment_cmd(
     )
 
 
+@meta(params={"gamedat": "save"})
 def monster_report_cmd(
     static: Annotated[
         Optional[str],
@@ -859,6 +868,7 @@ def monster_report_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def npc_equipment_cmd(
     file: Annotated[
         str,

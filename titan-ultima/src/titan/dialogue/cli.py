@@ -32,6 +32,7 @@ from titan.dialogue.pipeline.run_fold import (
     get_effective_fold_path,
     run_fold,
 )
+from titan._meta import meta
 
 
 dialogue_app = typer.Typer(
@@ -1057,6 +1058,7 @@ def prepare_cmd(
 
 
 @dialogue_app.command("copy")
+@meta(interactive=True, batch_with=("destination",))
 def copy_cmd(
     workdir: Optional[Path] = typer.Option(
         None, "--workdir", help="Runtime output directory"

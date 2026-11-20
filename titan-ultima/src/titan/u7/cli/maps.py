@@ -21,6 +21,7 @@ from typing import Annotated, Literal, Optional
 import typer
 
 from titan.u7 import install
+from titan._meta import ANY_PARAM, meta
 
 
 def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
@@ -631,6 +632,7 @@ def map_create_cmd(
     )
 
 
+@meta(results=("json",), params={"output": "output-file"})
 def map_export_json_cmd(
     static: Annotated[
         Optional[str],
@@ -695,6 +697,7 @@ def map_export_json_cmd(
     )
 
 
+@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def map_render_json_cmd(
     json_file: Annotated[
         str,
@@ -778,6 +781,12 @@ def map_render_json_cmd(
     )
 
 
+@meta(
+    results=("image",),
+    params={"gamedat": "save", "output": "output-file", "palette": "palette"},
+    interactive=True,
+    batch_with=(ANY_PARAM,),
+)
 def map_render_cmd(
     ctx: typer.Context,
     static: Annotated[
@@ -1079,6 +1088,7 @@ def map_render_cmd(
     raise SystemExit(cmd_map_render(render_args))
 
 
+@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def map_sample_cmd(
     static: Annotated[
         Optional[str],
@@ -1147,6 +1157,7 @@ def map_sample_cmd(
     )
 
 
+@meta(results=("files",), params={"gamedat": "save", "output": "output-dir"})
 def map_inventory_cmd(
     static: Annotated[
         Optional[str],

@@ -26,6 +26,7 @@ from titan.u8.palette_browser import (
     u8_palette_sheet,
 )
 from titan.u8.shape_browser_ui import choose_u8_shape_target
+from titan._meta import meta
 
 
 _menu = ui.menu
@@ -247,6 +248,7 @@ def run_u8_palette_browser(
         return 1
 
 
+@meta(results=("files",), params={"output": "output-dir"}, interactive=True)
 def palette_browse_cmd(
     source: Annotated[
         Path | None,

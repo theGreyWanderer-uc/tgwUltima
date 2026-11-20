@@ -43,6 +43,7 @@ from titan.u9.object_placement import U9SappearModelSource
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan.u9.cli import _common
+from titan._meta import meta
 
 
 def _load_naming(types_path: Optional[str], typenames_path: Optional[str]):
@@ -601,6 +602,7 @@ def model_info_cmd(
     )
 
 
+@meta(results=("json", "table"), params={"fmt": "format", "output": "output-file"})
 def model_material_report_cmd(
     source: Annotated[
         str,
@@ -657,6 +659,7 @@ def model_material_report_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def model_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     model_id: Annotated[int, typer.Argument(help="Model ID (0-7999) to export")],
@@ -728,6 +731,7 @@ def model_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def model_export_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
@@ -822,6 +826,7 @@ def dimension_show_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def dimension_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
     output: Annotated[

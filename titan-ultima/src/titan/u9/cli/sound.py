@@ -50,6 +50,7 @@ from titan.u9.sound_writer import (
 )
 from titan.u9.typename import U9TypeNameError, U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
+from titan._meta import meta
 
 
 def _load_sound_categories(filepath: str) -> Optional[U9SoundCategories]:
@@ -800,6 +801,7 @@ def sound_category_list_cmd(
     raise SystemExit(cmd_sound_category_list(SimpleNamespace(file=file)))
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def sound_category_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/sfxcat.flx")],
     output: Annotated[
@@ -818,6 +820,7 @@ def sound_environment_list_cmd(
     raise SystemExit(cmd_sound_environment_list(SimpleNamespace(file=file)))
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def sound_environment_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/sfxenv.flx")],
     output: Annotated[
@@ -831,6 +834,7 @@ def sound_environment_csv_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def sound_template_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/SFXTMPL.FLX")],
     output: Annotated[
@@ -859,6 +863,7 @@ def sound_template_csv_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def sound_association_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/sfxassoc.flx")],
     output: Annotated[
@@ -907,6 +912,7 @@ def sound_list_cmd(
     raise SystemExit(cmd_sound_list(SimpleNamespace(file=file)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def sound_extract_pcm_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
@@ -918,6 +924,7 @@ def sound_extract_pcm_cmd(
     raise SystemExit(cmd_sound_extract_pcm(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def sound_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
@@ -941,6 +948,7 @@ def sound_extract_cmd(
     )
 
 
+@meta(results=("json", "table"), params={"format": "format", "output": "output-file"})
 def sound_report_cmd(
     source: Annotated[
         str,
@@ -967,6 +975,7 @@ def sound_report_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def sound_import_cmd(
     archive: Annotated[str, typer.Argument(help="Target Speech/sfx/music FLX")],
     entry_id: Annotated[int, typer.Argument(help="Existing entry ID to replace")],
@@ -1001,6 +1010,7 @@ def sound_import_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def sound_import_batch_cmd(
     archive: Annotated[str, typer.Argument(help="Target Speech/sfx/music FLX")],
     directory: Annotated[

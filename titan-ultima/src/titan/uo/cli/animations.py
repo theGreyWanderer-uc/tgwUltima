@@ -33,6 +33,7 @@ from titan.uo.animnames import UOAnimationBodyNames
 from titan.uo.definfo import UOBodyConvDefEntry, UODefFile, UOEquipConvDefEntry
 from titan.uo.indexed import UOIndexedFile
 from titan.uo.cli import _common
+from titan._meta import meta
 
 
 def _load_animations(client: Path, set_name: str) -> UOIndexedFile:
@@ -489,6 +490,7 @@ def cmd_animation_body_names_export(args: SimpleNamespace) -> int:
     return 1
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def animation_export_cmd(
     client: Annotated[
         Optional[str],
@@ -529,6 +531,7 @@ def animation_export_cmd(
     raise SystemExit(cmd_animation_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def animation_resolution_export_cmd(
     client: Annotated[
         Optional[str],
@@ -569,6 +572,7 @@ def animation_resolution_export_cmd(
     raise SystemExit(cmd_animation_resolution_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def animation_body_names_export_cmd(
     client: Annotated[
         Optional[str],

@@ -21,6 +21,7 @@ import typer
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.flx_writer import U9FlxWriteError, repack, repack_equivalent, write_flx
+from titan._meta import meta
 
 
 def cmd_flx_list(args: SimpleNamespace) -> int:
@@ -219,6 +220,7 @@ def flx_list_cmd(
     raise SystemExit(cmd_flx_list(SimpleNamespace(file=file)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def flx_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
     index: Annotated[int, typer.Argument(help="Entry index to extract")],
@@ -233,6 +235,7 @@ def flx_extract_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def flx_extract_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
     output: Annotated[
@@ -246,6 +249,7 @@ def flx_extract_all_cmd(
     raise SystemExit(cmd_flx_extract_all(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def flx_pack_cmd(
     directory: Annotated[
         str, typer.Argument(help="Directory of NNNNN.bin entry files")
@@ -272,6 +276,7 @@ def flx_pack_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def flx_repack_cmd(
     file: Annotated[str, typer.Argument(help="Path to an existing U9 FLX archive")],
     output: Annotated[

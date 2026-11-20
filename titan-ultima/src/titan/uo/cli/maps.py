@@ -24,6 +24,7 @@ from titan.uo.multi import UOMultis
 from titan.uo.render import UOMapRenderer
 from titan.uo.tiles import FacetTileJob, build_facet_tiles
 from titan.uo.cli import _common
+from titan._meta import meta
 
 
 def cmd_radar_export(args: SimpleNamespace) -> int:
@@ -368,6 +369,7 @@ def cmd_multi_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def radar_export_cmd(
     client: Annotated[
         Optional[str],
@@ -396,6 +398,7 @@ def radar_export_cmd(
     raise SystemExit(cmd_radar_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def map_export_cmd(
     client: Annotated[
         Optional[str],
@@ -452,6 +455,7 @@ def map_export_cmd(
     raise SystemExit(cmd_map_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def map_render_cmd(
     center: Annotated[
         str,
@@ -528,6 +532,7 @@ def map_render_cmd(
     raise SystemExit(cmd_map_render(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def map_tiles_cmd(
     client: Annotated[
         Optional[str],
@@ -604,6 +609,7 @@ def map_tiles_cmd(
     raise SystemExit(cmd_map_tiles(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def map_inventory_cmd(
     client: Annotated[
         Optional[str],
@@ -663,6 +669,7 @@ def map_inventory_cmd(
     raise SystemExit(cmd_map_inventory(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def multi_export_cmd(
     client: Annotated[
         Optional[str],

@@ -47,6 +47,7 @@ from titan.u6.palette import U6Palette
 from titan.u6.schedule import U6Schedules
 from titan.u6.tile import U6AnimData, U6Tiles
 from titan.u6.tileflag import U6TileFlags
+from titan._meta import meta
 
 # ============================================================================
 # Typer sub-app
@@ -1148,6 +1149,7 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
 
 
 @u6_app.command("lzw-decompress")
+@meta(results=("files",), params={"output": "output-dir"})
 def lzw_decompress_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 LZW-compressed file")],
     output: Annotated[
@@ -1182,6 +1184,7 @@ def lib_list_cmd(
 
 
 @u6_app.command("lib-extract")
+@meta(results=("files",), params={"output": "output-dir"})
 def lib_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
     item: Annotated[int, typer.Argument(help="Item index to extract")],
@@ -1211,6 +1214,7 @@ def lib_extract_cmd(
 
 
 @u6_app.command("lib-extract-all")
+@meta(results=("files",), params={"output": "output-dir"})
 def lib_extract_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
     entry_size: Annotated[
@@ -1241,6 +1245,7 @@ def lib_extract_all_cmd(
 
 
 @u6_app.command("tileflag-dump")
+@meta(results=("files",), params={"output": "output-dir"})
 def tileflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to TILEFLAG")],
     output: Annotated[
@@ -1252,6 +1257,7 @@ def tileflag_dump_cmd(
 
 
 @u6_app.command("palette-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to U6PAL")],
     output: Annotated[
@@ -1263,6 +1269,7 @@ def palette_export_cmd(
 
 
 @u6_app.command("tile-export")
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def tile_export_cmd(
     tile_num: Annotated[
         str, typer.Argument(help="Tile number, decimal or 0x-hex (0-0x7FF)")
@@ -1292,6 +1299,7 @@ def tile_export_cmd(
 
 
 @u6_app.command("tile-export-all")
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def tile_export_all_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
@@ -1326,6 +1334,7 @@ def tile_export_all_cmd(
 
 
 @u6_app.command("map-render")
+@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def map_render_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
@@ -1546,6 +1555,7 @@ def flags_compare_cmd(
 
 
 @u6_app.command("flags-set")
+@meta(results=("file",), params={"output": "output-file", "savegame": "save"})
 def flags_set_cmd(
     savegame: Annotated[
         str, typer.Argument(help="A save's SAVEGAME folder (containing OBJLIST)")
@@ -1604,6 +1614,7 @@ def flags_set_cmd(
 
 
 @u6_app.command("converse-dump")
+@meta(results=("files",), params={"output": "output-dir"})
 def converse_dump_cmd(
     file: Annotated[
         str,
@@ -1647,6 +1658,7 @@ def converse_dump_cmd(
 
 
 @u6_app.command("font-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def font_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to U6.CH")],
     text: Annotated[
@@ -1671,6 +1683,7 @@ def font_export_cmd(
 
 
 @u6_app.command("look-dump")
+@meta(results=("files",), params={"output": "output-dir"})
 def look_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to LOOK.LZD")],
     output: Annotated[
@@ -1682,6 +1695,7 @@ def look_dump_cmd(
 
 
 @u6_app.command("book-dump")
+@meta(results=("files",), params={"output": "output-dir"})
 def book_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to BOOK.DAT")],
     book: Annotated[
@@ -1701,6 +1715,7 @@ def book_dump_cmd(
 
 
 @u6_app.command("schedule-dump")
+@meta(results=("files",), params={"output": "output-dir"})
 def schedule_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to SCHEDULE")],
     actor: Annotated[

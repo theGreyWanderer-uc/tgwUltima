@@ -33,6 +33,7 @@ from titan.u8.world_search import (
     next_u8_world_search_export,
     query_u8_world_items,
 )
+from titan._meta import meta
 
 
 def parse_u8_search_number(value: str) -> int:
@@ -473,6 +474,15 @@ def run_u8_world_search(
 
 
 def _make_u8_search_command(eggs: bool) -> Callable[..., None]:
+    @meta(
+        results=("files", "json", "table", "text"),
+        params={
+            "output_format": "format",
+            "output": "output-dir",
+            "palette": "palette",
+        },
+        interactive=True,
+    )
     def u8_search_cmd(
         source: Annotated[
             Path | None,

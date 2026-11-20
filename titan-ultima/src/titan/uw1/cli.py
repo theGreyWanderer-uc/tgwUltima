@@ -16,6 +16,7 @@ from titan.uw1.texture import (
     export_all_textures,
     inspect_texture_archives,
 )
+from titan._meta import meta
 
 uw1_app = typer.Typer(
     name="uw1",
@@ -39,6 +40,7 @@ def _require_game_directory(explicit: str | None) -> Path:
 
 
 @uw1_app.command("texture-info")
+@meta(params={"json_output": "format"}, results=("json", "text"))
 def texture_info_cmd(
     gamedir: Annotated[
         Optional[str],
@@ -72,6 +74,7 @@ def texture_info_cmd(
 
 
 @uw1_app.command("texture-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def texture_export_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output", help="Texture export directory")

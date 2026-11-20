@@ -14,6 +14,7 @@ import typer
 from titan import _wizard_ui as ui
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan._meta import meta
 
 
 def cmd_u7_flex_create(args: SimpleNamespace) -> int:
@@ -224,6 +225,7 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def u7_flex_create_cmd(
     output: Annotated[
         str,
@@ -252,6 +254,7 @@ def u7_flex_create_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def u7_flex_add_shape_cmd(
     archive: Annotated[
         str,

@@ -26,6 +26,7 @@ import typer
 from titan.u8.save import U8SaveArchive
 from titan.u8.typeflag import U8TypeFlags
 from titan.u8.credits import decrypt_credit_text
+from titan._meta import meta
 
 
 def cmd_credits_decrypt(args: SimpleNamespace) -> int:
@@ -229,6 +230,7 @@ def cmd_unkcoff_dump(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def credits_decrypt_cmd(
     file: Annotated[str, typer.Argument(help="Path to encrypted .dat file")],
     output: Annotated[
@@ -240,6 +242,10 @@ def credits_decrypt_cmd(
     raise SystemExit(cmd_credits_decrypt(SimpleNamespace(file=file, output=output)))
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def anim_dump_cmd(
     file: Annotated[Path, typer.Argument(help="Path to U8 ANIM.DAT")],
     shape: Annotated[
@@ -306,6 +312,10 @@ def anim_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def wpnovlay_dump_cmd(
     file: Annotated[Path, typer.Argument(help="Path to U8 WPNOVLAY.DAT")],
     anim: Annotated[
@@ -383,6 +393,10 @@ def wpnovlay_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def itemcach_dump_cmd(
     file: Annotated[Path, typer.Argument(help="ITEMCACH.DAT or native U8SAVE archive")],
     item: Annotated[
@@ -435,6 +449,10 @@ def itemcach_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def npcdata_dump_cmd(
     file: Annotated[Path, typer.Argument(help="NPCDATA.DAT or native U8SAVE archive")],
     itemcach: Annotated[
@@ -506,6 +524,10 @@ def npcdata_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def map_items_dump_cmd(
     ctx: typer.Context,
     file: Annotated[
@@ -587,6 +609,7 @@ def map_items_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def typeflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to TYPEFLAG.DAT")],
     output: Annotated[
@@ -598,6 +621,7 @@ def typeflag_dump_cmd(
     raise SystemExit(cmd_typeflag_dump(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def gumpinfo_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to GUMPAGE.DAT")],
     output: Annotated[
@@ -609,6 +633,7 @@ def gumpinfo_dump_cmd(
     raise SystemExit(cmd_gumpinfo_dump(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def unkcoff_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to UNKCOFF.DAT")],
     output: Annotated[

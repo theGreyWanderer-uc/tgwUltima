@@ -49,6 +49,7 @@ from titan.flex import (
     get_extension_for_flex,
 )
 from titan.music import XMIDIConverter
+from titan._meta import meta
 
 
 # ============================================================================
@@ -1322,6 +1323,7 @@ def flex_list_cmd(
 
 
 @app.command("flex-extract")
+@meta(results=("files",), params={"output": "output-dir"})
 def flex_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
     output: Annotated[
@@ -1336,6 +1338,7 @@ def flex_extract_cmd(
 
 
 @app.command("flex-create")
+@meta(results=("file",), params={"output": "output-file"})
 def flex_create_cmd(
     directory: Annotated[
         str,
@@ -1385,6 +1388,7 @@ def flex_create_cmd(
 
 
 @app.command("flex-update")
+@meta(results=("file",), params={"output": "output-file"})
 def flex_update_cmd(
     file: Annotated[str, typer.Argument(help="Path to .flx archive")],
     index: Annotated[
@@ -1420,6 +1424,7 @@ def flex_update_cmd(
 
 
 @app.command("music-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def music_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .xmi XMIDI file")],
     output: Annotated[
@@ -1432,6 +1437,7 @@ def music_export_cmd(
 
 
 @app.command("music-batch")
+@meta(results=("files",), params={"output": "output-dir"})
 def music_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .xmi files")],
     output: Annotated[
@@ -1451,6 +1457,7 @@ def music_batch_cmd(
 
 
 @app.command("setup")
+@meta(interactive=True)
 def setup_cmd() -> None:
     """Create titan.toml by detecting Ultima, Martian Dreams and UO installs."""
     try:

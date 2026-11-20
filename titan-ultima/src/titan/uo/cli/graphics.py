@@ -30,6 +30,7 @@ from titan.uo.light import UOLightDecoder
 from titan.uo.tiledata import UOTileData
 from titan.uo.texture import UOTextureDecoder
 from titan.uo.cli import _common
+from titan._meta import meta
 
 
 def _load_art(
@@ -537,6 +538,7 @@ def cmd_font_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def art_export_cmd(
     client: Annotated[
         Optional[str],
@@ -573,6 +575,7 @@ def art_export_cmd(
     raise SystemExit(cmd_art_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def gump_export_cmd(
     client: Annotated[
         Optional[str],
@@ -605,6 +608,7 @@ def gump_export_cmd(
     raise SystemExit(cmd_gump_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def texture_export_cmd(
     client: Annotated[
         Optional[str],
@@ -637,6 +641,7 @@ def texture_export_cmd(
     raise SystemExit(cmd_texture_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def light_export_cmd(
     client: Annotated[
         Optional[str],
@@ -669,6 +674,7 @@ def light_export_cmd(
     raise SystemExit(cmd_light_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def hue_export_cmd(
     client: Annotated[
         Optional[str],
@@ -707,6 +713,7 @@ def hue_export_cmd(
     raise SystemExit(cmd_hue_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def font_export_cmd(
     client: Annotated[
         Optional[str],

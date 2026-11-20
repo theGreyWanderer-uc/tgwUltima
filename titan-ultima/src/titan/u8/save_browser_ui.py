@@ -39,6 +39,7 @@ from titan.u8.shape_browser import (
 )
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
 from titan.u8.state_io import write_u8_state_report
+from titan._meta import meta
 
 PAGE_SIZE = 25
 
@@ -635,6 +636,16 @@ def run_u8_save_browser(
         return 1
 
 
+@meta(
+    results=("files",),
+    params={
+        "compare": "save",
+        "output": "output-dir",
+        "palette": "palette",
+        "source": "save",
+    },
+    interactive=True,
+)
 def save_browse_cmd(
     source: Annotated[
         Path | None,

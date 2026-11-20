@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
 import typer
+from titan._meta import meta
 
 
 def cmd_palette_export(args: SimpleNamespace) -> int:
@@ -197,6 +198,7 @@ def cmd_palette_info(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(interactive=True)
 def palette_browse_cmd(
     file: Annotated[
         Optional[str],
@@ -219,6 +221,7 @@ def palette_browse_cmd(
     raise SystemExit(run_browser(game=game, file=file, index=index, encoding=encoding))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def palette_export_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to PALETTES.FLX or a standalone .pal file")
@@ -252,6 +255,10 @@ def palette_export_cmd(
     )
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"format": "format", "output": "output-file"},
+)
 def palette_info_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to PALETTES.FLX or a standalone .pal file")

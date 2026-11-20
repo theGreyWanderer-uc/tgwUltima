@@ -26,6 +26,7 @@ import typer
 
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan._meta import meta
 
 
 def cmd_gamedat_info(args: SimpleNamespace) -> int:
@@ -687,6 +688,7 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(params={"source": "save"}, interactive=True)
 def save_browse_cmd(
     source: Annotated[
         Optional[str], typer.Argument(help="Initial save file or GAMEDAT folder")
@@ -701,6 +703,7 @@ def save_browse_cmd(
     raise SystemExit(run_browser(game=game, source=source, saves=True))
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def gamedat_info_cmd(
     directory: Annotated[
         Optional[str],
@@ -750,6 +753,7 @@ def gamedat_info_cmd(
     )
 
 
+@meta(params={"json_output": "format"}, results=("json", "text"))
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     strict: Annotated[
@@ -773,6 +777,7 @@ def save_list_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def save_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
@@ -806,6 +811,7 @@ def save_extract_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def gflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Exult .sav file or loose flaginit file")],
     output: Annotated[
@@ -831,6 +837,7 @@ def gflag_dump_cmd(
     )
 
 
+@meta(results=("text",), params={"output": "output-file"})
 def save_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
@@ -849,6 +856,7 @@ def save_info_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def save_npcs_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     static: Annotated[
@@ -887,6 +895,7 @@ def save_npcs_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def save_schedules_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     static: Annotated[

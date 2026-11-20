@@ -23,6 +23,7 @@ from titan.u9.activity import ACTIVITY_OPCODE_CATALOGUE, U9Activities, U9Activit
 from titan.u9.script_research import export_script_research_bundle
 from titan.u9.trigger_operands import operand_summary
 from titan.u9.triggers import U9Triggers, U9TriggersError, trigger_opcode_info
+from titan._meta import meta
 
 
 def _load_triggers(filepath: str) -> Optional[U9Triggers]:
@@ -395,6 +396,7 @@ def activity_opcodes_cmd(
     raise SystemExit(cmd_activity_opcodes(SimpleNamespace(file=file, limit=limit)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def script_research_export_cmd(
     triggers: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     activities: Annotated[str, typer.Argument(help="Path to static/activity.flx")],

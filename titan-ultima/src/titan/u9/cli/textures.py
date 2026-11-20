@@ -51,6 +51,7 @@ from titan.u9.texture_export import (
 )
 from titan.u9.texture_writer import U9TextureWriteError, frame_encoding, replace_frames
 from titan.u9.cli import _common
+from titan._meta import meta
 
 
 def cmd_icon_list(args: SimpleNamespace) -> int:
@@ -653,6 +654,7 @@ def texture_info_cmd(
     )
 
 
+@meta(results=("json", "table"), params={"fmt": "format", "output": "output-file"})
 def texture_frame_report_cmd(
     source: Annotated[
         str,
@@ -710,6 +712,7 @@ def texture_frame_report_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def texture_export_cmd(
     textures: Annotated[
         str,
@@ -754,6 +757,7 @@ def texture_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def texture_export_all_cmd(
     source: Annotated[
         str,
@@ -830,6 +834,7 @@ def icon_list_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def icon_export_cmd(
     textures: Annotated[
         str,
@@ -870,6 +875,7 @@ def icon_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def icon_export_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
@@ -941,6 +947,7 @@ def sdinfo_verify_cmd(
     raise SystemExit(cmd_sdinfo_verify(SimpleNamespace(file=file, textures=textures)))
 
 
+@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
 def texture_import_cmd(
     textures: Annotated[
         str,

@@ -35,6 +35,7 @@ from titan.u8.shape_browser import (
     u8_contact_sheet_groups,
     u8_playback_provider,
 )
+from titan._meta import meta
 
 PAGE_SIZE = 30
 
@@ -774,6 +775,11 @@ def browse_u8_npc_shape(
         )
 
 
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+    interactive=True,
+)
 def shape_browse_cmd(
     game_dir: Annotated[
         Path | None,

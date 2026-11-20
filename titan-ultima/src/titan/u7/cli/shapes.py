@@ -27,6 +27,7 @@ import typer
 from titan import _wizard_ui as ui
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan._meta import meta
 
 
 def cmd_shape_import(args: SimpleNamespace) -> int:
@@ -717,6 +718,12 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(
+    results=("file",),
+    params={"output": "output-file"},
+    interactive=True,
+    batch_with=("config",),
+)
 def shape_create_cmd(
     source: Annotated[
         Optional[str],
@@ -813,6 +820,7 @@ def shape_create_cmd(
     )
 
 
+@meta(params={"palette": "palette"}, interactive=True)
 def shape_browse_cmd(
     archive: Annotated[
         Optional[str],
@@ -861,6 +869,7 @@ def shape_browse_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def shape_export_cmd(
     file: Annotated[
         str,
@@ -958,6 +967,7 @@ def shape_export_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
 def shape_import_cmd(
     directory: Annotated[
         str,
@@ -1021,6 +1031,7 @@ def shape_import_cmd(
     )
 
 
+@meta(results=("json", "table"), params={"format": "format", "output": "output-file"})
 def shape_frame_report_cmd(
     file: Annotated[
         str,
@@ -1068,6 +1079,7 @@ def shape_frame_report_cmd(
     )
 
 
+@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def shape_animate_cmd(
     file: Annotated[
         str,
@@ -1162,6 +1174,7 @@ def shape_animate_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def shape_batch_cmd(
     file: Annotated[
         str,
@@ -1236,6 +1249,10 @@ def shape_batch_cmd(
     )
 
 
+@meta(
+    results=("files", "json", "table"),
+    params={"format": "format", "output": "output-dir", "palette": "palette"},
+)
 def shape_cycle_scan_cmd(
     file: Annotated[
         str,

@@ -23,6 +23,29 @@ work for the next release.
   on Windows, `~/.config/titan/config.toml` elsewhere), and
   `config_search_paths()` lists every location titan checks, in order. Front
   ends can ask titan instead of hard-coding these paths.
+- **Game list for other tools:** `titan._meta.GAMES` lists every game and
+  platform titan supports, with its command group, platform, `titan.toml`
+  section and `--game` value (`bg`/`si` for Ultima VII). `get_game(id)`
+  returns `None` for games titan doesn't read yet. The module loads without
+  the command tree, so front ends can read it at startup.
+- **Interactive commands are marked:** `titan._meta.command_meta("u7",
+  "shape-create")` tells other tools whether a command prompts or opens an
+  interactive browser, so they can run it in a terminal. Some commands only
+  prompt when certain options are missing (for example `u7 font-create`
+  without `--config`); `prompts(["config"])` answers for a given set of
+  options. Marked so far: `setup`, every `*-browse`, `u7 font-create`,
+  `shape-create`, `map-render`, `world-query`, `egg-query`,
+  `u8 world-query`, `egg-query` and `dialogue copy`.
+- **What parameters mean:** command metadata now also says what a
+  parameter is, whatever its option is called: a save (`u8 --nonfixed`,
+  `u7 --gamedat`, `md --savegame`, `u6 flags-set SAVEGAME`, `u9 --save`), a
+  palette file, an output file or an output folder. 239 commands are tagged;
+  `titan._meta.PARAM_KINDS` lists the kinds.
+- **What commands produce:** command metadata now also says what a command
+  writes or prints: an image, a CSV table, JSON, text, a folder of new
+  files, or one file such as an archive (`titan._meta.RESULT_KINDS`). Where
+  `--format` or `--json` picks between several, that option is marked too.
+  226 commands are tagged.
 
 ### Changed
 

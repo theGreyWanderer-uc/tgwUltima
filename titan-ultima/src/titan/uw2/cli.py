@@ -57,6 +57,7 @@ from titan.uw2.texture_catalog import (
     export_texture_catalog,
     export_texture_usage,
 )
+from titan._meta import meta
 
 uw2_app = typer.Typer(
     name="uw2",
@@ -805,6 +806,7 @@ def _validate_view_options(
 
 
 @uw2_app.command("model-render")
+@meta(results=("files",), params={"output": "output-dir"})
 def model_render_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output", help="Rendered PNG directory")
@@ -833,6 +835,7 @@ def model_render_cmd(
 
 
 @uw2_app.command("model-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def model_export_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output", help="Export directory")
@@ -855,6 +858,7 @@ def model_export_cmd(
 
 
 @uw2_app.command("map-extract")
+@meta(results=("files",), params={"output": "output-dir"})
 def map_extract_cmd(
     output: Annotated[str, typer.Option("-o", "--output", help="Extraction directory")],
     slots: SlotsOption = None,
@@ -869,6 +873,9 @@ def map_extract_cmd(
 
 
 @uw2_app.command("map-verify")
+@meta(
+    results=("json", "text"), params={"json_output": "format", "output": "output-file"}
+)
 def map_verify_cmd(
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit the full report as JSON")
@@ -883,6 +890,7 @@ def map_verify_cmd(
 
 
 @uw2_app.command("map-3d-render")
+@meta(results=("files",), params={"output": "output-dir"})
 def map_3d_render_cmd(
     output: Annotated[str, typer.Option("-o", "--output")] = "uw2_maps_3d",
     slot: Annotated[
@@ -966,6 +974,7 @@ def map_3d_render_cmd(
 
 
 @uw2_app.command("map-stack")
+@meta(results=("files",), params={"output": "output-dir"})
 def map_stack_cmd(
     output: Annotated[str, typer.Option("-o", "--output")] = "uw2_stacks",
     worlds: Annotated[
@@ -1026,6 +1035,7 @@ def map_stack_cmd(
 
 
 @uw2_app.command("map-3d-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def map_3d_export_cmd(
     output: Annotated[str, typer.Option("-o", "--output")] = "uw2_maps_3d",
     slot: Annotated[
@@ -1051,6 +1061,7 @@ def map_3d_export_cmd(
 
 
 @uw2_app.command("map-render")
+@meta(results=("files",), params={"output": "output-dir"})
 def map_render_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output", help="Rendered PNG directory")
@@ -1200,6 +1211,7 @@ def map_render_cmd(
 
 
 @uw2_app.command("map-grid")
+@meta(results=("files",), params={"output": "output-dir"})
 def map_grid_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output", help="Rendered PNG directory")
@@ -1228,6 +1240,7 @@ def map_grid_cmd(
 
 
 @uw2_app.command("texture-catalog")
+@meta(results=("files",), params={"output": "output-dir"})
 def texture_catalog_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output", help="Directory for texture_catalog.json")
@@ -1239,6 +1252,7 @@ def texture_catalog_cmd(
 
 
 @uw2_app.command("texture-usage")
+@meta(results=("files",), params={"output": "output-dir"})
 def texture_usage_cmd(
     output: Annotated[str, typer.Option("-o", "--output", help="Usage JSON directory")],
     slots: SlotsOption = None,
@@ -1253,6 +1267,7 @@ def texture_usage_cmd(
 
 
 @uw2_app.command("palette-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="PALS.DAT path/name")] = "PALS.DAT",
     index: Annotated[int, typer.Option("--index", help="Palette index")] = 0,
@@ -1279,6 +1294,10 @@ def palette_export_cmd(
 
 
 @uw2_app.command("shape-info")
+@meta(
+    results=("json", "text"),
+    params={"json_output": "format", "output": "output-file", "palette": "palette"},
+)
 def shape_info_cmd(
     file: Annotated[str, typer.Argument(help="UU2 .GR archive path/name")],
     palette: PaletteOption = None,
@@ -1307,6 +1326,7 @@ def shape_info_cmd(
 
 
 @uw2_app.command("shape-export")
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def shape_export_cmd(
     file: Annotated[str, typer.Argument(help="UU2 .GR archive path/name")],
     index: Annotated[int, typer.Argument(help="Image index")],
@@ -1328,6 +1348,7 @@ def shape_export_cmd(
 
 
 @uw2_app.command("shape-batch")
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def shape_batch_cmd(
     file: Annotated[str, typer.Argument(help="UU2 .GR archive path/name")],
     palette: PaletteOption = None,
@@ -1352,6 +1373,7 @@ def shape_batch_cmd(
 
 
 @uw2_app.command("terrain-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def terrain_export_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output", help="Terrain PNG directory")
@@ -1386,6 +1408,7 @@ def object_info_cmd(
 
 
 @uw2_app.command("object-dump")
+@meta(results=("json", "table"), params={"output": "output-file"})
 def object_dump_cmd(
     comobj: Annotated[
         Optional[str], typer.Option("--comobj", help="COMOBJ.DAT path/name")

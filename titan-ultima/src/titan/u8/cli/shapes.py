@@ -32,6 +32,7 @@ from titan.u8.u7_shape_convert import build_footprint_size_table, convert_shape
 from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
 from titan.u7.typeflag import U7TypeFlags
+from titan._meta import meta
 
 
 def cmd_shape_export(args: SimpleNamespace) -> int:
@@ -432,6 +433,7 @@ def cmd_shape_convert_u7_all(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def shape_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .shp file")],
     palette: Annotated[
@@ -455,6 +457,7 @@ def shape_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def shape_batch_cmd(
     directory: Annotated[
         str,
@@ -483,6 +486,7 @@ def shape_batch_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
 def shape_import_cmd(
     directory: Annotated[
         str,
@@ -516,6 +520,7 @@ def shape_import_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def shape_convert_u7_cmd(
     file: Annotated[str, typer.Argument(help="Path to the U8 .shp file to convert")],
     shape_num: Annotated[
@@ -573,6 +578,7 @@ def shape_convert_u7_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def shape_convert_u7_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8SHAPES.FLX")],
     typeflag: Annotated[

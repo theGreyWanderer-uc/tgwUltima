@@ -12,8 +12,10 @@ from typing import Annotated, Literal, Optional
 import typer
 
 from titan.u7 import install
+from titan._meta import meta
 
 
+@meta(results=("json",), params={"output": "output-file"})
 def ireg_dump_cmd(
     file: Annotated[str, typer.Argument(help="Raw U7IREG stream to inspect")],
     static: Annotated[
@@ -86,6 +88,26 @@ def ireg_dump_cmd(
         raise SystemExit(1)
 
 
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "gamedat": "save", "output": "output-file"},
+    interactive=True,
+    batch_with=(
+        "config",
+        "shape_class",
+        "shape_num",
+        "frame",
+        "name",
+        "flag",
+        "tile_rect",
+        "sc",
+        "ireg",
+        "ifix",
+        "format",
+        "output",
+        "force",
+    ),
+)
 def world_query_cmd(
     static: Annotated[
         Optional[str],
@@ -341,6 +363,21 @@ def world_query_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "gamedat": "save", "output": "output-file"},
+    interactive=True,
+    batch_with=(
+        "container_shape",
+        "container_name",
+        "contains_shape",
+        "contains_name",
+        "tile_rect",
+        "sc",
+        "format",
+        "output",
+    ),
+)
 def container_browse_cmd(
     static: Annotated[
         Optional[str],
@@ -594,6 +631,19 @@ def container_browse_cmd(
         typer.echo(out)
 
 
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "gamedat": "save", "output": "output-file"},
+    interactive=True,
+    batch_with=(
+        "egg_type",
+        "fn",
+        "tile_rect",
+        "sc",
+        "format",
+        "output",
+    ),
+)
 def egg_query_cmd(
     static: Annotated[
         Optional[str],

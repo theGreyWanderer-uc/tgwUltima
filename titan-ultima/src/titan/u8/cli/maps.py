@@ -23,6 +23,7 @@ from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
 from titan.u8.install import resolve_u8_save
 from titan.u8.map import U8MapRenderer, U8MapSampler
+from titan._meta import meta
 
 _NONFIXED_HELP = (
     "Save to overlay: slot number (3), file name (U8SAVE.003) or path; raw"
@@ -727,6 +728,10 @@ def cmd_map_render_all(args: SimpleNamespace) -> int:
     )
 
 
+@meta(
+    results=("image",),
+    params={"nonfixed": "save", "output": "output-file", "palette": "palette"},
+)
 def map_render_cmd(
     map_num: Annotated[
         int, typer.Option("--map", "-m", help="Map number to render (0\u2013255)")
@@ -828,6 +833,10 @@ def map_render_cmd(
     raise SystemExit(cmd_map_render(args))
 
 
+@meta(
+    results=("files",),
+    params={"nonfixed": "save", "output": "output-dir", "palette": "palette"},
+)
 def map_render_all_cmd(
     fixed: Annotated[Optional[str], typer.Option(help="Path to FIXED.DAT")] = None,
     shapes: Annotated[
@@ -930,6 +939,10 @@ def map_render_all_cmd(
     raise SystemExit(cmd_map_render_all(args))
 
 
+@meta(
+    results=("image",),
+    params={"nonfixed": "save", "output": "output-file", "palette": "palette"},
+)
 def map_sample_cmd(
     map_num: Annotated[
         int, typer.Option("--map", "-m", help="Map number to sample (0\u2013255)")
@@ -1031,6 +1044,10 @@ def map_sample_cmd(
     raise SystemExit(cmd_map_sample(args))
 
 
+@meta(
+    results=("files",),
+    params={"nonfixed": "save", "output": "output-dir", "palette": "palette"},
+)
 def map_sample_all_cmd(
     fixed: Annotated[Optional[str], typer.Option(help="Path to FIXED.DAT")] = None,
     shapes: Annotated[

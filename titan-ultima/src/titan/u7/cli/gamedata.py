@@ -14,6 +14,7 @@ import typer
 
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan._meta import meta
 
 
 def cmd_typeflag_dump(args: SimpleNamespace) -> int:
@@ -320,6 +321,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def typeflag_dump_cmd(
     static: Annotated[
         Optional[str],
@@ -355,6 +357,7 @@ def typeflag_dump_cmd(
     )
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def wihh_dump_cmd(
     static: Annotated[
         Optional[str],
@@ -396,6 +399,7 @@ def wihh_dump_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def static_data_dump_cmd(
     kind: Annotated[
         str,

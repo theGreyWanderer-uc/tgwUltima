@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
 import typer
+from titan._meta import meta
 
 
 def cmd_music_export(args: SimpleNamespace) -> int:
@@ -143,6 +144,7 @@ def _looks_like_text(data: bytes) -> bool:
     return all((0x20 <= b <= 0x7E) or b in (0x0A, 0x0D, 0x09) for b in sample)
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def music_export_cmd(
     file: Annotated[
         str,
@@ -177,6 +179,7 @@ def music_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def voc_export_cmd(
     file: Annotated[
         str,
@@ -198,6 +201,7 @@ def voc_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def speech_export_cmd(
     file: Annotated[
         str,

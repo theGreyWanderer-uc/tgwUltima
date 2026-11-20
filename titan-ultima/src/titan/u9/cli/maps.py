@@ -45,6 +45,7 @@ from titan.u9.region_vtk import (
 from titan.u9.terrain import U9TerrainError
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan.u9.cli import _common
+from titan._meta import meta
 
 
 def cmd_map_atlas(args: SimpleNamespace) -> int:
@@ -787,6 +788,7 @@ def cmd_map_render_3d(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def map_atlas_cmd(
     static: Annotated[
         str,
@@ -1067,6 +1069,7 @@ def map_atlas_cmd(
     )
 
 
+@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def map_render_cmd(
     terrain: Annotated[
         str, typer.Argument(help="Path to a static/terrain.<region> file")
@@ -1303,6 +1306,7 @@ def map_render_cmd(
     )
 
 
+@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
 def map_export_glb_cmd(
     terrain: Annotated[
         str, typer.Argument(help="Path to a static/terrain.<region> file")
@@ -1440,6 +1444,7 @@ def map_export_glb_cmd(
     )
 
 
+@meta(results=("image",), params={"output": "output-file"})
 def map_render_3d_cmd(
     scene: Annotated[
         str,
