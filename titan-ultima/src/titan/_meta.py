@@ -10,18 +10,29 @@ from __future__ import annotations
 __all__ = [
     "ANY_PARAM",
     "PARAM_KINDS",
+    "PATH_KINDS",
+    "RECIPE_TYPES",
     "RESULT_KINDS",
+    "RecipeField",
+    "RecipeSpec",
+    "SaveInfo",
     "GAMES",
     "CommandMeta",
     "GameMeta",
     "command_meta",
     "command_metas",
     "get_game",
+    "has_saves",
+    "list_saves",
     "meta",
+    "path_kind",
+    "resolve_save",
 ]
 
 from dataclasses import dataclass, field
 from functools import lru_cache
+from importlib import import_module
+from pathlib import Path
 from typing import Callable, Iterable, Mapping, Optional, TypeVar
 
 
@@ -121,6 +132,17 @@ class CommandMeta:
     results: tuple[str, ...] = ()
     """What the command can produce, from :data:`RESULT_KINDS`. Empty means
     unknown: show the log."""
+    recipe: Optional[str] = None
+    """``"module:function"`` returning the :class:`RecipeSpec` its ``recipe``
+    parameter reads; use :meth:`recipe_spec`. Named, not imported, so tagging
+    a command doesn't load the wizard."""
+
+    def recipe_spec(self) -> Optional[RecipeSpec]:
+        """The recipe this command reads, or ``None``. Imports the recipe module."""
+        if not self.recipe:
+            return None
+        module, _, name = self.recipe.partition(":")
+        return getattr(import_module(module), name)()
 
     def prompts(self, given: Iterable[str]) -> bool:
         """Whether a run with the parameters named in *given* will prompt.
@@ -146,6 +168,7 @@ def meta(
     batch_with: Iterable[str] = (),
     params: Optional[Mapping[str, str]] = None,
     results: Iterable[str] = (),
+    recipe: Optional[str] = None,
 ) -> Callable[[_F], _F]:
     """Attach :class:`CommandMeta` to a command function.
 
@@ -153,7 +176,7 @@ def meta(
     tree, not from its name, so one function registered twice gets both paths.
     """
     info = CommandMeta(
-        interactive, tuple(batch_with), dict(params or {}), tuple(results)
+        interactive, tuple(batch_with), dict(params or {}), tuple(results), recipe
     )
 
     def decorate(fn: _F) -> _F:
@@ -192,3 +215,219 @@ def command_metas() -> dict[tuple[str, ...], CommandMeta]:
 def command_meta(*path: str) -> Optional[CommandMeta]:
     """Metadata for the command at *path* (``"u7", "shape-create"``), or ``None``."""
     return command_metas().get(path)
+
+
+# --- recipes -------------------------------------------------------------
+
+RECIPE_TYPES = frozenset({"str", "int", "bool", "path", "int-list"})
+"""Value types a :class:`RecipeField` can hold."""
+
+
+@dataclass(frozen=True)
+class RecipeField:
+    """One ``[section] key`` of a wizard's TOML recipe."""
+
+    section: str
+    key: str
+    type: str
+    """From :data:`RECIPE_TYPES`."""
+    default: object = None
+    """What the command uses when the field is left out. ``None`` means the
+    command works it out (from a preset, the archive, Exult's config, ...);
+    ``help`` says how."""
+    help: str = ""
+    choices: tuple[object, ...] = ()
+    """Allowed values; with ``open`` they are suggestions and any value is allowed."""
+    open: bool = False
+    """``choices`` are named presets; a path (of ``kind``) is also accepted."""
+    kind: Optional[str] = None
+    """For paths, what the path is, from :data:`PARAM_KINDS`."""
+    required: bool = False
+    when: Optional[tuple[str, tuple[object, ...]]] = None
+    """``("section.key", values)``: the field only matters when that field has
+    one of *values*. A front end shows it while that field is still unset."""
+
+    @property
+    def name(self) -> str:
+        """``"section.key"``, the name :meth:`RecipeSpec.to_toml` takes."""
+        return f"{self.section}.{self.key}"
+
+
+@dataclass(frozen=True)
+class RecipeSpec:
+    """The recipe a wizard command reads with its ``param`` option.
+
+    Relative paths in a recipe are relative to the recipe file, so a front end
+    that writes one to a temporary folder should pass absolute paths.
+    """
+
+    param: str
+    """The command parameter that takes the recipe file (``"config"``)."""
+    fields: tuple[RecipeField, ...]
+
+    def field(self, name: str) -> Optional[RecipeField]:
+        """The field called ``"section.key"``, or ``None``."""
+        return next((f for f in self.fields if f.name == name), None)
+
+    def to_toml(self, values: Mapping[str, object]) -> str:
+        """A recipe holding *values* (``{"section.key": value}``); ``None`` values
+        are left out. Raises ``ValueError`` for unknown fields or bad values."""
+        import tomli_w
+
+        data: dict[str, dict[str, object]] = {}
+        for name, value in values.items():
+            spec = self.field(name)
+            if spec is None:
+                raise ValueError(f"Unknown recipe field: {name}")
+            if value is None:
+                continue
+            data.setdefault(spec.section, {})[spec.key] = _recipe_value(spec, value)
+        missing = [
+            f.name
+            for f in self.fields
+            if f.required and f.key not in data.get(f.section, {})
+        ]
+        if missing:
+            raise ValueError(f"Missing recipe fields: {', '.join(missing)}")
+        return tomli_w.dumps(data)
+
+
+def _recipe_value(spec: RecipeField, value: object) -> object:
+    def bad() -> ValueError:
+        return ValueError(f"{spec.name}: expected {spec.type}, got {value!r}")
+
+    if spec.type == "bool":
+        if not isinstance(value, bool):
+            raise bad()
+        return value
+    if spec.type == "int":
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise bad()
+        result: object = value
+    elif spec.type == "int-list":
+        if not isinstance(value, (list, tuple)) or any(
+            isinstance(v, bool) or not isinstance(v, int) for v in value
+        ):
+            raise bad()
+        return list(value)
+    elif isinstance(value, Path):
+        result = value.as_posix()
+    elif isinstance(value, str) and value:
+        result = value
+    else:
+        raise bad()
+    if spec.choices and not spec.open and result not in spec.choices:
+        choices = ", ".join(map(str, spec.choices))
+        raise ValueError(f"{spec.name}: {value!r} is not one of {choices}")
+    return result
+
+
+# --- saves ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SaveInfo:
+    """One save a front end can offer for a game's ``save`` parameters."""
+
+    slot: str
+    """The value to pass to this game's ``save`` parameters, unchanged. Each
+    game decides what it is: U8 uses the slot number (``"3"``); games whose
+    commands take paths use the full path."""
+    path: Path
+    name: str
+    """The in-game description, or ``""``."""
+    modified: float
+    """File modification time (``st_mtime``)."""
+
+
+_SAVE_PROVIDERS = {
+    "u6": ("titan.u6.saves", False),
+    "md": ("titan.md.saves", False),
+    "u7bg": ("titan.u7.saves", True),
+    "u7si": ("titan.u7.saves", True),
+    "u8": ("titan.u8.saves", False),
+    "u9": ("titan.u9.saves", False),
+}
+"""Game id -> (module, takes game id). The module has ``list_saves(config)`` and
+``resolve_save(value, config)``; a shared module (U7 BG and SI) also gets the
+game id: ``list_saves(config, game_id)``."""
+
+
+def has_saves(game_id: str) -> bool:
+    """Whether titan can list saves for *game_id*."""
+    return game_id in _SAVE_PROVIDERS
+
+
+def _save_provider(game_id: str):
+    entry = _SAVE_PROVIDERS.get(game_id)
+    return import_module(entry[0]) if entry else None
+
+
+def _loaded_config(config: Optional[dict]) -> dict:
+    if config is not None:
+        return config
+    from titan._config import get_config
+
+    return get_config()
+
+
+def list_saves(game_id: str, config: Optional[dict] = None) -> list[SaveInfo]:
+    """Saves for *game_id* found through titan's config; ``[]`` if none or unsupported.
+
+    *config* is a loaded config (:func:`titan._config.load_config`); by default
+    the one titan already loaded.
+    """
+    provider = _save_provider(game_id)
+    if provider is None:
+        return []
+    extra = (game_id,) if _SAVE_PROVIDERS[game_id][1] else ()
+    return provider.list_saves(_loaded_config(config), *extra)
+
+
+def resolve_save(
+    game_id: str, value: Optional[str], config: Optional[dict] = None
+) -> Optional[Path]:
+    """The save file or folder a ``save`` parameter value means, or ``None``."""
+    provider = _save_provider(game_id)
+    if provider is None:
+        return Path(value).expanduser() if value else None
+    return provider.resolve_save(value, _loaded_config(config))
+
+
+# --- config paths --------------------------------------------------------
+
+PATH_KINDS = frozenset(
+    {
+        "install-file",  # a file the game install ships
+        "install-dir",  # a folder of the game install (STATIC, runtime, a mod's patch)
+        "save",  # one save: a save file, or U7's live gamedat folder
+        "save-dir",  # the folder that holds the game's saves
+        "working-dir",  # extracted intermediate data a command creates (U8 shapes/)
+    }
+)
+"""What a ``[<section>.paths]`` key names; see :func:`path_kind`."""
+
+_PATH_KIND_TABLES = {
+    "u6": ("titan.u6.install", "U6_PATH_KINDS"),
+    "md": ("titan.md.install", "MD_PATH_KINDS"),
+    "u7bg": ("titan.u7.install", "U7_PATH_KINDS"),
+    "u7si": ("titan.u7.install", "U7_PATH_KINDS"),
+    "u8": ("titan.u8.install", "U8_PATH_KINDS"),
+    "u9": ("titan.u9.install", "U9_PATH_KINDS"),
+}
+"""Config section -> (module, table). Each game keeps its table beside its
+install rules; it is imported only when asked for."""
+
+
+def path_kind(config_section: str, key: str) -> Optional[str]:
+    """What the ``[<config_section>.paths]`` key *key* names, from :data:`PATH_KINDS`.
+
+    U7 mod sections (``[u7bg.mods."<name>".paths]``) use their game's section.
+    ``None`` means titan doesn't know the key: treat it as an install path.
+    Only ``install-file`` and ``install-dir`` must exist for the game to work;
+    a missing ``working-dir`` just hasn't been extracted yet.
+    """
+    entry = _PATH_KIND_TABLES.get(config_section)
+    if entry is None:
+        return None
+    return getattr(import_module(entry[0]), entry[1]).get(key)

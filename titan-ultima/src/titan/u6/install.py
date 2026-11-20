@@ -37,6 +37,13 @@ U6_RESOURCE_NAMES = {
 }
 """Ultima VI data paths relative to the game directory, including optional saves."""
 
+U6_PATH_KINDS = {
+    **{key: "install-file" for key in U6_RESOURCE_NAMES},
+    "savegame": "save-dir",
+    "objlist": "save",
+}
+"""``[u6.paths]`` key -> kind (see :func:`titan._meta.path_kind`)."""
+
 
 def u6_install_candidates(config: dict) -> list[Path]:
     """Search configured Ultima VI data before GOG, Heroic and manual installs."""

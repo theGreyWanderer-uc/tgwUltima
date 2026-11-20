@@ -33,6 +33,13 @@ MD_RESOURCE_NAMES = {
 }
 """Martian Dreams data paths relative to MARTIAN; launcher files are excluded."""
 
+MD_PATH_KINDS = {
+    **{key: "install-file" for key in MD_RESOURCE_NAMES},
+    "savegame": "save-dir",
+    "objlist": "save",
+}
+"""``[md.paths]`` key -> kind (see :func:`titan._meta.path_kind`)."""
+
 
 def martian_install_candidates(config: dict) -> list[Path]:
     """Search configured Martian Dreams data before GOG, Heroic and manual installs."""

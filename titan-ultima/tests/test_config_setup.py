@@ -201,6 +201,24 @@ def test_u6_only_config_inspects_relative_absolute_and_missing_paths(
     )
 
 
+def test_config_shows_missing_working_folders_neutrally(setup_workspace, capsys):
+    base = setup_workspace / "Ultima8"
+    (base / "ENGLISH" / "STATIC").mkdir(parents=True)
+    path = Path.cwd() / "titan.toml"
+    path.write_text(
+        f'[u8.game]\nbase="{base.as_posix()}"\n[u8.paths]\n'
+        'fixed="FIXED.DAT"\nshapes="shapes"\n'
+    )
+    assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
+    lines = capsys.readouterr().out.splitlines()
+
+    def flag(key: str) -> str:
+        return next(line for line in lines if line.strip().startswith(key))
+
+    assert "[not extracted yet]" in flag("shapes")
+    assert "[NOT FOUND]" in flag("fixed")
+
+
 def _md_install(root: Path) -> Path:
     from titan.md.install import MD_RESOURCE_NAMES
 

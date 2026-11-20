@@ -169,3 +169,59 @@ def test_results_for_known_commands() -> None:
     assert set(results("uw2", "shape-info")) == {"json", "text"}
     info = _meta.command_meta("uw2", "shape-info")
     assert info is not None and info.params["json_output"] == "format"
+
+
+def test_path_kinds_use_the_vocabulary_and_cover_install_tables() -> None:
+    from titan.md.install import MD_RESOURCE_NAMES
+    from titan.u6.install import U6_RESOURCE_NAMES
+    from titan.u7.install import RESOURCE_NAMES
+    from titan.u8.install import U8_STATIC_FILES
+    from titan.u9.install import U9_FILE_PATHS
+
+    install_keys = {
+        "u6": U6_RESOURCE_NAMES,
+        "md": MD_RESOURCE_NAMES,
+        "u7bg": RESOURCE_NAMES,
+        "u7si": RESOURCE_NAMES,
+        "u8": U8_STATIC_FILES,
+        "u9": U9_FILE_PATHS,
+    }
+    for meta in _meta.GAMES:
+        section = meta.config_section
+        for key in install_keys.get(section or "", ()):
+            assert _meta.path_kind(section, key) in _meta.PATH_KINDS, (section, key)
+    for section, (module, table) in _meta._PATH_KIND_TABLES.items():
+        assert _meta.get_game(section) is not None, section
+        kinds = getattr(__import__(module, fromlist=[table]), table)
+        assert set(kinds.values()) <= _meta.PATH_KINDS, section
+
+
+def test_path_kind_for_known_keys() -> None:
+    assert _meta.path_kind("u8", "fixed") == "install-file"
+    assert _meta.path_kind("u8", "savegame") == "save-dir"
+    assert _meta.path_kind("u8", "nonfixed") == "save"
+    assert _meta.path_kind("u8", "shapes") == "working-dir"
+    assert _meta.path_kind("u8", "globs") == "working-dir"
+    assert _meta.path_kind("u7bg", "static") == "install-dir"
+    assert _meta.path_kind("u7si", "gamedat") == "save"
+    assert _meta.path_kind("u7bg", "patch") == "install-dir"
+    assert _meta.path_kind("u9", "processes") == "save"
+    assert _meta.path_kind("u9", "nonfixed") == "install-file"
+    assert _meta.path_kind("u9", "runtime") == "install-dir"
+    assert _meta.path_kind("u6", "savegame") == "save-dir"
+    assert _meta.path_kind("md", "objlist") == "save"
+    assert _meta.path_kind("u8", "no-such-key") is None
+    assert _meta.path_kind("uo", "base") is None
+
+
+def test_path_kind_loads_no_command_tree() -> None:
+    code = (
+        "import sys, titan._meta as m; "
+        "[m.path_kind(s, 'x') for s in ('u6', 'md', 'u7bg', 'u8', 'u9')]; "
+        "bad = [n for n in ('typer', 'click', 'titan.cli') if n in sys.modules]; "
+        "print(','.join(bad))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == ""

@@ -650,7 +650,7 @@ def save_browse_cmd(
     source: Annotated[
         Path | None,
         typer.Argument(
-            help="Initial native U8SAVE or GAMEDAT folder; otherwise choose interactively"
+            help="Initial native U8SAVE (slot number, name or path) or GAMEDAT folder; otherwise choose interactively"
         ),
     ] = None,
     game_dir: Annotated[
@@ -664,7 +664,7 @@ def save_browse_cmd(
         Path | None,
         typer.Option(
             "--compare",
-            help="Initial comparison native save or GAMEDAT; selected save is the before snapshot",
+            help="Initial comparison save (slot number, name or path) or GAMEDAT; selected save is the before snapshot",
         ),
     ] = None,
     shapes: Annotated[
@@ -706,11 +706,23 @@ def save_browse_cmd(
     ] = U8_SAVE_BROWSER_OUTPUT,
 ) -> None:
     """Browse native save entries/state, NPCs, flags, maps, kernel and comparisons."""
+    from titan._config import get_config
+    from titan.u8.install import resolve_u8_save
+
+    def save(value: Path | None) -> Path | None:
+        # A slot number or bare U8SAVE name is looked up in [u8.paths] savegame.
+        if value is None:
+            return None
+        try:
+            return resolve_u8_save(str(value), get_config())
+        except ValueError as error:
+            raise typer.BadParameter(str(error)) from error
+
     raise SystemExit(
         run_u8_save_browser(
-            source=source,
+            source=save(source),
             game_dir=game_dir,
-            compare=compare,
+            compare=save(compare),
             shapes=shapes,
             palette=palette,
             anim=anim,

@@ -140,7 +140,8 @@ def world_query_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"
+            "--gamedat",
+            help="GAMEDAT folder or Exult save (.sav) for IREG dynamic objects",
         ),
     ] = None,
     text: Annotated[
@@ -229,6 +230,9 @@ def world_query_cmd(
       titan u7 world-query STATIC/ --name "locked chest" --ireg --gamedat gamedat/ -f csv -o out.csv
       titan u7 world-query STATIC/ --shape 522 --ireg --gamedat gamedat/ -f full_text
     """
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.world import (
         run_wizard as _world_wizard,
         WorldQueryParams,
@@ -398,7 +402,7 @@ def container_browse_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat", help="Path to gamedat/ directory (required for IREG)"
+            "--gamedat", help="GAMEDAT folder or Exult save (.sav) (required for IREG)"
         ),
     ] = None,
     text: Annotated[
@@ -490,6 +494,9 @@ def container_browse_cmd(
       titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword -f csv -o containers.csv
       titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048 -f tree
     """
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.container import (
         browse_containers,
         ContainerQueryParams,
@@ -657,7 +664,9 @@ def egg_query_cmd(
     ] = "bg",
     gamedat: Annotated[
         Optional[str],
-        typer.Option("--gamedat", help="Path to gamedat/ directory (required)"),
+        typer.Option(
+            "--gamedat", help="GAMEDAT folder or Exult save (.sav) (required)"
+        ),
     ] = None,
     egg_type: Annotated[
         Optional[list[str]],
@@ -703,6 +712,9 @@ def egg_query_cmd(
       titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
       titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o eggs.csv
     """
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.eggs import (
         query_eggs,
         EggQueryParams,

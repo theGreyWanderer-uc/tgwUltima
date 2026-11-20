@@ -720,9 +720,10 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
 
 @meta(
     results=("file",),
-    params={"output": "output-file"},
+    params={"output": "output-file", "config": "recipe"},
     interactive=True,
     batch_with=("config",),
+    recipe="titan.u7.shape_recipe:shape_recipe",
 )
 def shape_create_cmd(
     source: Annotated[

@@ -862,7 +862,8 @@ def map_render_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"
+            "--gamedat",
+            help="GAMEDAT folder or Exult save (.sav) for IREG dynamic objects",
         ),
     ] = None,
     grid: Annotated[
@@ -990,6 +991,9 @@ def map_render_cmd(
     ] = False,
 ) -> None:
     """Render a U7 map to PNG. With no render options, open the guided wizard."""
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     wizard_mode = interactive or not any(
         source is not None and source.name == "COMMANDLINE"
         for name in ctx.params
@@ -1187,7 +1191,7 @@ def map_inventory_cmd(
         Optional[str],
         typer.Option(
             "--gamedat",
-            help="Count movable objects from this GAMEDAT folder instead of INITGAME.DAT",
+            help="Count movable objects from this GAMEDAT folder or Exult save (.sav) instead of INITGAME.DAT",
         ),
     ] = None,
     initgame: Annotated[
@@ -1281,6 +1285,9 @@ def map_inventory_cmd(
       titan u7 map-inventory --game si --contents
       titan u7 map-inventory STATIC/ --gamedat gamedat/ -o inventory/
     """
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.map_inventory import (
         build_u7_map_inventory,
         chunk_rect,

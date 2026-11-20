@@ -580,9 +580,12 @@ def cmd_config(args: SimpleNamespace) -> int:
         base: Optional[str] = None,
         u7_resources: bool = False,
         u9_resources: bool = False,
+        kinds: Optional[str] = None,
     ) -> None:
         if not section:
             return
+        from titan._meta import path_kind
+
         print()
         print(title)
         for k, v in section.items():
@@ -607,6 +610,8 @@ def cmd_config(args: SimpleNamespace) -> int:
 
                     if k in U9_RESOURCE_NAMES:
                         flag = check_u9_resource(k, value_path)
+                if not exists and kinds and path_kind(kinds, k) == "working-dir":
+                    flag = "not extracted yet"
                 resolved = f" -> {value_path.absolute()}" if value_path else ""
                 print(f"  {k:<12} = {v!r}  [{flag}]{resolved}")
             else:
@@ -625,7 +630,9 @@ def cmd_config(args: SimpleNamespace) -> int:
     exult = config.get("exult", {})
     if any((u8, uw2, u7bg, u7si, uo, u9, md, u6, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
-        _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
+        _print_kv_section(
+            "[u8.paths]", u8.get("paths", {}), check_exists=True, kinds="u8"
+        )
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
         _print_kv_section("[u6.game]", u6.get("game", {}), check_exists=True)
         _print_kv_section(
@@ -633,6 +640,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             u6.get("paths", {}),
             check_exists=True,
             base=u6.get("game", {}).get("base"),
+            kinds="u6",
         )
         _print_kv_section("[md.game]", md.get("game", {}), check_exists=True)
         _print_kv_section(
@@ -640,6 +648,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             md.get("paths", {}),
             check_exists=True,
             base=md.get("game", {}).get("base"),
+            kinds="md",
         )
         _print_kv_section("[u9.game]", u9.get("game", {}), check_exists=True)
         _print_kv_section(
@@ -647,6 +656,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             u9.get("paths", {}),
             check_exists=True,
             base=u9.get("game", {}).get("base"),
+            kinds="u9",
             u9_resources=True,
         )
         _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
@@ -657,6 +667,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             check_exists=True,
             base=bg_base,
             u7_resources=True,
+            kinds="u7bg",
         )
         for mod_name, mod in u7bg.get("mods", {}).items():
             _print_kv_section(
@@ -664,6 +675,7 @@ def cmd_config(args: SimpleNamespace) -> int:
                 mod.get("paths", {}),
                 check_exists=True,
                 base=bg_base,
+                kinds="u7bg",
             )
         _print_kv_section("[u7si.game]", u7si.get("game", {}))
         si_base = u7si.get("game", {}).get("base")
@@ -673,6 +685,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             check_exists=True,
             base=si_base,
             u7_resources=True,
+            kinds="u7si",
         )
         for mod_name, mod in u7si.get("mods", {}).items():
             _print_kv_section(
@@ -680,6 +693,7 @@ def cmd_config(args: SimpleNamespace) -> int:
                 mod.get("paths", {}),
                 check_exists=True,
                 base=si_base,
+                kinds="u7si",
             )
         uo_path_keys = {"base", "path", "output"}
         uo_sections = [("[uo.game]", uo.get("game", {}))] + [
@@ -705,7 +719,9 @@ def cmd_config(args: SimpleNamespace) -> int:
         game = config.get("game", {})
         paths = config.get("paths", {})
         _print_kv_section("[game]", game)
-        _print_kv_section("[paths]  (after base expansion)", paths, check_exists=True)
+        _print_kv_section(
+            "[paths]  (after base expansion)", paths, check_exists=True, kinds="u8"
+        )
     return 0
 
 

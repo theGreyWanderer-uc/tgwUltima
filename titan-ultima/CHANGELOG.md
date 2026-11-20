@@ -46,6 +46,32 @@ work for the next release.
   files, or one file such as an archive (`titan._meta.RESULT_KINDS`). Where
   `--format` or `--json` picks between several, that option is marked too.
   226 commands are tagged.
+- **Save lists for other tools:** `titan._meta.list_saves("u8")` lists a
+  game's saves from titan's config, each with the value to pass to its save
+  options and its in-game description. Ultima 8 names come from the game's
+  own `SGHEADER.DAT`; Ultima VII lists Exult's `exultNN<bg|si>.sav` saves
+  with the names typed in Exult; Ultima IX names come from each save; Ultima
+  VI and Martian Dreams list their one `SAVEGAME` folder.
+- **Config path kinds for other tools:** `titan._meta.path_kind("u8",
+  "shapes")` says what a `[<game>.paths]` key names: an install file or
+  folder, a save, the save folder, or a working folder that a command
+  creates (U8 `shapes`/`globs`). Front ends can tell a missing game file
+  from data that just hasn't been extracted yet.
+- **Wizard recipes for other tools:** `u7 font-create` and `u7 shape-create`
+  now describe their `--config` recipes: each field's section, type,
+  default, allowed values and help, and when it applies (the LUT only for
+  `method = "lut"`, say). `command_meta("u7", "font-create").recipe_spec()`
+  returns the description, and its `to_toml(values)` writes a checked
+  recipe. A front end can draw a form, write the recipe and run the wizard
+  without prompts.
+- **U7 `--gamedat` takes an Exult save:** `u7 map-render`, `map-inventory`,
+  `world-query`, `container-browse`, `egg-query` and `monster-report` now
+  accept an Exult save file (`exult00bg.sav`) as well as a GAMEDAT folder.
+  The save is unpacked once into titan's cache
+  (`%LOCALAPPDATA%\Titan\cache\u7-saves` on Windows) and reused.
+- **`u8 save-browse` takes a slot:** `titan u8 save-browse 3 --compare 0`
+  opens `U8SAVE.003` from the configured save folder, as the map commands'
+  `--nonfixed` already does.
 
 ### Changed
 
@@ -58,6 +84,9 @@ work for the next release.
   yourself. With neither, the map commands draw the base world. Configs
   without `savegame` use the folder of `nonfixed`, then
   `<base>/cloud_saves/SAVEGAME`.
+- **`titan config` and working folders:** a missing U8 `shapes` or `globs`
+  folder now shows `[not extracted yet]` instead of `[NOT FOUND]`. Missing
+  game files are still flagged NOT FOUND.
 
 ### Fixed
 

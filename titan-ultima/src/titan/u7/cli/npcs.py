@@ -822,7 +822,7 @@ def monster_report_cmd(
     ] = None,
     gamedat: Annotated[
         Optional[str],
-        typer.Option("--gamedat", help="Path to Exult GAMEDAT directory"),
+        typer.Option("--gamedat", help="Exult GAMEDAT folder or save (.sav)"),
     ] = None,
     live_source: Annotated[
         Optional[str],
@@ -852,6 +852,9 @@ def monster_report_cmd(
     ] = None,
 ) -> None:
     """Export monster definitions, live actors, spawn eggs, and placements."""
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     raise SystemExit(
         cmd_monster_report(
             SimpleNamespace(

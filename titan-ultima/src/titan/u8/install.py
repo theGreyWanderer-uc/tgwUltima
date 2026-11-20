@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = [
     "U8_GAME_SAVE_DIR",
+    "U8_PATH_KINDS",
     "U8_STATIC_FILES",
     "discover_u8_installs",
     "expand_u8_paths",
@@ -34,6 +35,16 @@ U8_STATIC_FILES = {
     "u8gumps": "U8GUMPS.FLX",
 }
 """``[u8.paths]`` keys that name files in the game's STATIC folder."""
+
+U8_PATH_KINDS = {
+    **{key: "install-file" for key in U8_STATIC_FILES},
+    "usecode": "install-file",
+    "savegame": "save-dir",
+    "nonfixed": "save",
+    "shapes": "working-dir",
+    "globs": "working-dir",
+}
+"""``[u8.paths]`` key -> kind (see :func:`titan._meta.path_kind`)."""
 
 
 U8_GAME_SAVE_DIR = "cloud_saves/SAVEGAME"
