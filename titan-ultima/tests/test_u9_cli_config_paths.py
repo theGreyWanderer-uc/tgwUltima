@@ -77,7 +77,13 @@ def _sample_value(parameter, tmp_path):
         annotation, choices = descriptor.annotation, descriptor.choices
     else:
         name = type(parameter.type).__name__
-        annotation = int if name.startswith("Int") else float if name.startswith("Float") else None
+        annotation = (
+            int
+            if name.startswith("Int")
+            else float
+            if name.startswith("Float")
+            else None
+        )
         choices = getattr(parameter.type, "choices", None)
     if annotation is int:
         return "1"

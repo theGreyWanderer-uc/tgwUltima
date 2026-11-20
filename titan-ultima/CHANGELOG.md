@@ -18,6 +18,11 @@ work for the next release.
   each building's town, outline, doors, signs and the NPCs who start or
   work there when a new game begins. Names come from the printed town maps
   and a full review of the world; Serpent Isle will follow.
+- **Config location for other tools:** `titan._config.user_config_path()`
+  returns where titan expects its per-user config (`%APPDATA%\titan\config.toml`
+  on Windows, `~/.config/titan/config.toml` elsewhere), and
+  `config_search_paths()` lists every location titan checks, in order. Front
+  ends can ask titan instead of hard-coding these paths.
 
 ### Changed
 
