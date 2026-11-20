@@ -727,8 +727,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
         u7_setup_lines,
     )
     from titan.u8.install import (
+        U8_GAME_SAVE_DIR,
         discover_u8_installs,
         find_u8_engine_save,
+        prune_stale_u8_save_default,
         u8_detected_paths,
         u8_install_candidates,
         u8_setup_lines,
@@ -991,16 +993,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
     # -- Third-party engine save detection -------------------------
     engine_save_file = find_u8_engine_save()
 
-    nonfixed_value = "U8SAVE.000"
+    # Setup records the save folder only; choosing a save is the user's call.
+    savegame_value = U8_GAME_SAVE_DIR if lang else ""
     if engine_save_file:
-        print(f"\nThird-party engine save detected: {engine_save_file}")
+        engine_save_dir = engine_save_file.parent
+        print(f"\nThird-party engine saves detected: {engine_save_dir}")
         ans = ui.choice(
-            "Use this save instead of game-folder saves? [Y/n] ",
+            "Use this save folder instead of the game's? [Y/n] ",
             ["y", "Y", "n", "N"],
             "Y",
         ).lower()
         if ans not in ("n", "no"):
-            nonfixed_value = str(engine_save_file).replace("\\", "/")
+            savegame_value = engine_save_dir.as_posix()
 
     # -- Detection summary + confirmation -------------------------
     u8_static_detected, u8_usecode_detected = u8_detected_paths(base, lang)
@@ -1052,6 +1056,12 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U8 language:  {lang or '(flat mode)'}")
     print(f"  U8 STATIC:    {u8_static_detected}")
     print(f"  U8 USECODE:   {u8_usecode_detected}")
+    u8_save_shown = (
+        Path(savegame_value)
+        if Path(savegame_value).is_absolute()
+        else Path(base) / savegame_value
+    )
+    print(f"  U8 saves:     {u8_save_shown}")
     print(f"  U7 BG base:   {u7bg_base or '(empty)'}")
     print(f"  U7 BG STATIC: {u7bg_static_detected or '(empty)'}")
     print(f"  U7 BG GAMEDAT:{u7bg_gamedat or '(empty)'}")
@@ -1226,7 +1236,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
     lines += u8_setup_lines(
         base,
         lang,
-        nonfixed_value,
+        savegame_value,
         u8_usecode_detected,
         manual_static=manual_u8_static,
         manual_usecode=manual_u8_usecode,
@@ -1273,7 +1283,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
     try:
         backup = write_setup_config(
-            toml_path, "\n".join(lines) + "\n", updates=setup_updates
+            toml_path,
+            "\n".join(lines) + "\n",
+            updates=setup_updates,
+            cleanup=prune_stale_u8_save_default,
         )
     except (OSError, ValueError) as exc:
         print(f"ERROR: Could not write setup config: {exc}", file=sys.stderr)

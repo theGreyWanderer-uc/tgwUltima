@@ -1400,7 +1400,7 @@ CLI values always override config values.
 | `--globs DIR` | Directory of pre-extracted GLOB `.dat` files (from `flex-extract GLOB.FLX`) |
 | `--palette PATH`, `-p PATH` | Path to `U8PAL.PAL` colour palette |
 | `--typeflag PATH` | Path to `TYPEFLAG.DAT`. Enables engine-accurate pairwise depth sorting for correct building/wall rendering. Highly recommended |
-| `--nonfixed PATH` | Path to a native `U8SAVE.000` or loose `NONFIXED.DAT`. Merges stored dynamic world items into the render. NPC registry slot 0 and inventory records are excluded; active cached state is a separate snapshot. |
+| `--nonfixed SAVE` | Save to overlay: a slot number (`3`), a file name (`U8SAVE.003`) or a path to a native U8SAVE or loose `NONFIXED.DAT`. Slots and bare names are read from `[u8.paths] savegame`. Without it, `[u8.paths] nonfixed` is the default; with neither, the base world is drawn. Merges stored dynamic world items into the render. NPC registry slot 0 and inventory records are excluded; active cached state is a separate snapshot. |
 
 FIXED and NONFIXED use the shared complete 16-byte record parser. Contained
 items are excluded using their native flags, including nested inventories;
@@ -1445,7 +1445,7 @@ All map commands accept these typeflag-based exclusion switches.
 
 > **Tip — player-accurate renders:** For renders closest to what the original
 > engine displays, use `--no-editor --no-ignore` together with
-> `--nonfixed U8SAVE.000`. Editor shapes (eggs, debug markers, translucent
+> `--nonfixed 0` (slot 0). Editor shapes (eggs, debug markers, translucent
 > collision volumes) and ignored shapes are never drawn by the game engine.
 
 #### Common display flags
@@ -1512,7 +1512,7 @@ With `titan.toml` (paths from config):
 ```bash
 titan u8 map-render -m 5
 titan u8 map-render -m 5 --view iso_high -o map_005_high.png
-titan u8 map-render -m 39 --nonfixed U8SAVE.000   # override nonfixed only
+titan u8 map-render -m 39 --nonfixed 3            # overlay save slot 3
 titan u8 map-render -m 0  --no-roof               # remove roof tiles
 ```
 

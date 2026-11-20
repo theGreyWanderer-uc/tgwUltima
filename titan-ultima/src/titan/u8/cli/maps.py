@@ -18,9 +18,17 @@ from typing import Annotated, Optional
 import typer
 
 from titan._config import cfg as _cfg
+from titan._config import get_config
 from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
+from titan.u8.install import resolve_u8_save
 from titan.u8.map import U8MapRenderer, U8MapSampler
+
+_NONFIXED_HELP = (
+    "Save to overlay: slot number (3), file name (U8SAVE.003) or path; raw"
+    " NONFIXED.DAT also works. Names and slots are read from [u8.paths]"
+    " savegame. Default: [u8.paths] nonfixed, else the base world."
+)
 
 
 def _get_exclude_flags(args: SimpleNamespace) -> dict[str, bool]:
@@ -209,7 +217,12 @@ def _apply_map_config(
     globs = globs or _cfg("globs")
     palette = palette or _cfg("palette")
     typeflag = typeflag or _cfg("typeflag")
-    nonfixed = nonfixed or _cfg("nonfixed")
+    try:
+        save = resolve_u8_save(nonfixed, get_config())
+    except ValueError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(1) from error
+    nonfixed = str(save) if save else None
     missing = [
         k
         for k, v in [
@@ -737,9 +750,7 @@ def map_render_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[
-        Optional[str], typer.Option(help="Path to U8SAVE.000 or raw NONFIXED.DAT")
-    ] = None,
+    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,
@@ -841,9 +852,7 @@ def map_render_all_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[
-        Optional[str], typer.Option(help="Path to U8SAVE.000 or raw NONFIXED.DAT")
-    ] = None,
+    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,
@@ -944,9 +953,7 @@ def map_sample_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[
-        Optional[str], typer.Option(help="Path to U8SAVE.000 or raw NONFIXED.DAT")
-    ] = None,
+    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,
@@ -1050,9 +1057,7 @@ def map_sample_all_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[
-        Optional[str], typer.Option(help="Path to U8SAVE.000 or raw NONFIXED.DAT")
-    ] = None,
+    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,

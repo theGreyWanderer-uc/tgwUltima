@@ -50,14 +50,20 @@ u8gumps   = "U8GUMPS.FLX"
 shapes    = "shapes/"
 globs     = "globs/"
 
-# Live / dynamic objects — from a game save or Pentagram/ScummVM.
-# Relative names are expanded to <base>/cloud_saves/SAVEGAME/<name>  (GOG layout).
-# Absolute paths (e.g. from Pentagram) are used as-is.
-nonfixed  = "U8SAVE.000"
+# Save folder. Relative paths are under <base>; with no savegame, titan uses
+# <base>/cloud_saves/SAVEGAME (GOG layout), or <base> for flat installs.
+# Map commands pick a save with --nonfixed: a slot (3), a name (U8SAVE.003)
+# or a path.
+savegame  = "cloud_saves/SAVEGAME"
 
-# Pentagram / ScummVM examples (absolute path, unchanged):
-# nonfixed = "C:/Users/<you>/AppData/Roaming/Pentagram/u8-save/U8SAVE.000"  # Windows
-# nonfixed = "~/Library/Application Support/Pentagram/u8-save/U8SAVE.000"   # macOS
+# Pentagram / ScummVM save folders (absolute path, unchanged):
+# savegame = "C:/Users/<you>/AppData/Roaming/Pentagram/u8-save"  # Windows
+# savegame = "~/Library/Application Support/Pentagram/u8-save"   # macOS
+
+# Optional default save for map commands when --nonfixed is not given.
+# Leave unset to render the base world. A slot number or name is looked up
+# in the save folder.
+# nonfixed = "3"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -77,7 +83,7 @@ nonfixed  = "U8SAVE.000"
 # typeflag = "TYPEFLAG.DAT"
 # shapes   = "shapes/"
 # globs    = "globs/"
-# nonfixed = "U8SAVE.000"
+# savegame = "cloud_saves/SAVEGAME"
 #
 # [u6.game]
 # # Detected by `titan setup`; the directory containing U6PAL and MAP.

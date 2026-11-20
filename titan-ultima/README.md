@@ -734,7 +734,7 @@ palette  = "U8PAL.PAL"
 typeflag = "TYPEFLAG.DAT"
 shapes   = "shapes/"
 globs    = "globs/"
-nonfixed = "U8SAVE.000"
+savegame = "cloud_saves/SAVEGAME"
 
 [u7bg.game]
 base    = "<Black Gate install>/ULTIMA7"

@@ -28,8 +28,22 @@ work for the next release.
 
 - **Python 3.10 is now the minimum.** Titan already used Python 3.10
   features, so it did not run on 3.9 despite saying it did.
+- **U8 saves by slot:** the U8 map commands' `--nonfixed` now also takes a
+  slot number (`--nonfixed 3`) or a file name (`U8SAVE.003`), looked up in
+  the new `[u8.paths] savegame` folder. Paths work as before.
+  `[u8.paths] nonfixed` is now an optional default save that you set
+  yourself. With neither, the map commands draw the base world. Configs
+  without `savegame` use the folder of `nonfixed`, then
+  `<base>/cloud_saves/SAVEGAME`.
 
 ### Fixed
+
+- **`titan setup` no longer picks a U8 save:** it wrote
+  `nonfixed = "U8SAVE.000"` without checking the file existed, so on GOG
+  installs whose saves start at 001 the map commands failed. Setup now
+  records the save folder (`savegame`) instead. Re-running setup removes
+  that old generated value if `U8SAVE.000` doesn't exist; a `nonfixed` you
+  set yourself is kept.
 
 - **Ultima 9 commands work with newer Typer:** with Typer 0.29 or later
   installed, U9 commands that take game files, such as `u9 fixed-objects` and
