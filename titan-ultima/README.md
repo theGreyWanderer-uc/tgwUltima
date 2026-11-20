@@ -784,8 +784,8 @@ Notes:
   except `shapes` and `globs`, which are working folders in titan's data folder
   (`%LOCALAPPDATA%\Titan\u8` on Windows, `~/.local/share/titan/u8` elsewhere;
   `TITAN_DATA` moves it). `titan flex-extract` puts the install's `U8SHAPES.FLX`
-  and `GLOB.FLX` there by default. An extraction already in the current folder
-  is still found for now; `titan config` points it out.
+  and `GLOB.FLX` there by default. Older extractions in the current folder
+  are not read; the map commands extract again on first use.
 - U7 `gamedat` should usually point at Exult's initialized runtime copy when
   available.
 - U7 mod `saves` is discovered by scanning the mod profile root recursively for

@@ -45,10 +45,6 @@ U8_STATIC_FILES = {
 U8_WORKING_DIRS = ("shapes", "globs")
 """``[u8.paths]`` keys for folders extracted from the game (``flex-extract``)."""
 
-U8_LEGACY_WORKING_DIRS = "legacy_working_dirs"
-"""Key :func:`expand_u8_paths` sets on the U8 section, listing working folders
-still read from the current folder instead of titan's data folder."""
-
 U8_PATH_KINDS = {
     **{key: "install-file" for key in U8_STATIC_FILES},
     "usecode": "install-file",
@@ -115,26 +111,18 @@ def expand_u8_paths(data: dict) -> dict:
     return data
 
 
-def resolve_u8_working_dir(
-    value: str, *, data: Optional[Path] = None, cwd: Optional[Path] = None
-) -> tuple[Path, bool]:
-    """Resolve a ``shapes``/``globs`` value; returns ``(path, legacy)``.
+def resolve_u8_working_dir(value: str, *, data: Optional[Path] = None) -> Path:
+    """Resolve a ``shapes``/``globs`` value.
 
-    A relative value lives in titan's data folder (:func:`titan._config.data_dir`).
-    Until extractions move there, an existing extraction under the current
-    folder (where titan used to resolve them) is used instead and flagged
-    *legacy*. Absolute values are used unchanged.
+    A relative value lives in titan's data folder (:func:`titan._config.data_dir`,
+    or *data*); absolute values are used unchanged.
     """
     from titan._config import data_dir
 
     path = Path(value).expanduser()
     if path.is_absolute():
-        return path, False
-    shared = (data or data_dir("u8")) / path
-    old = (cwd or Path.cwd()) / path
-    if not _has_entries(shared) and _has_entries(old):
-        return old, True
-    return shared, False
+        return path
+    return (data or data_dir("u8")) / path
 
 
 U8_WORKING_DIR_ARCHIVES = {
@@ -196,29 +184,13 @@ def u8_working_dir_for_archive(archive: str | Path, config: dict) -> Optional[Pa
     return None
 
 
-def _has_entries(folder: Path) -> bool:
-    try:
-        return folder.is_dir() and any(folder.iterdir())
-    except OSError:
-        return False
-
-
 def _expand_u8_working_dirs(data: dict, *, default: bool) -> None:
     """Resolve working folders; a configured U8 without them gets the defaults."""
     paths = data.setdefault("paths", {})
-    legacy = []
     for key in U8_WORKING_DIRS:
         value = _str_value(paths, key) or (f"{key}/" if default else "")
-        if not value:
-            continue
-        path, old = resolve_u8_working_dir(value)
-        paths[key] = str(path)
-        if old:
-            legacy.append(key)
-    if legacy:
-        data[U8_LEGACY_WORKING_DIRS] = legacy
-    else:
-        data.pop(U8_LEGACY_WORKING_DIRS, None)
+        if value:
+            paths[key] = str(resolve_u8_working_dir(value))
 
 
 def _expand_u8_save_paths(paths: dict, base_p: Path, lang: str) -> None:

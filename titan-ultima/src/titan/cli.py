@@ -582,7 +582,6 @@ def cmd_config(args: SimpleNamespace) -> int:
         return 0
 
     config = load_config(str(path))
-    from titan.u8.install import U8_LEGACY_WORKING_DIRS
 
     def _print_kv_section(
         title: str,
@@ -592,7 +591,6 @@ def cmd_config(args: SimpleNamespace) -> int:
         u7_resources: bool = False,
         u9_resources: bool = False,
         kinds: Optional[str] = None,
-        legacy: tuple[str, ...] = (),
     ) -> None:
         if not section:
             return
@@ -624,8 +622,6 @@ def cmd_config(args: SimpleNamespace) -> int:
                         flag = check_u9_resource(k, value_path)
                 if not exists and kinds and path_kind(kinds, k) == "working-dir":
                     flag = "not extracted yet"
-                if k in legacy:
-                    flag += "; current folder, move it into the data folder"
                 resolved = f" -> {value_path.absolute()}" if value_path else ""
                 print(f"  {k:<12} = {v!r}  [{flag}]{resolved}")
             else:
@@ -650,7 +646,6 @@ def cmd_config(args: SimpleNamespace) -> int:
             u8.get("paths", {}),
             check_exists=True,
             kinds="u8",
-            legacy=tuple(u8.get(U8_LEGACY_WORKING_DIRS, ())),
         )
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
         _print_kv_section("[u6.game]", u6.get("game", {}), check_exists=True)
@@ -743,7 +738,6 @@ def cmd_config(args: SimpleNamespace) -> int:
             paths,
             check_exists=True,
             kinds="u8",
-            legacy=tuple(config.get(U8_LEGACY_WORKING_DIRS, ())),
         )
     return 0
 

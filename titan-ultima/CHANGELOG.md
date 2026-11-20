@@ -94,8 +94,9 @@ work for the next release.
   in front ends. A configured U8 without them gets `shapes/` and `globs/`.
   `titan flex-extract` with no `-o` puts the configured install's
   `U8SHAPES.FLX` and `GLOB.FLX` there; other archives still extract to the
-  current folder. An extraction already in the current folder is still used
-  for now, and `titan config` says to move it.
+  current folder. An old extraction in the folder you ran titan from is no
+  longer read: the map commands extract again into the data folder on first
+  use, and the old `shapes`/`globs` folders can be deleted.
 - **U8 map commands extract once, by themselves:** when `shapes` or
   `globs` is empty, the map commands extract the configured install's
   `U8SHAPES.FLX` or `GLOB.FLX` into the data folder without asking, so they

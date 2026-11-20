@@ -10,7 +10,7 @@ import pytest
 
 from titan import _config, cli
 from titan.flex import FlexArchive
-from titan.u8.install import U8_LEGACY_WORKING_DIRS, u8_working_dir_for_archive
+from titan.u8.install import u8_working_dir_for_archive
 
 
 @pytest.fixture
@@ -65,7 +65,6 @@ def test_relative_working_dirs_resolve_in_the_data_folder(workspace, monkeypatch
     config = _config.load_config(str(toml))
     assert Path(config["u8"]["paths"]["shapes"]) == workspace / "data" / "u8" / "shapes"
     assert Path(config["u8"]["paths"]["globs"]) == absolute
-    assert U8_LEGACY_WORKING_DIRS not in config["u8"]
 
 
 def test_configured_u8_without_working_dirs_gets_the_defaults(workspace, monkeypatch):
@@ -75,23 +74,17 @@ def test_configured_u8_without_working_dirs_gets_the_defaults(workspace, monkeyp
         assert Path(config["u8"]["paths"][key]) == workspace / "data" / "u8" / key
 
 
-def test_existing_current_folder_extraction_still_works(workspace, monkeypatch, capsys):
+def test_current_folder_extraction_is_not_read(workspace, monkeypatch, capsys):
     monkeypatch.setenv(_config.DATA_ENV, str(workspace / "data"))
-    _fill(Path.cwd() / "shapes")  # extracted before the data folder existed
+    _fill(Path.cwd() / "shapes")  # where titan used to resolve shapes/
     toml = _u8_config(workspace)
     config = _config.load_config(str(toml))
-    assert Path(config["u8"]["paths"]["shapes"]) == Path.cwd() / "shapes"
-    assert config["u8"][U8_LEGACY_WORKING_DIRS] == ["shapes"]
+    assert Path(config["u8"]["paths"]["shapes"]) == workspace / "data" / "u8" / "shapes"
     assert cli.cmd_config(SimpleNamespace(config=str(toml), edit=False)) == 0
     report = capsys.readouterr().out
     assert f"Data folder:   {workspace / 'data'}" in report
     line = next(x for x in report.splitlines() if x.strip().startswith("shapes"))
-    assert "current folder, move it into the data folder" in line
-    # Once the data folder has its own copy, it wins.
-    _fill(workspace / "data" / "u8" / "shapes")
-    config = _config.load_config(str(toml))
-    assert Path(config["u8"]["paths"]["shapes"]) == workspace / "data" / "u8" / "shapes"
-    assert U8_LEGACY_WORKING_DIRS not in config["u8"]
+    assert "not extracted yet" in line
 
 
 def _flex(path: Path) -> Path:

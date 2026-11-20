@@ -9611,7 +9611,7 @@ Override with `titan --config <other config.toml> <command>`.
 | SAVEGAME file (relative) | `<base>/cloud_saves/SAVEGAME/<name>` |
 | U7 path (relative) | `<u7*.game.base>/<u7*.paths value>` |
 | Any absolute path | Used unchanged |
-| `shapes`, `globs` | Relative to titan's data folder: `%LOCALAPPDATA%\Titan\u8` (Windows), `$XDG_DATA_HOME/titan/u8` or `~/.local/share/titan/u8` (elsewhere); `TITAN_DATA` moves it. Default `shapes/` and `globs/` when a U8 base is set. An existing extraction in the current folder is still used for now. |
+| `shapes`, `globs` | Relative to titan's data folder: `%LOCALAPPDATA%\Titan\u8` (Windows), `$XDG_DATA_HOME/titan/u8` or `~/.local/share/titan/u8` (elsewhere); `TITAN_DATA` moves it. Default `shapes/` and `globs/` when a U8 base is set. Extractions in the current folder are not read. |
 | Flat mode (`language = ""`) | STATIC and SAVEGAME expand directly to `<base>/` |
 
 ### Priority
