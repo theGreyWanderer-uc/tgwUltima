@@ -110,7 +110,9 @@ def find_dungeons(
                 kind = "void"
             elif named(shape, FLOOR_WORDS):
                 kind = "floor"
-            elif shape >= 150 or (entry is not None and (entry.is_solid or entry.is_water)):
+            elif shape >= 150 or (
+                entry is not None and (entry.is_solid or entry.is_water)
+            ):
                 kind = "blocked"
             else:
                 kind = "open"
@@ -161,7 +163,11 @@ def find_dungeons(
         for cluster in group_near(edge, 4):
             xs, ys = [x for x, _ in cluster], [y for _, y in cluster]
             spots.append(
-                {"tx": sum(xs) // len(xs), "ty": sum(ys) // len(ys), "tiles": len(cluster)}
+                {
+                    "tx": sum(xs) // len(xs),
+                    "ty": sum(ys) // len(ys),
+                    "tiles": len(cluster),
+                }
             )
         entrances_of.append(sorted(spots, key=lambda s: (s["ty"], s["tx"])))
 
@@ -251,7 +257,9 @@ def find_dungeons(
                 "size": [bx1 - bx0 + 1, by1 - by0 + 1],
                 "center": [round(cx, 1), round(cy, 1)],
                 # a floor tile, usable as an anchor in the place data
-                "anchor": list(min(group, key=lambda t: abs(t[0] - cx) + abs(t[1] - cy))),
+                "anchor": list(
+                    min(group, key=lambda t: abs(t[0] - cx) + abs(t[1] - cy))
+                ),
                 "tile_count": len(group),
                 "rects": [list(r) for r in to_rects(group)],
                 "entrances": entrances_of[i],
@@ -268,7 +276,10 @@ def find_dungeons(
                     if any(r[0] <= cx <= r[2] and r[1] <= cy <= r[3] for r in rects)
                 ],
                 "chunks": {
-                    "cx0": bx0 // 16, "cy0": by0 // 16, "cx1": bx1 // 16, "cy1": by1 // 16,
+                    "cx0": bx0 // 16,
+                    "cy0": by0 // 16,
+                    "cx1": bx1 // 16,
+                    "cy1": by1 // 16,
                 },  # fmt: skip
                 "superchunks": sorted(
                     {

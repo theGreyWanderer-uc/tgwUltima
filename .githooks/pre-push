@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# Run the titan-ultima test suite before anything leaves this machine.
+# Takes about a minute with pytest-xdist. Skip once with: git push --no-verify
+
+# Python with the test deps: the titanDev env, else whatever is on PATH.
+PY="/c/Users/winUser/.conda/envs/titanDev/python.exe"
+if [ ! -x "$PY" ]; then
+    PY="python"
+fi
+
+if ! "$PY" -c "import pytest, xdist" >/dev/null 2>&1; then
+    echo "WARNING: pytest/pytest-xdist not found for $PY; skipping tests."
+    exit 0
+fi
+
+ROOT=$(git rev-parse --show-toplevel)
+cd "$ROOT/titan-ultima" || exit 1
+
+# Same lint CI runs ("Lint Titan" in build-release.yml), over the whole package.
+echo "Running ruff (as CI does) before push..."
+if ! "$PY" -m ruff check . || ! "$PY" -m ruff format --check .; then
+    echo
+    echo "PUSH BLOCKED: ruff failed. Fix with: python -m ruff format . (and ruff check --fix)"
+    echo
+    exit 1
+fi
+
+echo "Running titan-ultima tests before push..."
+
+if ! "$PY" -m pytest -q -p no:cacheprovider; then
+    echo
+    echo "PUSH BLOCKED: tests failed (see above)."
+    echo
+    exit 1
+fi
+
+echo "Tests passed."
+exit 0

@@ -56,6 +56,7 @@ glb = [
 ]
 test = [
     "pytest>=8.0",
+    "pytest-xdist>=3.5",
 ]
 lint = [
     "ruff>=0.15",
@@ -127,6 +128,9 @@ titan = "titan.cli:main"
 [tool.pytest.ini_options]
 # Keep collection to the suite; scratch output folders may hold stray test files.
 testpaths = ["tests"]
+# Run across all cores (pytest-xdist, in the `test` extra). Use `-n 0` for a
+# single-process run, e.g. when debugging.
+addopts = "-n auto"
 
 [tool.ruff]
 target-version = "py310"

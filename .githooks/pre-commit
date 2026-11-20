@@ -28,4 +28,66 @@ if [ $RESULT -ne 0 ]; then
 fi
 
 echo "Gitleaks found no secrets."
+
+# --- Ruff: format staged Python files, then lint them -----------------------
+#
+# Fully staged files are formatted and re-staged automatically. A file that
+# also has unstaged changes is only checked: re-staging it would pull those
+# unstaged changes into the commit. Lint is check-only (its fixes can delete
+# code), so a lint error blocks the commit for you to fix.
+
+# Ruff: on PATH if an env is active, else the titanDev env.
+if command -v ruff >/dev/null 2>&1; then
+    RUFF="ruff"
+elif [ -x "/c/Users/winUser/.conda/envs/titanDev/python.exe" ]; then
+    RUFF="/c/Users/winUser/.conda/envs/titanDev/python.exe -m ruff"
+else
+    echo "WARNING: ruff not found; skipping format/lint. Activate titanDev to enable it."
+    exit 0
+fi
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+[ -z "$STAGED" ] && exit 0
+
+FULL=""
+PARTIAL=""
+for f in $STAGED; do
+    if git diff --quiet -- "$f"; then
+        FULL="$FULL $f"
+    else
+        PARTIAL="$PARTIAL $f"
+    fi
+done
+
+echo "Running ruff on staged Python files..."
+
+if [ -n "$FULL" ]; then
+    # shellcheck disable=SC2086
+    $RUFF format $FULL || exit 1
+    # shellcheck disable=SC2086
+    git add -- $FULL
+fi
+
+if [ -n "$PARTIAL" ]; then
+    # shellcheck disable=SC2086
+    if ! $RUFF format --check $PARTIAL; then
+        echo
+        echo "COMMIT BLOCKED: these partly staged files need formatting:"
+        for f in $PARTIAL; do echo "  $f"; done
+        echo "Run: python -m ruff format <file>, review, stage, and commit again."
+        echo
+        exit 1
+    fi
+fi
+
+# shellcheck disable=SC2086
+if ! $RUFF check $FULL $PARTIAL; then
+    echo
+    echo "COMMIT BLOCKED: ruff found lint errors (see above)."
+    echo "Many can be fixed with: python -m ruff check --fix <file>"
+    echo
+    exit 1
+fi
+
+echo "Ruff: formatted and lint-clean."
 exit 0

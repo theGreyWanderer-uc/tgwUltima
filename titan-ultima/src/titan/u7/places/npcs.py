@@ -37,7 +37,9 @@ def load_npcs(static_dir, game: str, map_num: int = 0) -> list[dict]:
         return []
     npcs = U7NPCData.from_initgame_file(str(init), game=game)
     schedules = (
-        U7Schedules.from_file(str(sched_path), strict=False).entries if sched_path else {}
+        U7Schedules.from_file(str(sched_path), strict=False).entries
+        if sched_path
+        else {}
     )
     out = []
     for npc in npcs.npcs:
@@ -51,7 +53,13 @@ def load_npcs(static_dir, game: str, map_num: int = 0) -> list[dict]:
                 "shape": npc.shape,
                 "start": (npc.tile_x, npc.tile_y, npc.lift),
                 "schedule": [
-                    (e.time * 3, SCHEDULE_TYPE_NAMES.get(e.type, f"type_{e.type}"), e.tx, e.ty, e.tz)
+                    (
+                        e.time * 3,
+                        SCHEDULE_TYPE_NAMES.get(e.type, f"type_{e.type}"),
+                        e.tx,
+                        e.ty,
+                        e.tz,
+                    )
                     for e in schedules.get(npc.npc_num, [])
                 ],
             }
