@@ -13,6 +13,11 @@ work for the next release.
 - **Ultima 9 Steam installs:** `titan setup` now also looks for Ultima 9 in
   Steam libraries (`Program Files (x86)/Steam/steamapps/common` and
   `SteamLibrary/steamapps/common`) on drives C to G.
+- **Config location for other tools:** `titan._config.user_config_path()`
+  returns where titan expects its per-user config (`%APPDATA%\titan\config.toml`
+  on Windows, `~/.config/titan/config.toml` elsewhere), and
+  `config_search_paths()` lists every location titan checks, in order. Front
+  ends can ask titan instead of hard-coding these paths.
 
 ### Changed
 

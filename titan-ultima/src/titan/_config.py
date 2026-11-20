@@ -15,9 +15,16 @@ populated by the root CLI callback via :func:`load_config`.
 
 from __future__ import annotations
 
-__all__ = ["find_config", "load_config", "cfg"]
+__all__ = [
+    "config_search_paths",
+    "find_config",
+    "load_config",
+    "cfg",
+    "user_config_path",
+]
 
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -44,14 +51,37 @@ explicit_config_path: Optional[str] = None
 # --- public helpers ------------------------------------------------------
 
 
-def find_config() -> Optional[Path]:
-    """Return the first titan.toml found in the standard search order."""
-    candidates: list[Path] = [
+def user_config_path() -> Path:
+    """Return this platform's per-user config file location.
+
+    ``%APPDATA%\\titan\\config.toml`` on Windows, otherwise
+    ``~/.config/titan/config.toml``. The file may not exist yet; callers
+    that create a user-level config (e.g. a desktop front end) should
+    write it here so :func:`find_config` picks it up.
+    """
+    appdata = os.getenv("APPDATA")
+    if sys.platform == "win32" and appdata:
+        return Path(appdata) / "titan" / "config.toml"
+    return Path.home() / ".config" / "titan" / "config.toml"
+
+
+def config_search_paths() -> list[Path]:
+    """Return every location :func:`find_config` checks, in search order.
+
+    Always includes :func:`user_config_path`.
+    """
+    candidates = [
         Path.cwd() / "titan.toml",
         Path.home() / ".config" / "titan" / "config.toml",
         Path(os.getenv("APPDATA", "~")).expanduser() / "titan" / "config.toml",
+        user_config_path(),
     ]
-    return next((p for p in candidates if p.exists()), None)
+    return list(dict.fromkeys(candidates))
+
+
+def find_config() -> Optional[Path]:
+    """Return the first titan.toml found in the standard search order."""
+    return next((p for p in config_search_paths() if p.exists()), None)
 
 
 def load_config(config_path: Optional[str] = None) -> dict:
