@@ -38,6 +38,7 @@ import typer
 from titan._version import TITAN_VERSION
 from titan import _wizard_ui as ui
 from titan._config import (
+    config_search_paths,
     find_config,
     load_config,
     resolve_config_path,
@@ -564,11 +565,8 @@ def cmd_config(args: SimpleNamespace) -> int:
             return 1
         print("No titan.toml found.")
         print("  Locations checked:")
-        print(f"    {Path.cwd() / 'titan.toml'}")
-        print(f"    {Path.home() / '.config' / 'titan' / 'config.toml'}")
-        appdata = os.getenv("APPDATA")
-        if appdata:
-            print(f"    {Path(appdata) / 'titan' / 'config.toml'}")
+        for candidate in config_search_paths():
+            print(f"    {candidate}")
         print("\nRun `titan setup` to create one.")
         return 0
 
