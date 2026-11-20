@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import socketserver
 import webbrowser
 import csv
@@ -69,11 +68,9 @@ def _dialogue_root() -> Path:
 
 
 def _default_runtime_root() -> Path:
-    if os.name == "nt":
-        local_appdata = os.getenv("LOCALAPPDATA")
-        if local_appdata:
-            return Path(local_appdata) / "Titan" / "dialogue-web"
-    return Path.home() / ".local" / "share" / "titan" / "dialogue-web"
+    from titan._config import data_dir
+
+    return data_dir() / "dialogue-web"
 
 
 def _runtime_dirs(runtime_root: Path) -> SimpleNamespace:

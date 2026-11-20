@@ -21,7 +21,7 @@ from titan._config import cfg as _cfg
 from titan._config import get_config
 from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
-from titan.u8.install import resolve_u8_save
+from titan.u8.install import resolve_u8_save, u8_working_archive
 from titan.u8.map import U8MapRenderer, U8MapSampler
 from titan._meta import meta
 
@@ -108,13 +108,26 @@ def _resolve_typeflag(args: SimpleNamespace) -> Optional[str]:
     return None
 
 
+def _in_data_folder(dir_path: str) -> bool:
+    from titan._config import data_dir
+
+    inside = os.path.join(os.path.abspath(data_dir()), "")
+    return os.path.abspath(dir_path).startswith(inside)
+
+
 def _ensure_asset_dir(
     dir_path: str,
     ext: str,
     label: str,
     flx_hint: str,
+    working_dir: Optional[str] = None,
 ) -> bool:
-    """Verify that *dir_path* contains extracted *ext* files."""
+    """Verify that *dir_path* contains extracted *ext* files.
+
+    When it doesn't, extract the configured install's archive for
+    *working_dir* (``"shapes"``/``"globs"``): without asking into titan's data
+    folder, which is titan's own working data; after a yes anywhere else.
+    """
     manifest = _dir_manifest(dir_path, ext)
     if manifest:
         total_bytes = sum(manifest.values())
@@ -129,20 +142,26 @@ def _ensure_asset_dir(
             f"{ext} files: {dir_path}"
         )
     print(f"  Map rendering needs individual {ext} files extracted from {flx_hint}.")
+    archive = u8_working_archive(working_dir, get_config()) if working_dir else None
+    if archive is not None and _in_data_folder(dir_path):
+        # titan's own working data: extract once, without a prompt (front ends too).
+        return _extract_asset_dir(dir_path, ext, str(archive))
     clean_dir = dir_path.rstrip("/\\")
     print(
         f"  You can do this manually with: "
-        f"titan flex-extract {flx_hint} -o {clean_dir}/"
+        f"titan flex-extract {archive or flx_hint} -o {clean_dir}/"
     )
     print()
 
     from titan import _wizard_ui as ui
 
+    known = archive is not None
     try:
         answer = ui.choice(
-            f"  Extract {flx_hint} into '{dir_path}' now? [y/N] ",
+            f"  Extract {archive or flx_hint} into '{dir_path}' now? "
+            f"[{'Y/n' if known else 'y/N'}] ",
             ["y", "Y", "n", "N"],
-            "N",
+            "Y" if known else "N",
         ).lower()
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
         return False
@@ -150,6 +169,8 @@ def _ensure_asset_dir(
     if answer not in ("y", "yes"):
         print(f"  Aborting.  Re-run after extracting {flx_hint} manually.")
         return False
+    if archive is not None:
+        return _extract_asset_dir(dir_path, ext, str(archive))
 
     flx_path = ""
     while not flx_path or not os.path.isfile(flx_path):
@@ -162,7 +183,11 @@ def _ensure_asset_dir(
         if not os.path.isfile(flx_path):
             print(f"  Not found: {flx_path}")
             flx_path = ""
+    return _extract_asset_dir(dir_path, ext, flx_path)
 
+
+def _extract_asset_dir(dir_path: str, ext: str, flx_path: str) -> bool:
+    """Extract *flx_path* into *dir_path* and check the result."""
     print(f"\n  Loading {flx_path} ...")
     try:
         archive = FlexArchive.from_file(flx_path)
@@ -173,7 +198,7 @@ def _ensure_asset_dir(
     non_empty = sum(1 for r in archive.records if r)
     print(f"  Extracting {non_empty} non-empty records to {dir_path}/ ...")
     os.makedirs(dir_path, exist_ok=True)
-    extracted = archive.extract_all(dir_path)
+    extracted = archive.extract_all(dir_path, flex_name=os.path.basename(flx_path))
 
     missing_idx, changed_idx = _verify_dir_against_flex(dir_path, ext, flx_path)
     new_manifest = _dir_manifest(dir_path, ext)
@@ -310,9 +335,9 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     if not os.path.isfile(args.fixed):
         print(f"ERROR: FIXED.DAT not found: {args.fixed}", file=sys.stderr)
         return 1
-    if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX"):
+    if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
-    if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX"):
+    if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(args.palette):
         print(f"ERROR: Palette not found: {args.palette}", file=sys.stderr)
@@ -387,9 +412,9 @@ def cmd_map_sample_all(args: SimpleNamespace) -> int:
     if not os.path.isfile(args.fixed):
         print(f"ERROR: FIXED.DAT not found: {args.fixed}", file=sys.stderr)
         return 1
-    if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX"):
+    if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
-    if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX"):
+    if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(args.palette):
         print(f"ERROR: Palette not found: {args.palette}", file=sys.stderr)
@@ -484,9 +509,9 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     if not os.path.isfile(fixed_path):
         print(f"ERROR: FIXED.DAT not found: {fixed_path}", file=sys.stderr)
         return 1
-    if not _ensure_asset_dir(shapes_dir, ".shp", "Shapes", "U8SHAPES.FLX"):
+    if not _ensure_asset_dir(shapes_dir, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
-    if not _ensure_asset_dir(glob_dir, ".dat", "Globs", "GLOB.FLX"):
+    if not _ensure_asset_dir(glob_dir, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(palette_path):
         print(f"ERROR: Palette file not found: {palette_path}", file=sys.stderr)
@@ -656,9 +681,9 @@ def cmd_map_render_all(args: SimpleNamespace) -> int:
     if not os.path.isfile(args.fixed):
         print(f"ERROR: FIXED.DAT not found: {args.fixed}", file=sys.stderr)
         return 1
-    if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX"):
+    if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
-    if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX"):
+    if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(args.palette):
         print(f"ERROR: Palette not found: {args.palette}", file=sys.stderr)

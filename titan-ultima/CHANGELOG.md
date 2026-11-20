@@ -64,6 +64,10 @@ work for the next release.
   returns the description, and its `to_toml(values)` writes a checked
   recipe. A front end can draw a form, write the recipe and run the wizard
   without prompts.
+- **Shared data folder:** `titan._config.data_dir()` is where titan keeps
+  working data, shared by the CLI and front ends: `%LOCALAPPDATA%\Titan` on
+  Windows, `~/.local/share/titan` elsewhere. Set `TITAN_DATA` to move it.
+  `titan config` shows it.
 - **U7 `--gamedat` takes an Exult save:** `u7 map-render`, `map-inventory`,
   `world-query`, `container-browse`, `egg-query` and `monster-report` now
   accept an Exult save file (`exult00bg.sav`) as well as a GAMEDAT folder.
@@ -84,6 +88,20 @@ work for the next release.
   yourself. With neither, the map commands draw the base world. Configs
   without `savegame` use the folder of `nonfixed`, then
   `<base>/cloud_saves/SAVEGAME`.
+- **U8 working folders live in the data folder:** relative `shapes` and
+  `globs` in `titan.toml` now resolve under `<data folder>/u8/` instead of
+  the folder you run titan from, so an extraction works from any folder and
+  in front ends. A configured U8 without them gets `shapes/` and `globs/`.
+  `titan flex-extract` with no `-o` puts the configured install's
+  `U8SHAPES.FLX` and `GLOB.FLX` there; other archives still extract to the
+  current folder. An extraction already in the current folder is still used
+  for now, and `titan config` says to move it.
+- **U8 map commands extract once, by themselves:** when `shapes` or
+  `globs` is empty, the map commands extract the configured install's
+  `U8SHAPES.FLX` or `GLOB.FLX` into the data folder without asking, so they
+  also work from front ends. For a folder you chose yourself they still ask,
+  but no longer make you type the archive's path. `titan setup` now writes
+  `[u8.paths] glob = "GLOB.FLX"`; older configs find it beside `U8SHAPES.FLX`.
 - **`titan config` and working folders:** a missing U8 `shapes` or `globs`
   folder now shows `[not extracted yet]` instead of `[NOT FOUND]`. Missing
   game files are still flagged NOT FOUND.

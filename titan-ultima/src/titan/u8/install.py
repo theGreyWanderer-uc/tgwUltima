@@ -6,16 +6,21 @@ __all__ = [
     "U8_GAME_SAVE_DIR",
     "U8_PATH_KINDS",
     "U8_STATIC_FILES",
+    "U8_WORKING_DIRS",
+    "U8_WORKING_DIR_ARCHIVES",
     "discover_u8_installs",
     "expand_u8_paths",
     "find_u8_engine_save",
     "is_u8_folder_name",
     "prune_stale_u8_save_default",
     "resolve_u8_save",
+    "resolve_u8_working_dir",
     "u8_detected_paths",
     "u8_install_candidates",
     "u8_save_dir",
     "u8_setup_lines",
+    "u8_working_archive",
+    "u8_working_dir_for_archive",
 ]
 
 import os
@@ -31,18 +36,25 @@ U8_STATIC_FILES = {
     "ecredits": "ECREDITS.DAT",
     "quotes": "QUOTES.DAT",
     "u8shapes": "U8SHAPES.FLX",
+    "glob": "GLOB.FLX",
     "u8fonts": "U8FONTS.FLX",
     "u8gumps": "U8GUMPS.FLX",
 }
 """``[u8.paths]`` keys that name files in the game's STATIC folder."""
+
+U8_WORKING_DIRS = ("shapes", "globs")
+"""``[u8.paths]`` keys for folders extracted from the game (``flex-extract``)."""
+
+U8_LEGACY_WORKING_DIRS = "legacy_working_dirs"
+"""Key :func:`expand_u8_paths` sets on the U8 section, listing working folders
+still read from the current folder instead of titan's data folder."""
 
 U8_PATH_KINDS = {
     **{key: "install-file" for key in U8_STATIC_FILES},
     "usecode": "install-file",
     "savegame": "save-dir",
     "nonfixed": "save",
-    "shapes": "working-dir",
-    "globs": "working-dir",
+    **{key: "working-dir" for key in U8_WORKING_DIRS},
 }
 """``[u8.paths]`` key -> kind (see :func:`titan._meta.path_kind`)."""
 
@@ -97,7 +109,116 @@ def expand_u8_paths(data: dict) -> dict:
 
         _expand_u8_save_paths(paths, base_p, lang)
 
+    if base or any(k in data.get("paths", {}) for k in U8_WORKING_DIRS):
+        _expand_u8_working_dirs(data, default=bool(base))
+
     return data
+
+
+def resolve_u8_working_dir(
+    value: str, *, data: Optional[Path] = None, cwd: Optional[Path] = None
+) -> tuple[Path, bool]:
+    """Resolve a ``shapes``/``globs`` value; returns ``(path, legacy)``.
+
+    A relative value lives in titan's data folder (:func:`titan._config.data_dir`).
+    Until extractions move there, an existing extraction under the current
+    folder (where titan used to resolve them) is used instead and flagged
+    *legacy*. Absolute values are used unchanged.
+    """
+    from titan._config import data_dir
+
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path, False
+    shared = (data or data_dir("u8")) / path
+    old = (cwd or Path.cwd()) / path
+    if not _has_entries(shared) and _has_entries(old):
+        return old, True
+    return shared, False
+
+
+U8_WORKING_DIR_ARCHIVES = {
+    "shapes": ("u8shapes", "U8SHAPES.FLX"),
+    "globs": ("glob", "GLOB.FLX"),
+}
+"""Working folder -> (``[u8.paths]`` key, file name) of the archive it comes from."""
+
+
+def _u8_paths(config: dict) -> dict:
+    return config.get("u8", {}).get("paths") or config.get("paths", {})
+
+
+def u8_working_archive(working_dir: str, config: dict) -> Optional[Path]:
+    """The configured install's archive for a working folder (``"shapes"``), or ``None``.
+
+    ``shapes`` comes from ``U8SHAPES.FLX`` and ``globs`` from ``GLOB.FLX``. A
+    config without a ``glob`` key finds GLOB.FLX beside ``u8shapes``/``fixed``.
+    Returns ``None`` when the archive isn't configured or doesn't exist.
+    """
+    entry = U8_WORKING_DIR_ARCHIVES.get(working_dir)
+    if entry is None:
+        return None
+    key, filename = entry
+    paths = _u8_paths(config)
+    configured = _str_value(paths, key)
+    candidates = (
+        [configured]
+        if configured
+        else [
+            str(Path(value).expanduser().parent / filename)
+            for value in (_str_value(paths, "u8shapes"), _str_value(paths, "fixed"))
+            if value
+        ]
+    )
+    for value in candidates:
+        if Path(value).expanduser().is_file():
+            return Path(value).expanduser()
+    return None
+
+
+def u8_working_dir_for_archive(archive: str | Path, config: dict) -> Optional[Path]:
+    """The working folder an extraction of *archive* belongs in, or ``None``.
+
+    Only the configured install's ``U8SHAPES.FLX`` and ``GLOB.FLX`` qualify:
+    extracting them feeds the map commands, so they go to the folder those
+    read (``[u8.paths] shapes``/``globs``). *config* is the loaded config.
+    """
+    paths = _u8_paths(config)
+    try:
+        path = Path(archive).expanduser().resolve()
+        for working_dir in U8_WORKING_DIR_ARCHIVES:
+            source = u8_working_archive(working_dir, config)
+            target = _str_value(paths, working_dir)
+            if source is not None and target and source.resolve() == path:
+                return Path(target)
+    except OSError:
+        return None
+    return None
+
+
+def _has_entries(folder: Path) -> bool:
+    try:
+        return folder.is_dir() and any(folder.iterdir())
+    except OSError:
+        return False
+
+
+def _expand_u8_working_dirs(data: dict, *, default: bool) -> None:
+    """Resolve working folders; a configured U8 without them gets the defaults."""
+    paths = data.setdefault("paths", {})
+    legacy = []
+    for key in U8_WORKING_DIRS:
+        value = _str_value(paths, key) or (f"{key}/" if default else "")
+        if not value:
+            continue
+        path, old = resolve_u8_working_dir(value)
+        paths[key] = str(path)
+        if old:
+            legacy.append(key)
+    if legacy:
+        data[U8_LEGACY_WORKING_DIRS] = legacy
+    else:
+        data.pop(U8_LEGACY_WORKING_DIRS, None)
 
 
 def _expand_u8_save_paths(paths: dict, base_p: Path, lang: str) -> None:
@@ -352,10 +473,13 @@ def u8_setup_lines(
             )
         ),
         "",
-        *(_entry(key, paths[key]) for key in ("u8shapes", "u8fonts", "u8gumps")),
+        *(
+            _entry(key, paths[key])
+            for key in ("u8shapes", "glob", "u8fonts", "u8gumps")
+        ),
         _entry("usecode", usecode),
         "",
-        "# Pre-extracted directories (relative to where you run titan)",
+        "# Extracted working folders, relative to titan's data folder (titan config shows it)",
         'shapes    = "shapes/"',
         'globs     = "globs/"',
         "",

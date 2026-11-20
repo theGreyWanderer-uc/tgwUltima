@@ -38,7 +38,9 @@ import typer
 from titan._version import TITAN_VERSION
 from titan import _wizard_ui as ui
 from titan._config import (
+    DATA_ENV,
     config_search_paths,
+    data_dir,
     find_config,
     load_config,
     resolve_config_path,
@@ -166,9 +168,17 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
 
     # Determine output directory
     if outdir is None:
-        # Default: create a subfolder named after the flex file (minus extension)
-        base_name = Path(filepath).stem
-        outdir = os.path.join(".", base_name)
+        from titan._config import get_config
+        from titan.u8.install import u8_working_dir_for_archive
+
+        working = u8_working_dir_for_archive(filepath, get_config())
+        if working is not None:
+            # U8SHAPES.FLX / GLOB.FLX feed the map commands: extract where they read.
+            outdir = str(working)
+            print(f"Extracting to titan's working folder: {outdir}")
+        else:
+            # Default: create a subfolder named after the flex file (minus extension)
+            outdir = os.path.join(".", Path(filepath).stem)
 
     os.makedirs(outdir, exist_ok=True)
 
@@ -572,6 +582,7 @@ def cmd_config(args: SimpleNamespace) -> int:
         return 0
 
     config = load_config(str(path))
+    from titan.u8.install import U8_LEGACY_WORKING_DIRS
 
     def _print_kv_section(
         title: str,
@@ -581,6 +592,7 @@ def cmd_config(args: SimpleNamespace) -> int:
         u7_resources: bool = False,
         u9_resources: bool = False,
         kinds: Optional[str] = None,
+        legacy: tuple[str, ...] = (),
     ) -> None:
         if not section:
             return
@@ -612,12 +624,15 @@ def cmd_config(args: SimpleNamespace) -> int:
                         flag = check_u9_resource(k, value_path)
                 if not exists and kinds and path_kind(kinds, k) == "working-dir":
                     flag = "not extracted yet"
+                if k in legacy:
+                    flag += "; current folder, move it into the data folder"
                 resolved = f" -> {value_path.absolute()}" if value_path else ""
                 print(f"  {k:<12} = {v!r}  [{flag}]{resolved}")
             else:
                 print(f"  {k:<12} = {v!r}")
 
     print(f"Active config: {path.absolute()}")
+    print(f"Data folder:   {data_dir()}  (working data; {DATA_ENV} moves it)")
 
     u8 = config.get("u8", {})
     uw2 = config.get("uw2", {})
@@ -631,7 +646,11 @@ def cmd_config(args: SimpleNamespace) -> int:
     if any((u8, uw2, u7bg, u7si, uo, u9, md, u6, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
         _print_kv_section(
-            "[u8.paths]", u8.get("paths", {}), check_exists=True, kinds="u8"
+            "[u8.paths]",
+            u8.get("paths", {}),
+            check_exists=True,
+            kinds="u8",
+            legacy=tuple(u8.get(U8_LEGACY_WORKING_DIRS, ())),
         )
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
         _print_kv_section("[u6.game]", u6.get("game", {}), check_exists=True)
@@ -720,7 +739,11 @@ def cmd_config(args: SimpleNamespace) -> int:
         paths = config.get("paths", {})
         _print_kv_section("[game]", game)
         _print_kv_section(
-            "[paths]  (after base expansion)", paths, check_exists=True, kinds="u8"
+            "[paths]  (after base expansion)",
+            paths,
+            check_exists=True,
+            kinds="u8",
+            legacy=tuple(config.get(U8_LEGACY_WORKING_DIRS, ())),
         )
     return 0
 
@@ -1345,7 +1368,10 @@ def flex_extract_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: ./<flexname>/)"
+            "-o",
+            "--output",
+            help="Output directory (default: ./<flexname>/; U8SHAPES.FLX and "
+            "GLOB.FLX from the configured U8 go to titan's working folders)",
         ),
     ] = None,
 ) -> None:

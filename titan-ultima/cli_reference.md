@@ -578,8 +578,8 @@ Empty records are skipped and counted separately.
 
 **Examples**
 ```bash
-titan flex-extract U8SHAPES.FLX -o shapes/
-titan flex-extract GLOB.FLX     -o globs/
+titan flex-extract U8SHAPES.FLX        # configured U8 install: into titan's data folder
+titan flex-extract GLOB.FLX            # (the folders the map commands read)
 titan flex-extract MUSIC.FLX    -o music_xmi/   # → 0001_intro.xmi, 0001_intro.meta.txt, ...
 titan flex-extract SOUND.FLX    -o sound_raw/   # → 0001_ARMHIT1A.raw, 0001_ARMHIT1A.meta.txt, ...
 titan flex-extract E44.FLX      -o e44/         # → 0000.txt (transcript), 0001.raw, ...
@@ -9611,7 +9611,7 @@ Override with `titan --config <other config.toml> <command>`.
 | SAVEGAME file (relative) | `<base>/cloud_saves/SAVEGAME/<name>` |
 | U7 path (relative) | `<u7*.game.base>/<u7*.paths value>` |
 | Any absolute path | Used unchanged |
-| `shapes`, `globs` | Relative to current working directory |
+| `shapes`, `globs` | Relative to titan's data folder: `%LOCALAPPDATA%\Titan\u8` (Windows), `$XDG_DATA_HOME/titan/u8` or `~/.local/share/titan/u8` (elsewhere); `TITAN_DATA` moves it. Default `shapes/` and `globs/` when a U8 base is set. An existing extraction in the current folder is still used for now. |
 | Flat mode (`language = ""`) | STATIC and SAVEGAME expand directly to `<base>/` |
 
 ### Priority
