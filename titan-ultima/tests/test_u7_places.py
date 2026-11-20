@@ -36,11 +36,25 @@ def test_bundled_bg_data_is_compact_and_complete():
     assert len(ids) == len(set(ids))
     # Only what the finders read ships: every place is on the map, and no
     # review notes, rejected guesses or dropped entries come along.
-    allowed = {"id", "name", "type", "town", "number", "keeper", "anchor", "rects", "source"}
+    allowed = {
+        "id",
+        "name",
+        "type",
+        "town",
+        "number",
+        "keeper",
+        "anchor",
+        "rects",
+        "source",
+    }
     for p in places:
         assert p["anchor"] and set(p) <= allowed, p
     for r in regions:
-        assert (r.get("anchor") or r.get("rects")) and "note" not in r and "placed_by" not in r
+        assert (
+            (r.get("anchor") or r.get("rects"))
+            and "note" not in r
+            and "placed_by" not in r
+        )
     towns = [r for r in regions if r["kind"] == "town"]
     assert len(towns) == 14 and all(t["rects"] for t in towns)
     assert {"Britain", "Trinsic", "Skara Brae"} <= {t["name"] for t in towns}
@@ -160,7 +174,9 @@ def test_assemble_document_towns_footprints_and_areas():
     # A building shared by two places carries each place's own part.
     assert [p.get("rects") for p in shop["places"]] == [[[0, 0, 4, 9]], [[5, 0, 9, 9]]]
     assert "keeper" not in shop["places"][0]
-    assert shop["doors"] == [{"tx": 1, "ty": 1, "tz": 0, "kind": "outside", "name": "door"}]
+    assert shop["doors"] == [
+        {"tx": 1, "ty": 1, "tz": 0, "kind": "outside", "name": "door"}
+    ]
     assert by_id["b2"]["town"] is None and by_id["b3"]["town"] == "Townsville"
     ruin = by_id["t-02"]
     assert not ruin["detected"] and ruin["flags"] == ["hand_drawn"]
@@ -171,12 +187,16 @@ def test_assemble_document_towns_footprints_and_areas():
          "rects": [[56, 56, 63, 63]]}
     ]  # fmt: skip
     assert doc["dungeons"][0]["door_count"] == 2 and doc["dungeons"][0]["town"] is None
-    assert doc["towns"] == [{"id": "town-x", "name": "Townsville", "rects": [[0, 0, 99, 99]]}]
+    assert doc["towns"] == [
+        {"id": "town-x", "name": "Townsville", "rects": [[0, 0, 99, 99]]}
+    ]
 
 
 def test_places_export_cli_refuses_games_without_data(tmp_path):
     out = tmp_path / "si.json"
-    result = CliRunner().invoke(u7_app, ["places-export", "--game", "si", "-o", str(out)])
+    result = CliRunner().invoke(
+        u7_app, ["places-export", "--game", "si", "-o", str(out)]
+    )
     assert result.exit_code == 1 and not out.exists()
     assert "No place data for --game si" in result.output
 

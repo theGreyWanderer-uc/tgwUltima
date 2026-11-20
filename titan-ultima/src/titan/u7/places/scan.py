@@ -92,7 +92,9 @@ class MapScan:
     ) -> MapScan:
         """Read a map from STATIC (or the configured install for ``game``)."""
         if game not in GAME_IDS:
-            raise ValueError(f"unknown game {game!r}; expected one of {sorted(GAME_IDS)}")
+            raise ValueError(
+                f"unknown game {game!r}; expected one of {sorted(GAME_IDS)}"
+            )
         configured, palette_path = install.resolve_u7_static_and_palette(game)
         static_dir = static_dir or configured
         if not static_dir or not Path(static_dir).is_dir():

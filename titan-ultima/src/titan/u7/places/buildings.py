@@ -52,7 +52,9 @@ BARRIER_WORDS = ("wall", "fortress", "window", "bars", "portcullis", "fireplace"
 
 def load_zones(game: str) -> list[tuple]:
     """[(zone id, zone name, [rect tuples])] from titan's zone profile."""
-    path = Path(__file__).resolve().parent.parent / "zone_profiles" / f"{game}_zones.json"
+    path = (
+        Path(__file__).resolve().parent.parent / "zone_profiles" / f"{game}_zones.json"
+    )
     if not path.is_file():
         return []
     zones = json.loads(path.read_text(encoding="utf-8")).get("zones", [])
@@ -221,9 +223,7 @@ def find_buildings(
             doors.append((obj, source))
         if obj.tz < UPPER_LIFT and (is_door or obj.shape in barrier_shapes):
             x0, y0, x1, y1 = footprint(tfa, obj)
-            barrier.update(
-                (x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)
-            )
+            barrier.update((x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1))
         kind = roofs.get(obj.shape)
         if kind is None or (kind == FLAT and obj.tz < UPPER_LIFT):
             return
@@ -334,8 +334,7 @@ def find_buildings(
                 label_of[(obj.tx + dx, obj.ty + dy)]
                 for dx in range(-d, d + 1)
                 for dy in range(-d, d + 1)
-                if max(abs(dx), abs(dy)) == d
-                and (obj.tx + dx, obj.ty + dy) in label_of
+                if max(abs(dx), abs(dy)) == d and (obj.tx + dx, obj.ty + dy) in label_of
             )
             if ring:
                 owner = ring.most_common(1)[0][0]
@@ -355,11 +354,15 @@ def find_buildings(
             places_of[owner].append(place)
         else:
             status = (
-                "dropped" if place.get("dropped")
-                else "not placed" if not anchor
-                else "area" if place.get("type") == "area"
+                "dropped"
+                if place.get("dropped")
+                else "not placed"
+                if not anchor
+                else "area"
+                if place.get("type") == "area"
                 # a roofless building the finder cannot see, drawn by hand
-                else "footprint" if place.get("rects")
+                else "footprint"
+                if place.get("rects")
                 else "no building at anchor"
             )
             places_other.append({"status": status, **place})
@@ -434,10 +437,16 @@ def find_buildings(
                 "name": (
                     places_of[i][0]["name"]
                     if places_of[i]
-                    else sign_names[0] if sign_names else None
+                    else sign_names[0]
+                    if sign_names
+                    else None
                 ),
                 "name_source": (
-                    ("review" if places_of[i][0].get("source") == "review" else "official")
+                    (
+                        "review"
+                        if places_of[i][0].get("source") == "review"
+                        else "official"
+                    )
                     if places_of[i]
                     else name_source
                 ),

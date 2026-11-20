@@ -64,7 +64,9 @@ class _Towns:
         return None
 
     def records(self) -> list[dict]:
-        return [{"id": t["id"], "name": t["name"], "rects": t["rects"]} for t in self.towns]
+        return [
+            {"id": t["id"], "name": t["name"], "rects": t["rects"]} for t in self.towns
+        ]
 
 
 def _building(rec: dict, places_by_id: dict, towns: _Towns) -> dict:
@@ -110,7 +112,9 @@ def _drawn_buildings(finds: BuildingFinds, scan: MapScan, towns: _Towns) -> list
     drawn = [p for p in finds.places_other if p["status"] == "footprint"]
 
     def owner_at(tx, ty):
-        return next((i for i, p in enumerate(drawn) if in_rects(tx, ty, p["rects"])), None)
+        return next(
+            (i for i, p in enumerate(drawn) if in_rects(tx, ty, p["rects"])), None
+        )
 
     npcs_of = npc_presence.presence(scan.npcs, owner_at, len(drawn))
     out = []
@@ -125,7 +129,11 @@ def _drawn_buildings(finds: BuildingFinds, scan: MapScan, towns: _Towns) -> list
                 "town": p.get("town") or towns.at(*center),
                 "detected": False,
                 "places": [
-                    {k: p[k] for k in ("id", "town", "number", "name", "keeper") if p.get(k) is not None}
+                    {
+                        k: p[k]
+                        for k in ("id", "town", "number", "name", "keeper")
+                        if p.get(k) is not None
+                    }
                 ],
                 "sign_name": None,
                 "bbox": _bbox(rects),
@@ -227,14 +235,18 @@ def build_places_document(
     """Find and name every building, dungeon, area and town on a U7 map."""
     data = load_place_data(game)
     if data.get("map", 0) != map_num:
-        raise ValueError(f"Place data covers map {data.get('map', 0)}, not map {map_num}.")
+        raise ValueError(
+            f"Place data covers map {data.get('map', 0)}, not map {map_num}."
+        )
     scan = MapScan.load(static_dir, game, map_num)
     buildings = find_buildings(scan, data["places"])
     dungeons = find_dungeons(scan, data["regions"])
     return assemble_document(scan, data, buildings, dungeons)
 
 
-def write_places_document(document: dict, path: str | Path, *, pretty: bool = False) -> Path:
+def write_places_document(
+    document: dict, path: str | Path, *, pretty: bool = False
+) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     text = (

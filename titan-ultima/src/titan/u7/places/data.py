@@ -106,6 +106,8 @@ def dump_place_data(data: dict) -> str:
             )
             lines.append(f'  "{key}": [\n{rows}\n  ],' if value else f'  "{key}": [],')
         else:
-            lines.append(f"  {json.dumps(key)}: {json.dumps(value, ensure_ascii=False)},")
+            lines.append(
+                f"  {json.dumps(key)}: {json.dumps(value, ensure_ascii=False)},"
+            )
     lines[-1] = lines[-1].rstrip(",")
     return "\n".join(lines) + "\n}\n"
