@@ -24,6 +24,7 @@ from titan.u7.ireg_tree_edit import (
     edit_ireg_tree,
     read_ireg_save_member,
 )
+from titan._meta import meta
 
 
 @dataclass(frozen=True)
@@ -291,6 +292,7 @@ def write_new_u7_output(path: Path, data: bytes) -> None:
         raise
 
 
+@meta(results=("json",), params={"output": "output-file"})
 def ireg_tree_cmd(
     file: Annotated[
         str,
@@ -350,6 +352,7 @@ def ireg_tree_cmd(
         raise SystemExit(1) from error
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def ireg_tree_edit_cmd(
     file: Annotated[
         str,

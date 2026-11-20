@@ -27,6 +27,7 @@ from titan.u6.lib import U6LibraryError
 from titan.u6.look import U6LookError
 from titan.u6.lzw import U6LzwError
 from titan.u6.object import U6ObjectError
+from titan._meta import meta
 
 __all__ = ["register_martian_inspection_commands"]
 
@@ -70,6 +71,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
     """Register MD read-only inspections beside the map renderer, with explicit output paths."""
 
     @app.command("actor-list")
+    @meta(results=("json",), params={"output": "output-file", "savegame": "save"})
     def actor_list_cmd(
         gamedir: Annotated[
             Optional[str],
@@ -123,6 +125,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
             )
 
     @app.command("gamestate-dump")
+    @meta(results=("json",), params={"output": "output-file", "savegame": "save"})
     def gamestate_dump_cmd(
         gamedir: Annotated[
             Optional[str],
@@ -153,6 +156,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
             _write_text(json.dumps(data, indent=2, ensure_ascii=False), output)
 
     @app.command("converse-dump")
+    @meta(results=("text",), params={"output": "output-file"})
     def converse_dump_cmd(
         gamedir: Annotated[
             Optional[str],
@@ -185,6 +189,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
             )
 
     @app.command("converse-report")
+    @meta(results=("json",), params={"output": "output-file"})
     def converse_report_cmd(
         gamedir: Annotated[
             Optional[str],
@@ -207,6 +212,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
             )
 
     @app.command("look-dump")
+    @meta(results=("json",), params={"output": "output-file"})
     def look_dump_cmd(
         gamedir: Annotated[
             Optional[str],
@@ -251,6 +257,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
             )
 
     @app.command("book-dump")
+    @meta(results=("text",), params={"output": "output-file"})
     def book_dump_cmd(
         gamedir: Annotated[
             Optional[str],

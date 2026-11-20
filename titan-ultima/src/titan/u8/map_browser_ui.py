@@ -33,6 +33,7 @@ from titan.u8.npc_browser_ui import browse_u8_npc_session
 from titan.u8.save_browser_ui import choose_u8_save_browser_source
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
+from titan._meta import meta
 
 PAGE_SIZE = 25
 
@@ -451,6 +452,11 @@ def browse_u8_map_session(
     _browse_map_session(session, map_id, output, embedded=True)
 
 
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+    interactive=True,
+)
 def map_browse_cmd(
     source: Annotated[
         Path | None,

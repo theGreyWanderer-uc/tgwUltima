@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Annotated, Optional
 
 import typer
+from titan._meta import meta
 
 
 def cmd_font_create(args: SimpleNamespace) -> int:
@@ -25,6 +26,13 @@ def cmd_font_create(args: SimpleNamespace) -> int:
     return run_wizard(**options)
 
 
+@meta(
+    results=("file",),
+    params={"output": "output-file", "config": "recipe"},
+    interactive=True,
+    batch_with=("config",),
+    recipe="titan.fonts.recipe:font_recipe",
+)
 def font_create_cmd(
     config: Annotated[
         Optional[str],

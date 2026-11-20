@@ -22,6 +22,7 @@ from titan.u7.actor_rewrite import (
 )
 from titan.u7.ireg_tree import ireg_context_sha256
 from titan.u7.ireg_tree_cli import load_ireg_cli_context, write_new_u7_output
+from titan._meta import meta
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,7 @@ def read_actor_edit_plan(value: object) -> U7ActorEditPlan:
     )
 
 
+@meta(results=("json",), params={"output": "output-file"})
 def actor_headers_cmd(
     file: Annotated[
         str,
@@ -175,6 +177,7 @@ def actor_headers_cmd(
         raise SystemExit(1) from error
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def actor_rewrite_cmd(
     file: Annotated[
         str, typer.Argument(help="Loose actor stream or explicitly selected save")

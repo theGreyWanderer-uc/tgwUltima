@@ -38,7 +38,9 @@ import typer
 from titan._version import TITAN_VERSION
 from titan import _wizard_ui as ui
 from titan._config import (
+    DATA_ENV,
     config_search_paths,
+    data_dir,
     find_config,
     load_config,
     resolve_config_path,
@@ -49,6 +51,7 @@ from titan.flex import (
     get_extension_for_flex,
 )
 from titan.music import XMIDIConverter
+from titan._meta import meta
 
 
 # ============================================================================
@@ -165,9 +168,17 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
 
     # Determine output directory
     if outdir is None:
-        # Default: create a subfolder named after the flex file (minus extension)
-        base_name = Path(filepath).stem
-        outdir = os.path.join(".", base_name)
+        from titan._config import get_config
+        from titan.u8.install import u8_working_dir_for_archive
+
+        working = u8_working_dir_for_archive(filepath, get_config())
+        if working is not None:
+            # U8SHAPES.FLX / GLOB.FLX feed the map commands: extract where they read.
+            outdir = str(working)
+            print(f"Extracting to titan's working folder: {outdir}")
+        else:
+            # Default: create a subfolder named after the flex file (minus extension)
+            outdir = os.path.join(".", Path(filepath).stem)
 
     os.makedirs(outdir, exist_ok=True)
 
@@ -579,9 +590,12 @@ def cmd_config(args: SimpleNamespace) -> int:
         base: Optional[str] = None,
         u7_resources: bool = False,
         u9_resources: bool = False,
+        kinds: Optional[str] = None,
     ) -> None:
         if not section:
             return
+        from titan._meta import path_kind
+
         print()
         print(title)
         for k, v in section.items():
@@ -606,12 +620,15 @@ def cmd_config(args: SimpleNamespace) -> int:
 
                     if k in U9_RESOURCE_NAMES:
                         flag = check_u9_resource(k, value_path)
+                if not exists and kinds and path_kind(kinds, k) == "working-dir":
+                    flag = "not extracted yet"
                 resolved = f" -> {value_path.absolute()}" if value_path else ""
                 print(f"  {k:<12} = {v!r}  [{flag}]{resolved}")
             else:
                 print(f"  {k:<12} = {v!r}")
 
     print(f"Active config: {path.absolute()}")
+    print(f"Data folder:   {data_dir()}  (working data; {DATA_ENV} moves it)")
 
     u8 = config.get("u8", {})
     uw2 = config.get("uw2", {})
@@ -624,7 +641,12 @@ def cmd_config(args: SimpleNamespace) -> int:
     exult = config.get("exult", {})
     if any((u8, uw2, u7bg, u7si, uo, u9, md, u6, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
-        _print_kv_section("[u8.paths]", u8.get("paths", {}), check_exists=True)
+        _print_kv_section(
+            "[u8.paths]",
+            u8.get("paths", {}),
+            check_exists=True,
+            kinds="u8",
+        )
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
         _print_kv_section("[u6.game]", u6.get("game", {}), check_exists=True)
         _print_kv_section(
@@ -632,6 +654,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             u6.get("paths", {}),
             check_exists=True,
             base=u6.get("game", {}).get("base"),
+            kinds="u6",
         )
         _print_kv_section("[md.game]", md.get("game", {}), check_exists=True)
         _print_kv_section(
@@ -639,6 +662,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             md.get("paths", {}),
             check_exists=True,
             base=md.get("game", {}).get("base"),
+            kinds="md",
         )
         _print_kv_section("[u9.game]", u9.get("game", {}), check_exists=True)
         _print_kv_section(
@@ -646,6 +670,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             u9.get("paths", {}),
             check_exists=True,
             base=u9.get("game", {}).get("base"),
+            kinds="u9",
             u9_resources=True,
         )
         _print_kv_section("[u7bg.game]", u7bg.get("game", {}))
@@ -656,6 +681,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             check_exists=True,
             base=bg_base,
             u7_resources=True,
+            kinds="u7bg",
         )
         for mod_name, mod in u7bg.get("mods", {}).items():
             _print_kv_section(
@@ -663,6 +689,7 @@ def cmd_config(args: SimpleNamespace) -> int:
                 mod.get("paths", {}),
                 check_exists=True,
                 base=bg_base,
+                kinds="u7bg",
             )
         _print_kv_section("[u7si.game]", u7si.get("game", {}))
         si_base = u7si.get("game", {}).get("base")
@@ -672,6 +699,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             check_exists=True,
             base=si_base,
             u7_resources=True,
+            kinds="u7si",
         )
         for mod_name, mod in u7si.get("mods", {}).items():
             _print_kv_section(
@@ -679,6 +707,7 @@ def cmd_config(args: SimpleNamespace) -> int:
                 mod.get("paths", {}),
                 check_exists=True,
                 base=si_base,
+                kinds="u7si",
             )
         uo_path_keys = {"base", "path", "output"}
         uo_sections = [("[uo.game]", uo.get("game", {}))] + [
@@ -704,7 +733,12 @@ def cmd_config(args: SimpleNamespace) -> int:
         game = config.get("game", {})
         paths = config.get("paths", {})
         _print_kv_section("[game]", game)
-        _print_kv_section("[paths]  (after base expansion)", paths, check_exists=True)
+        _print_kv_section(
+            "[paths]  (after base expansion)",
+            paths,
+            check_exists=True,
+            kinds="u8",
+        )
     return 0
 
 
@@ -727,8 +761,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
         u7_setup_lines,
     )
     from titan.u8.install import (
+        U8_GAME_SAVE_DIR,
         discover_u8_installs,
         find_u8_engine_save,
+        prune_stale_u8_save_default,
         u8_detected_paths,
         u8_install_candidates,
         u8_setup_lines,
@@ -991,16 +1027,18 @@ def cmd_setup(args: SimpleNamespace) -> int:
     # -- Third-party engine save detection -------------------------
     engine_save_file = find_u8_engine_save()
 
-    nonfixed_value = "U8SAVE.000"
+    # Setup records the save folder only; choosing a save is the user's call.
+    savegame_value = U8_GAME_SAVE_DIR if lang else ""
     if engine_save_file:
-        print(f"\nThird-party engine save detected: {engine_save_file}")
+        engine_save_dir = engine_save_file.parent
+        print(f"\nThird-party engine saves detected: {engine_save_dir}")
         ans = ui.choice(
-            "Use this save instead of game-folder saves? [Y/n] ",
+            "Use this save folder instead of the game's? [Y/n] ",
             ["y", "Y", "n", "N"],
             "Y",
         ).lower()
         if ans not in ("n", "no"):
-            nonfixed_value = str(engine_save_file).replace("\\", "/")
+            savegame_value = engine_save_dir.as_posix()
 
     # -- Detection summary + confirmation -------------------------
     u8_static_detected, u8_usecode_detected = u8_detected_paths(base, lang)
@@ -1052,6 +1090,12 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U8 language:  {lang or '(flat mode)'}")
     print(f"  U8 STATIC:    {u8_static_detected}")
     print(f"  U8 USECODE:   {u8_usecode_detected}")
+    u8_save_shown = (
+        Path(savegame_value)
+        if Path(savegame_value).is_absolute()
+        else Path(base) / savegame_value
+    )
+    print(f"  U8 saves:     {u8_save_shown}")
     print(f"  U7 BG base:   {u7bg_base or '(empty)'}")
     print(f"  U7 BG STATIC: {u7bg_static_detected or '(empty)'}")
     print(f"  U7 BG GAMEDAT:{u7bg_gamedat or '(empty)'}")
@@ -1226,7 +1270,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
     lines += u8_setup_lines(
         base,
         lang,
-        nonfixed_value,
+        savegame_value,
         u8_usecode_detected,
         manual_static=manual_u8_static,
         manual_usecode=manual_u8_usecode,
@@ -1273,7 +1317,10 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
     try:
         backup = write_setup_config(
-            toml_path, "\n".join(lines) + "\n", updates=setup_updates
+            toml_path,
+            "\n".join(lines) + "\n",
+            updates=setup_updates,
+            cleanup=prune_stale_u8_save_default,
         )
     except (OSError, ValueError) as exc:
         print(f"ERROR: Could not write setup config: {exc}", file=sys.stderr)
@@ -1309,12 +1356,16 @@ def flex_list_cmd(
 
 
 @app.command("flex-extract")
+@meta(results=("files",), params={"output": "output-dir"})
 def flex_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: ./<flexname>/)"
+            "-o",
+            "--output",
+            help="Output directory (default: ./<flexname>/; U8SHAPES.FLX and "
+            "GLOB.FLX from the configured U8 go to titan's working folders)",
         ),
     ] = None,
 ) -> None:
@@ -1323,6 +1374,7 @@ def flex_extract_cmd(
 
 
 @app.command("flex-create")
+@meta(results=("file",), params={"output": "output-file"})
 def flex_create_cmd(
     directory: Annotated[
         str,
@@ -1372,6 +1424,7 @@ def flex_create_cmd(
 
 
 @app.command("flex-update")
+@meta(results=("file",), params={"output": "output-file"})
 def flex_update_cmd(
     file: Annotated[str, typer.Argument(help="Path to .flx archive")],
     index: Annotated[
@@ -1407,6 +1460,7 @@ def flex_update_cmd(
 
 
 @app.command("music-export")
+@meta(results=("files",), params={"output": "output-dir"})
 def music_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .xmi XMIDI file")],
     output: Annotated[
@@ -1419,6 +1473,7 @@ def music_export_cmd(
 
 
 @app.command("music-batch")
+@meta(results=("files",), params={"output": "output-dir"})
 def music_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .xmi files")],
     output: Annotated[
@@ -1438,6 +1493,7 @@ def music_batch_cmd(
 
 
 @app.command("setup")
+@meta(interactive=True)
 def setup_cmd() -> None:
     """Create titan.toml by detecting Ultima, Martian Dreams and UO installs."""
     try:

@@ -36,6 +36,7 @@ from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.terrain import U9Terrain, U9TerrainError
 from titan.u9.typename import U9TypeNames
 from titan.u9.cli import _common
+from titan._meta import meta
 
 
 def _load_region(filepath: str) -> Optional[U9Nonfixed]:
@@ -880,6 +881,7 @@ def terrain_textures_cmd(
     )
 
 
+@meta(results=("image",), params={"output": "output-file"})
 def terrain_heightmap_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     output: Annotated[
@@ -896,6 +898,7 @@ def terrain_heightmap_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def terrain_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     output: Annotated[

@@ -20,6 +20,7 @@ import typer
 from titan.flex import FlexArchive
 from titan.music import XMIDIConverter
 from titan.u8.sound import SonarcDecoder
+from titan._meta import meta
 
 
 def cmd_music_export(args: SimpleNamespace) -> int:
@@ -202,6 +203,7 @@ def cmd_sound_batch(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def music_export_cmd(
     file: Annotated[
         str,
@@ -218,6 +220,7 @@ def music_export_cmd(
     raise SystemExit(cmd_music_export(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def sound_export_all_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to SOUND.FLX (Flex archive of Sonarc audio)")
@@ -238,6 +241,7 @@ def sound_export_all_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def sound_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .raw Sonarc audio file")],
     output: Annotated[
@@ -249,6 +253,7 @@ def sound_export_cmd(
     raise SystemExit(cmd_sound_export(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def sound_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .raw files")],
     output: Annotated[

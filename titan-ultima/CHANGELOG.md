@@ -6,35 +6,91 @@ work for the next release.
 
 ---
 
-## [Unreleased]
+## [0.8.0]
 
 ### Added
 
-- **Ultima 9 Steam installs:** `titan setup` now also looks for Ultima 9 in
-  Steam libraries (`Program Files (x86)/Steam/steamapps/common` and
-  `SteamLibrary/steamapps/common`) on drives C to G.
+#### Setup
+
+- **Ultima 9 on Steam:** `titan setup` now finds Ultima 9 in Steam libraries
+  on drives C to G, as well as GOG and manual installs.
+- **One data folder for titan's working files:** files titan extracts for
+  its own use now live in one place, `%LOCALAPPDATA%\Titan` on Windows or
+  `~/.local/share/titan` elsewhere, whichever folder you run titan from.
+  titan-desktop uses the same folder, so extracting once serves both. Set
+  `TITAN_DATA` to move it; `titan config` shows where it is.
+
+#### Ultima 7
+
 - **Black Gate places:** `u7 places-export -o FILE` writes one JSON file
-  naming every town, building, dungeon and outdoor area in Britannia, with
-  each building's town, outline, doors, signs and the NPCs who start or
-  work there when a new game begins. Names come from the printed town maps
-  and a full review of the world; Serpent Isle will follow.
-- **Config location for other tools:** `titan._config.user_config_path()`
-  returns where titan expects its per-user config (`%APPDATA%\titan\config.toml`
-  on Windows, `~/.config/titan/config.toml` elsewhere), and
-  `config_search_paths()` lists every location titan checks, in order. Front
-  ends can ask titan instead of hard-coding these paths.
+  naming every town, building, dungeon and outdoor area in Britannia: each
+  building's town, outline, doors and signs, and the NPCs who live or work
+  there at the start of a new game. Names follow the printed town maps.
+  Serpent Isle will follow.
+- **Read your Exult saves directly:** `u7 map-render`, `map-inventory`,
+  `world-query`, `container-browse`, `egg-query` and `monster-report` take
+  an Exult save file (`--gamedat exult00bg.sav`) as well as a GAMEDAT
+  folder, so you can look at any saved game without loading it first.
+
+#### Ultima 8
+
+- **Pick saves by slot:** the map commands' `--nonfixed` and
+  `u8 save-browse` take a slot number, so `--nonfixed 3` reads
+  `U8SAVE.003` from your save folder. `u8 save-browse 3 --compare 0` compares
+  two slots. File names and full paths still work.
+
+#### For front ends
+
+titan now describes itself to tools like titan-desktop, so they can show
+proper forms and results instead of a terminal:
+
+- which games and platforms titan supports, and where its config lives;
+- which commands ask questions, and which options skip the questions;
+- what each option means (a save, a palette, an output file or folder) and
+  what each command produces (an image, a table, JSON, text or files);
+- each game's saves, with their in-game names (Ultima 7, 8 and 9; the one
+  save of Ultima 6 and Martian Dreams);
+- what each `titan.toml` path is: a game file, a save, or a working folder
+  titan creates;
+- every setting in the `u7 font-create` and `u7 shape-create` recipes, so a
+  front end can build the wizard as a form.
+
+This lives in `titan._meta`, plus `user_config_path()` and `data_dir()` in
+`titan._config`.
 
 ### Changed
 
-- **Python 3.10 is now the minimum.** Titan already used Python 3.10
-  features, so it did not run on 3.9 despite saying it did.
+- **Python 3.10 or newer is required.** titan already needed it and
+  wouldn't run on 3.9.
+- **Ultima 8 maps set themselves up:** the first time a map command needs
+  shapes or globs, it extracts `U8SHAPES.FLX` and `GLOB.FLX` from your
+  install into titan's data folder without asking, and later runs reuse
+  them. Before, it asked you to type the archive's path, and the folders
+  only worked from the folder you extracted them in. Folders you named
+  yourself with `--shapes`/`--globs` are still only filled after a yes.
+  `titan flex-extract U8SHAPES.FLX` and `GLOB.FLX` from your install also go
+  to the data folder; other archives extract to the current folder as
+  before.
+  - **If you extracted before:** your old `shapes`/`globs` folders are no
+    longer read. The map commands extract again on first use, and you can
+    delete the old folders.
+- **Ultima 8 saves in `titan.toml`:** setup now records your save folder
+  (`[u8.paths] savegame`) rather than one save. `nonfixed` is an optional
+  default you set yourself; without it, the map commands draw the fixed
+  world with no save's objects on it. `titan setup` also writes
+  `glob = "GLOB.FLX"`.
+- **`titan config` is clearer:** shapes and globs that haven't been extracted
+  yet show as `[not extracted yet]` instead of `[NOT FOUND]`.
 
 ### Fixed
 
-- **Ultima 9 commands work with newer Typer:** with Typer 0.29 or later
-  installed, U9 commands that take game files, such as `u9 fixed-objects` and
-  `u9 nonfixed-entities`, stopped with an error before doing anything. They
-  now work with both older and newer Typer.
+- **Ultima 8 setup on GOG:** `titan setup` wrote `nonfixed = "U8SAVE.000"`
+  without checking it existed, so on GOG installs, whose saves start at 001,
+  the map commands failed. Re-running setup removes that value when the file
+  is missing; a `nonfixed` you set yourself is kept.
+- **Ultima 9 with newer Typer:** with Typer 0.29 or later, U9 commands that
+  read game files (`u9 fixed-objects`, `u9 nonfixed-entities`, ...) stopped
+  with an error at once. They now work with old and new Typer.
 
 ## [0.7.9]
 

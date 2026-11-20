@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
 from titan.u8.xformpal import U8_XFORM_PALETTE as _U8_XFORM_PAL
+from titan._meta import meta
 
 
 def cmd_palette_export(args: SimpleNamespace) -> int:
@@ -111,6 +112,7 @@ def cmd_xformpal_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .pal file")],
     output: Annotated[
@@ -122,6 +124,7 @@ def palette_export_cmd(
     raise SystemExit(cmd_palette_export(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def xformpal_export_cmd(
     file: Annotated[
         Optional[str],

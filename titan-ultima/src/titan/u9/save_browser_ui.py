@@ -34,6 +34,7 @@ from titan.u9.save_wording import (
     load_u9_save_wording,
     render_u9_plain_integrity,
 )
+from titan._meta import meta
 
 PAGE_SIZE = 25
 ACTION_KEYS = {
@@ -369,6 +370,7 @@ def run_u9_save_browser(
         return 1
 
 
+@meta(results=("files",), params={"output": "output-dir"}, interactive=True)
 def save_browse_cmd(
     source: Annotated[
         Path | None,

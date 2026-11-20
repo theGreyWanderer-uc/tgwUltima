@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import tomli_w
 
@@ -32,9 +32,17 @@ def _apply_updates(existing: dict[str, Any], updates: dict[str, Any]) -> None:
 
 
 def write_setup_config(
-    path: Path, generated_text: str, *, updates: Optional[dict[str, Any]] = None
+    path: Path,
+    generated_text: str,
+    *,
+    updates: Optional[dict[str, Any]] = None,
+    cleanup: Optional[Callable[[dict[str, Any]], object]] = None,
 ) -> Optional[Path]:
-    """Add missing config values; back up the original before rewriting TOML."""
+    """Add missing config values; back up the original before rewriting TOML.
+
+    *cleanup* runs on the merged existing config, to drop values only an
+    older setup wrote (never ones a user set on purpose).
+    """
     generated = tomllib.loads(generated_text)
     backup = None
     if path.exists():
@@ -45,6 +53,8 @@ def write_setup_config(
             generated.pop("u8", None)
         _merge_missing_config(existing, generated)
         _apply_updates(existing, updates or {})
+        if cleanup is not None:
+            cleanup(existing)
         text = tomli_w.dumps(existing)
         backup = path.with_name(path.name + ".bak")
         suffix = 1

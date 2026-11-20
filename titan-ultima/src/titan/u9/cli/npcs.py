@@ -20,6 +20,7 @@ from typing import Annotated, Optional
 import typer
 
 from titan.u9.npc import NO_COMBAT_BEHAVIOR, U9NpcError, U9Npcs
+from titan._meta import meta
 
 
 def _npc_level_csv_columns(prefix: str) -> list[str]:
@@ -471,6 +472,7 @@ def cmd_npc_diff(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(params={"save": "save"})
 def npc_list_cmd(
     file: Annotated[
         str,
@@ -519,6 +521,7 @@ def npc_list_cmd(
     )
 
 
+@meta(params={"save": "save"})
 def npc_show_cmd(
     file: Annotated[
         str,
@@ -538,6 +541,7 @@ def npc_show_cmd(
     raise SystemExit(cmd_npc_show(SimpleNamespace(file=file, index=index, save=save)))
 
 
+@meta(params={"save": "save"})
 def npc_classes_cmd(
     file: Annotated[
         str,
@@ -562,6 +566,7 @@ def npc_classes_cmd(
     )
 
 
+@meta(params={"save_file": "save"})
 def npc_diff_cmd(
     file: Annotated[str, typer.Argument(help="Path to the shipped runtime/NPC.FLX")],
     save_file: Annotated[
@@ -577,6 +582,7 @@ def npc_diff_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file", "save": "save"})
 def npc_csv_cmd(
     file: Annotated[
         str,

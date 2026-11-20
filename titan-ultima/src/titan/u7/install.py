@@ -18,6 +18,19 @@ RESOURCE_NAMES = {
     "palette": "PALETTES.FLX",
     "text": "TEXT.FLX",
 }
+U7_PATH_KINDS = {
+    "static": "install-dir",
+    **{key: "install-file" for key in RESOURCE_NAMES},
+    "gamedat": "save",
+    "savegame": "save-dir",
+    # Keys only mod sections ([u7bg.mods."<name>".paths]) use.
+    "root": "install-dir",
+    "patch": "install-dir",
+    "archive": "install-file",
+}
+"""``[u7bg.paths]``/``[u7si.paths]`` and mod ``paths`` key -> kind (see
+:func:`titan._meta.path_kind`). ``gamedat`` is a ``save``: Exult's live game
+state, which ``--gamedat`` also reads from a save file."""
 _SKIP_DIRS = {"mods", "patch", "saves", "gamedat", "static"}
 
 

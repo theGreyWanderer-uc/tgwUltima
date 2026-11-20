@@ -13,6 +13,7 @@ from typing import Annotated, Optional
 import typer
 
 from titan.u8.save import U8SaveArchive
+from titan._meta import meta
 
 
 def cmd_save_list(args: SimpleNamespace) -> int:
@@ -89,6 +90,7 @@ def save_list_cmd(
     raise SystemExit(cmd_save_list(SimpleNamespace(file=file)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def save_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8 save file")],
     output: Annotated[

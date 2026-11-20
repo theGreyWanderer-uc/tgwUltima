@@ -63,6 +63,7 @@ from titan.u9.planned_animation_library_export import (
     parse_actor_model_library_spec,
 )
 from titan.u9.cli import _common
+from titan._meta import meta
 
 
 def _load_animations(filepath: str) -> Optional[U9Animations]:
@@ -727,6 +728,7 @@ def animation_show_cmd(
     )
 
 
+@meta(results=("json",), params={"output": "output-file"})
 def animation_library_plan_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     output: Annotated[
@@ -790,6 +792,7 @@ def animation_library_plan_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def animation_library_export_cmd(
     plan: Annotated[str, typer.Argument(help="Animation library plan JSON path")],
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
@@ -864,6 +867,7 @@ def animation_library_export_cmd(
     )
 
 
+@meta(results=("json", "table"), params={"fmt": "format", "output": "output-file"})
 def animation_model_report_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     output: Annotated[
@@ -921,6 +925,7 @@ def animation_model_report_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def animation_pose_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
@@ -972,6 +977,7 @@ def animation_pose_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def animation_bundle_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
@@ -1029,6 +1035,7 @@ def animation_bundle_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def animation_set_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
@@ -1095,6 +1102,7 @@ def animation_set_export_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def avatar_animation_library_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],

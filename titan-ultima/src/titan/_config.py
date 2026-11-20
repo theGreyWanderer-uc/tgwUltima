@@ -17,6 +17,7 @@ from __future__ import annotations
 
 __all__ = [
     "config_search_paths",
+    "data_dir",
     "find_config",
     "load_config",
     "cfg",
@@ -63,6 +64,29 @@ def user_config_path() -> Path:
     if sys.platform == "win32" and appdata:
         return Path(appdata) / "titan" / "config.toml"
     return Path.home() / ".config" / "titan" / "config.toml"
+
+
+DATA_ENV = "TITAN_DATA"
+"""Environment variable that moves :func:`data_dir`."""
+
+
+def data_dir(game: Optional[str] = None) -> Path:
+    """Return titan's working-data folder, shared by the CLI and front ends.
+
+    ``%LOCALAPPDATA%\\Titan`` on Windows, otherwise ``$XDG_DATA_HOME/titan``
+    (``~/.local/share/titan``); ``TITAN_DATA`` overrides both. With *game*
+    (a config section such as ``"u8"``), the game's subfolder. Working
+    folders such as U8 ``shapes/`` resolve here; the folder may not exist yet.
+    """
+    override = os.getenv(DATA_ENV)
+    if override:
+        root = Path(override).expanduser()
+    elif sys.platform == "win32" and os.getenv("LOCALAPPDATA"):
+        root = Path(os.environ["LOCALAPPDATA"]) / "Titan"
+    else:
+        xdg = os.getenv("XDG_DATA_HOME")
+        root = (Path(xdg) if xdg else Path.home() / ".local" / "share") / "titan"
+    return root / game if game else root
 
 
 def config_search_paths() -> list[Path]:

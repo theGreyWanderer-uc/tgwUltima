@@ -18,6 +18,7 @@ from titan.u6.object import U6ObjectError
 from titan.u6.palette import U6PaletteError
 from titan.u6.tile import U6TilesError
 from titan.u6.tileflag import U6TileFlagsError
+from titan._meta import meta
 
 __all__ = ["md_app"]
 
@@ -35,6 +36,10 @@ def martian_dreams_commands() -> None:
 
 
 @md_app.command("map-render")
+@meta(
+    results=("image",),
+    params={"output": "output-file", "palette": "palette", "savegame": "save"},
+)
 def map_render_cmd(
     gamedir: Annotated[
         Optional[str],

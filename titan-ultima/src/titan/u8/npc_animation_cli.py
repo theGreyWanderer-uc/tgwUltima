@@ -15,8 +15,10 @@ from titan.u8.npc_animation_report import (
     load_u8_npc_labels,
 )
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
+from titan._meta import meta
 
 
+@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def npc_animation_report_cmd(
     source: Annotated[
         Path,

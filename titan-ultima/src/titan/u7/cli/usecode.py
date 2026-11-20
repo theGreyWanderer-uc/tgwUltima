@@ -13,6 +13,7 @@ from typing import Annotated, Literal, Optional
 import typer
 
 from titan.u7 import install
+from titan._meta import meta
 
 
 def _load_u7_intrinsic_names_for_cli(args: SimpleNamespace) -> dict[int, str]:
@@ -214,6 +215,7 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
 def usecode_scan_intrinsic_cmd(
     file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
     intrinsic: Annotated[
@@ -260,6 +262,7 @@ def usecode_scan_intrinsic_cmd(
     )
 
 
+@meta(results=("text",), params={"output": "output-file"})
 def usecode_disasm_cmd(
     file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
     function: Annotated[

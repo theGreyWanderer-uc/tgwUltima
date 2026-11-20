@@ -21,8 +21,13 @@ from titan.u8.flags_report import format_u8_flags_report
 from titan.u8.save_diff import format_u8_save_diff
 from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
 from titan.u8.state_io import write_u8_state_report
+from titan._meta import meta
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def flags_dump_cmd(
     file: Annotated[
         Path,
@@ -95,6 +100,10 @@ def flags_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def save_info_cmd(
     file: Annotated[
         Path, typer.Argument(help="Native U8SAVE archive or GAMEDAT directory")
@@ -121,6 +130,10 @@ def save_info_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def save_diff_cmd(
     before: Annotated[
         Path, typer.Argument(help="Before: native U8SAVE archive or GAMEDAT directory")
@@ -169,6 +182,10 @@ def save_diff_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def avatar_dump_cmd(
     file: Annotated[Path, typer.Argument(help="AVATAR.DAT or native U8SAVE archive")],
     output_format: Annotated[
@@ -192,6 +209,10 @@ def avatar_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def gumps_dump_cmd(
     file: Annotated[Path, typer.Argument(help="GUMPS.DAT or native U8SAVE archive")],
     view: Annotated[
@@ -221,6 +242,10 @@ def gumps_dump_cmd(
         raise SystemExit(1) from error
 
 
+@meta(
+    results=("json", "table", "text"),
+    params={"output_format": "format", "output": "output-file"},
+)
 def kernel_dump_cmd(
     file: Annotated[Path, typer.Argument(help="KERNEL.DAT or native U8SAVE archive")],
     view: Annotated[

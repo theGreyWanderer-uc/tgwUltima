@@ -21,6 +21,7 @@ from typing import Annotated, Literal, Optional
 import typer
 
 from titan.u7 import install
+from titan._meta import ANY_PARAM, meta
 
 
 def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
@@ -631,6 +632,7 @@ def map_create_cmd(
     )
 
 
+@meta(results=("json",), params={"output": "output-file"})
 def map_export_json_cmd(
     static: Annotated[
         Optional[str],
@@ -695,6 +697,7 @@ def map_export_json_cmd(
     )
 
 
+@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def map_render_json_cmd(
     json_file: Annotated[
         str,
@@ -778,6 +781,12 @@ def map_render_json_cmd(
     )
 
 
+@meta(
+    results=("image",),
+    params={"gamedat": "save", "output": "output-file", "palette": "palette"},
+    interactive=True,
+    batch_with=(ANY_PARAM,),
+)
 def map_render_cmd(
     ctx: typer.Context,
     static: Annotated[
@@ -853,7 +862,8 @@ def map_render_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat", help="Path to gamedat/ directory for IREG dynamic objects"
+            "--gamedat",
+            help="GAMEDAT folder or Exult save (.sav) for IREG dynamic objects",
         ),
     ] = None,
     grid: Annotated[
@@ -981,6 +991,9 @@ def map_render_cmd(
     ] = False,
 ) -> None:
     """Render a U7 map to PNG. With no render options, open the guided wizard."""
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     wizard_mode = interactive or not any(
         source is not None and source.name == "COMMANDLINE"
         for name in ctx.params
@@ -1079,6 +1092,7 @@ def map_render_cmd(
     raise SystemExit(cmd_map_render(render_args))
 
 
+@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def map_sample_cmd(
     static: Annotated[
         Optional[str],
@@ -1147,6 +1161,7 @@ def map_sample_cmd(
     )
 
 
+@meta(results=("files",), params={"gamedat": "save", "output": "output-dir"})
 def map_inventory_cmd(
     static: Annotated[
         Optional[str],
@@ -1176,7 +1191,7 @@ def map_inventory_cmd(
         Optional[str],
         typer.Option(
             "--gamedat",
-            help="Count movable objects from this GAMEDAT folder instead of INITGAME.DAT",
+            help="Count movable objects from this GAMEDAT folder or Exult save (.sav) instead of INITGAME.DAT",
         ),
     ] = None,
     initgame: Annotated[
@@ -1270,6 +1285,9 @@ def map_inventory_cmd(
       titan u7 map-inventory --game si --contents
       titan u7 map-inventory STATIC/ --gamedat gamedat/ -o inventory/
     """
+    from titan.u7.gamedat_source import gamedat_option
+
+    gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.map_inventory import (
         build_u7_map_inventory,
         chunk_rect,

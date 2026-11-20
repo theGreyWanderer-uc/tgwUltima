@@ -69,6 +69,21 @@ U9_FILE_PATHS = {
     "npcs": ("runtime", "NPC.FLX"),
     "processes": ("savegame", "processes.dat"),
 }
+U9_PATH_KINDS = {
+    **{
+        key: "save" if folder == "savegame" else "install-file"
+        for key, (folder, _) in U9_FILE_PATHS.items()
+    },
+    # Numbered region files: static terrain/fixed, runtime nonfixed (not a save).
+    "terrain": "install-file",
+    "fixed": "install-file",
+    "nonfixed": "install-file",
+    "static": "install-dir",
+    "sound": "install-dir",
+    "runtime": "install-dir",
+    "savegame": "save-dir",
+}
+"""``[u9.paths]`` key -> kind (see :func:`titan._meta.path_kind`)."""
 _SKIP_DIRS = {
     "backup",
     "backups",

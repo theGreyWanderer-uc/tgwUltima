@@ -31,6 +31,7 @@ from titan.u9.gameplay_zones import U9Areas, U9AreasError, U9GameplayZone
 from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.space_tree import U9VolumeLookupCache, U9VolumeLookupError
 from titan.u9.spaces import U9Spaces, U9SpacesError
+from titan._meta import meta
 
 
 def _load_highway(filepath: str) -> Optional[U9Highway]:
@@ -1077,6 +1078,7 @@ def spaces_show_cmd(
     raise SystemExit(cmd_spaces_show(SimpleNamespace(file=file, id=id)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def spaces_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
     output: Annotated[
@@ -1111,6 +1113,7 @@ def treedat_show_cmd(
     raise SystemExit(cmd_treedat_show(SimpleNamespace(file=file, id=id)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def treedat_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
     output: Annotated[
@@ -1143,6 +1146,7 @@ def areas_show_cmd(
     raise SystemExit(cmd_areas_show(SimpleNamespace(file=file, id=id)))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def areas_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
     output: Annotated[

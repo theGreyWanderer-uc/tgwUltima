@@ -12,6 +12,7 @@ from typing import Annotated, Optional
 import typer
 
 from titan.u3.u3_nes_map_create import create_u3_nes_sosaria_map
+from titan._meta import meta
 
 
 u3_app = typer.Typer(
@@ -136,6 +137,7 @@ def cmd_map_create(args: SimpleNamespace) -> int:
 
 
 @u3_app.command("map-create")
+@meta(params={"palette": "palette"})
 def map_create_cmd(
     si_source_json: Annotated[
         str,

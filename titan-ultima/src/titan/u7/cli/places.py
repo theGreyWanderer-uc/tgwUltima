@@ -6,8 +6,10 @@ import sys
 from typing import Annotated, Literal, Optional
 
 import typer
+from titan._meta import meta
 
 
+@meta(results=("json",), params={"output": "output-file"})
 def places_export_cmd(
     static: Annotated[
         Optional[str],

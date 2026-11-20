@@ -30,6 +30,7 @@ from titan.uo.localization import (
 )
 from titan.uo.sound import UOSoundDecoder
 from titan.uo.cli import _common
+from titan._meta import meta
 
 
 def _load_sounds(
@@ -545,6 +546,7 @@ def cmd_sound_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def tiledata_export_cmd(
     client: Annotated[
         Optional[str],
@@ -565,6 +567,7 @@ def tiledata_export_cmd(
     raise SystemExit(cmd_tiledata_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def animdata_export_cmd(
     client: Annotated[
         Optional[str],
@@ -585,6 +588,7 @@ def animdata_export_cmd(
     raise SystemExit(cmd_animdata_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def artdef_export_cmd(
     client: Annotated[
         Optional[str],
@@ -605,6 +609,7 @@ def artdef_export_cmd(
     raise SystemExit(cmd_artdef_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def def_export_cmd(
     client: Annotated[
         Optional[str],
@@ -625,6 +630,7 @@ def def_export_cmd(
     raise SystemExit(cmd_def_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def localization_export_cmd(
     client: Annotated[
         Optional[str],
@@ -649,6 +655,7 @@ def localization_export_cmd(
     raise SystemExit(cmd_localization_export(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def sound_export_cmd(
     client: Annotated[
         Optional[str],

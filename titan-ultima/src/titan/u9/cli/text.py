@@ -41,6 +41,7 @@ from titan.u9.text_keys import (
     text_reference_status,
 )
 from titan.u9.cli import _common
+from titan._meta import meta
 
 
 def _load_text(filepath: str) -> Optional[U9TextArchive]:
@@ -632,6 +633,7 @@ def text_search_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def text_export_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
@@ -647,6 +649,7 @@ def text_export_cmd(
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def text_import_cmd(
     file: Annotated[
         str,
@@ -722,6 +725,7 @@ def text_key_lookup_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def text_keys_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
     text: Annotated[
@@ -813,6 +817,7 @@ def books_search_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def books_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     output: Annotated[

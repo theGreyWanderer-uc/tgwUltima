@@ -45,6 +45,7 @@ from titan.u9.color_cube import (
     U9ColorCubeError,
     metric_for_filename,
 )
+from titan._meta import meta
 
 
 def cmd_palette_info(args: SimpleNamespace) -> int:
@@ -411,6 +412,7 @@ def palette_info_cmd(
     )
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/ankh.pal")],
     output: Annotated[
@@ -432,6 +434,7 @@ def palette_export_cmd(
     )
 
 
+@meta(params={"palette": "palette"})
 def shade_info_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
@@ -447,6 +450,7 @@ def shade_info_cmd(
     raise SystemExit(cmd_shade_info(SimpleNamespace(file=file, palette=palette)))
 
 
+@meta(results=("table",), params={"output": "output-file", "palette": "palette"})
 def shade_csv_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
@@ -470,6 +474,7 @@ def shade_csv_cmd(
     )
 
 
+@meta(params={"palette": "palette"})
 def color_cube_info_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
@@ -512,6 +517,7 @@ def color_cube_lookup_cmd(
     )
 
 
+@meta(results=("table",), params={"output": "output-file"})
 def color_cube_csv_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")

@@ -38,6 +38,7 @@ from titan.u8.save_browser_ui import choose_u8_save_browser_source
 from titan.u8.save_state import U8SaveSnapshot
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
+from titan._meta import meta
 
 PAGE_SIZE = 25
 
@@ -364,6 +365,11 @@ def run_u8_container_browser(
         return 1
 
 
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+    interactive=True,
+)
 def container_browse_cmd(
     source: Annotated[
         Path | None,

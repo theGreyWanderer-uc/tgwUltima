@@ -201,6 +201,24 @@ def test_u6_only_config_inspects_relative_absolute_and_missing_paths(
     )
 
 
+def test_config_shows_missing_working_folders_neutrally(setup_workspace, capsys):
+    base = setup_workspace / "Ultima8"
+    (base / "ENGLISH" / "STATIC").mkdir(parents=True)
+    path = Path.cwd() / "titan.toml"
+    path.write_text(
+        f'[u8.game]\nbase="{base.as_posix()}"\n[u8.paths]\n'
+        'fixed="FIXED.DAT"\nshapes="shapes"\n'
+    )
+    assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
+    lines = capsys.readouterr().out.splitlines()
+
+    def flag(key: str) -> str:
+        return next(line for line in lines if line.strip().startswith(key))
+
+    assert "[not extracted yet]" in flag("shapes")
+    assert "[NOT FOUND]" in flag("fixed")
+
+
 def _md_install(root: Path) -> Path:
     from titan.md.install import MD_RESOURCE_NAMES
 
@@ -539,6 +557,40 @@ def test_setup_keeps_legacy_u8_config_without_adding_overriding_defaults(
     saved = tomllib.loads(path.read_text())
     assert "u8" not in saved
     assert saved["paths"]["fixed"] == "CUSTOM.DAT"
+
+
+@pytest.mark.parametrize("save_exists", [False, True])
+def test_setup_records_u8_save_folder_and_prunes_only_stale_default(
+    setup_workspace: Path, monkeypatch: pytest.MonkeyPatch, save_exists: bool
+) -> None:
+    base = setup_workspace / "u8"
+    if save_exists:
+        saves = base / "cloud_saves" / "SAVEGAME"
+        saves.mkdir(parents=True)
+        (saves / "U8SAVE.000").write_bytes(b"")
+    path = Path.cwd() / "titan.toml"
+    path.write_text(
+        f'[u8.game]\nbase="{base.as_posix()}"\nlanguage="ENGLISH"\n'
+        '[u8.paths]\nnonfixed="U8SAVE.000"\n'
+    )
+    _answer_setup(monkeypatch)
+
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+
+    saved = tomllib.loads(path.read_text())["u8"]["paths"]
+    assert saved["savegame"] == "cloud_saves/SAVEGAME"
+    assert ("nonfixed" in saved) is save_exists
+
+
+def test_setup_fresh_u8_config_has_no_default_save(
+    setup_workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _answer_setup(monkeypatch)
+
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+
+    saved = tomllib.loads((Path.cwd() / "titan.toml").read_text())["u8"]["paths"]
+    assert "nonfixed" not in saved
 
 
 def test_setup_honors_global_config_and_creates_parent_directories(

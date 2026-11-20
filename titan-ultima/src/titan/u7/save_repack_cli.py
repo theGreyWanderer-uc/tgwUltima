@@ -11,6 +11,7 @@ from typing import Annotated, Optional
 import typer
 
 from titan.u7.save_repack import U7SaveReplacement, check_u7_save_hash, repack_u7_save
+from titan._meta import meta
 
 
 def read_u7_repack_plan(
@@ -70,6 +71,7 @@ def read_u7_repack_plan(
     return tuple(replacements)
 
 
+@meta(results=("file",), params={"output": "output-file"})
 def save_repack_cmd(
     file: Annotated[
         str, typer.Argument(help="Source U7 named Flex or ZIP save/INITGAME")

@@ -50,6 +50,7 @@ from titan.uo.placement import (
     pack_houses,
 )
 from titan.uo.cli import _common
+from titan._meta import meta
 
 
 def _try_load_cliloc(client: Path, language: str) -> UOCliloc | None:
@@ -641,6 +642,7 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def house_footprints_cmd(
     client: Annotated[
         Optional[str],
@@ -686,6 +688,7 @@ def house_footprints_cmd(
     raise SystemExit(cmd_house_footprints(SimpleNamespace(**locals())))
 
 
+@meta(results=("files",), params={"output": "output-dir"})
 def house_capacity_cmd(
     client: Annotated[
         Optional[str],
