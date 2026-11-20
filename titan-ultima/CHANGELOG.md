@@ -13,6 +13,11 @@ work for the next release.
 - **Ultima 9 Steam installs:** `titan setup` now also looks for Ultima 9 in
   Steam libraries (`Program Files (x86)/Steam/steamapps/common` and
   `SteamLibrary/steamapps/common`) on drives C to G.
+- **Black Gate places:** `u7 places-export -o FILE` writes one JSON file
+  naming every town, building, dungeon and outdoor area in Britannia, with
+  each building's town, outline, doors, signs and the NPCs who start or
+  work there when a new game begins. Names come from the printed town maps
+  and a full review of the world; Serpent Isle will follow.
 - **Config location for other tools:** `titan._config.user_config_path()`
   returns where titan expects its per-user config (`%APPDATA%\titan\config.toml`
   on Windows, `~/.config/titan/config.toml` elsewhere), and

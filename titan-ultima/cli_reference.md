@@ -4690,6 +4690,51 @@ titan u7 map-sample /games/u7si/STATIC --game si --scale 8 -o minimap_si.png
 
 ---
 
+#### `u7 places-export`
+
+Write one JSON file describing every named place in Black Gate: towns,
+buildings, dungeons and caves, and outdoor areas. Buildings and dungeons are
+found in your own game files (roofs, floors, doors, signs and plaques, and
+which NPCs start or are scheduled there when a new game begins). Their names
+and the town outlines come from place data bundled with Titan: the printed
+town maps from the game box, plus a review of every building and dungeon.
+Serpent Isle is not available yet.
+
+```
+titan u7 places-export [static] -o FILE [--game bg] [--pretty | --compact]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `static` | Optional path to `STATIC/` (default from `[u7bg.paths]`) |
+| `-o FILE`, `--output FILE` | JSON file to write (required) |
+| `--game bg` | Game to export; `si` is refused until its place data is reviewed |
+| `--pretty / --compact` | Indented or compact JSON (default: compact) |
+
+The document (`"format": "titan-u7-places"`, version 1) holds:
+
+| Key | Contents |
+|-----|----------|
+| `towns` | Each town's `name` and outline `rects` |
+| `buildings` | `name`, `name_source` (`official` printed map, `review`, `sign` or `plaque`), `town`, legend `places`, `bbox`, `rects`, `center`, `doors`, `signs`, `npcs_at_start`, roof and room details. `detected: false` marks roofless ruins whose outline was drawn by hand |
+| `dungeons` | `name`, `town`, `bbox`, `rects`, `entrances`, floor types, `signs`, `npcs_at_start` |
+| `areas` | Outdoor places such as docks, orchards and cemeteries: `anchor` and `rects` |
+
+Coordinates are inclusive world tiles (0–3071); `rects` and `bbox` are
+`[x0, y0, x1, y1]`. NPC data is the start of a new game only: positions and
+schedules change as the game is played.
+
+**Examples**
+```bash
+# Configured Black Gate install
+titan u7 places-export -o britannia_places.json
+
+# Explicit STATIC folder, readable output
+titan u7 places-export /games/ultima7/STATIC -o places.json --pretty
+```
+
+---
+
 ### U7 type flag commands
 
 ---
