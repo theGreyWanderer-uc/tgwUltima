@@ -40,7 +40,8 @@ TERMINAL_IMPORTS = {"typer", "click", "questionary", "rich", "prompt_toolkit"}
 
 # Library module -> terminal I/O uses still in it. Shrink this; never grow it.
 ALLOWED: dict[str, int] = {
-    # dialogue pipeline steps, also runnable as scripts that print progress
+    # Dialogue pipeline steps, also runnable as scripts that print progress. Kept on
+    # purpose: the pipeline will be replaced or kept as it is, not refactored.
     "dialogue/pipeline/lint_json.py": 14,
     "dialogue/pipeline/build_data.py": 8,
     "dialogue/pipeline/extract_ast.py": 7,
