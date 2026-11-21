@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from titan._files import rows_to_csv
+from titan.errors import InvalidDataError
 
 if TYPE_CHECKING:
     from titan.u7.usecode_analysis import U7UsecodeSymbol, U7UsecodeDiagnostic
@@ -147,7 +148,9 @@ def _u32(data: bytes, pos: int) -> int:
 
 def _require_bytes(data: bytes, pos: int, size: int, context: str) -> None:
     if pos < 0 or size < 0 or pos + size > len(data):
-        raise ValueError(f"Truncated U7 USECODE {context} at file offset 0x{pos:X}")
+        raise InvalidDataError(
+            f"Truncated U7 USECODE {context} at file offset 0x{pos:X}"
+        )
 
 
 def _skip_symbol_scope(data: bytes, pos: int, depth: int = 0) -> int:
@@ -291,7 +294,7 @@ def _read_usecode_function(data: bytes, start: int) -> U7UsecodeFunctionRecord:
     if marker == 0xFFFE:
         func_id = _u32(data, start + 2)
         if func_id > 0x7FFFFFFF:
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 USECODE negative wide function ID at file offset 0x{start:X}"
             )
         func_size = _u32(data, start + 6)
@@ -306,13 +309,13 @@ def _read_usecode_function(data: bytes, start: int) -> U7UsecodeFunctionRecord:
     _require_bytes(data, body, func_size, "function body")
     data_width = 4 if extended else 2
     if func_size < data_width + 6:
-        raise ValueError(
+        raise InvalidDataError(
             f"U7 USECODE incomplete function body at file offset 0x{start:X}"
         )
     data_size = _u32(data, body) if extended else _u16(data, body)
     code_header = body + data_width + data_size
     if code_header + 6 > end:
-        raise ValueError(
+        raise InvalidDataError(
             f"U7 USECODE data/count header exceeds function at file offset 0x{start:X}"
         )
     num_args = _u16(data, code_header)
@@ -321,7 +324,7 @@ def _read_usecode_function(data: bytes, start: int) -> U7UsecodeFunctionRecord:
     externs_pos = code_header + 6
     code_offset = externs_pos + 2 * num_externs
     if code_offset > end:
-        raise ValueError(
+        raise InvalidDataError(
             f"Truncated U7 USECODE extern table at file offset 0x{externs_pos:X}: declared {num_externs} entries"
         )
     externs = [_u16(data, externs_pos + 2 * index) for index in range(num_externs)]
@@ -573,6 +576,6 @@ def load_u7_intrinsic_names(filepath: str) -> dict[int, str]:
     for match in re.finditer(r"<0x([0-9A-Fa-f]+)>\s*([^<\r\n]+?)\s*</>", text):
         index = int(match.group(1), 16)
         if index > 0xFFFF:
-            raise ValueError(f"U7 intrinsic table ID exceeds u16: 0x{index:X}")
+            raise InvalidDataError(f"U7 intrinsic table ID exceeds u16: 0x{index:X}")
         result[index] = match.group(2).strip()
     return result

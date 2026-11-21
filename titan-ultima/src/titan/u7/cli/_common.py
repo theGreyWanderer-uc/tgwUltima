@@ -22,6 +22,43 @@ from titan.u7.shape_archive import U7ShapeArchive
 from titan.u7 import install
 
 
+def complete_mod(ctx, incomplete: str) -> list[str]:
+    """Shell completion for ``--mod``: the game's mod and Exult game keys."""
+    from titan._config import get_config
+    from titan.u7.mods import configured_u7_mods
+
+    game = str((ctx.params or {}).get("game") or "bg").lower()
+    game_id = "u7si" if game == "si" else "u7bg"
+    try:
+        mods = configured_u7_mods(get_config() or {}, game_id)
+    except (OSError, ValueError):
+        return []
+    folded = incomplete.casefold()
+    return [mod.key for mod in mods if mod.key.casefold().startswith(folded)]
+
+
+def mod_gamedat_error(game: str, mod: str, *, archive: bool = False) -> str:
+    """Why ``--mod MOD`` found no data. Commands stop there rather than read
+    the base game's GAMEDAT in its place."""
+    from titan._config import get_config
+    from titan.u7.mods import configured_u7_mods, find_u7_mod
+
+    game_id = "u7bg" if game.lower() == "bg" else "u7si"
+    mods = configured_u7_mods(get_config() or {}, game_id)
+    letters = game.upper()
+    if find_u7_mod(mods, mod) is None:
+        listed = ", ".join(m.key for m in mods) or "none"
+        return (
+            f"ERROR: --mod {mod}: no {letters} mod or Exult game has that name "
+            f"(found: {listed}; `titan u7 mods --game {game.lower()}` lists them)."
+        )
+    what = "GAMEDAT (npc.dat) or initgame.dat" if archive else "GAMEDAT (npc.dat)"
+    return (
+        f"ERROR: --mod {mod}: no {what} found. Has it been played in Exult yet? "
+        "Pass a GAMEDAT folder or save to choose one."
+    )
+
+
 def gamedat_option(value: str | None) -> str | None:
     """A ``--save`` value as a GAMEDAT folder; a bad save file is a usage error.
 

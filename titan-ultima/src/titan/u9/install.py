@@ -17,6 +17,7 @@ from titan.u9.flx_archive import (
     MAX_ENTRIES,
     VERSION_OFFSET,
 )
+from titan.errors import InvalidDataError
 
 U9_RESOURCE_NAMES = {
     "bitmap16": "bitmap16.flx",
@@ -130,14 +131,14 @@ def check_u9_resource(key: str, path: Path) -> str:
         with path.open("rb") as file:
             header = file.read(DIR_OFFSET)
             if len(header) != DIR_OFFSET:
-                raise ValueError("truncated FLX header")
+                raise InvalidDataError("truncated FLX header")
             version = struct.unpack_from("<I", header, VERSION_OFFSET)[0]
             count = struct.unpack_from("<I", header, COUNT_OFFSET)[0]
             if version != FORMAT_VERSION:
-                raise ValueError("not a U9 FLX archive")
+                raise InvalidDataError("not a U9 FLX archive")
             directory_end = DIR_OFFSET + count * DIR_ENTRY_SIZE
             if not 0 < count <= MAX_ENTRIES or directory_end > size:
-                raise ValueError("invalid FLX directory size")
+                raise InvalidDataError("invalid FLX directory size")
             used = 0
             for offset, length in struct.iter_unpack(
                 "<II", file.read(count * DIR_ENTRY_SIZE)
@@ -145,10 +146,10 @@ def check_u9_resource(key: str, path: Path) -> str:
                 if not offset or not length:
                     continue
                 if offset < directory_end or offset + length > size:
-                    raise ValueError("FLX entry lies outside its payload")
+                    raise InvalidDataError("FLX entry lies outside its payload")
                 used += 1
             if not used:
-                raise ValueError("FLX archive has no populated entries")
+                raise InvalidDataError("FLX archive has no populated entries")
     except (OSError, ValueError, struct.error) as error:
         return f"INVALID: {error}"
     return "OK"
@@ -282,9 +283,13 @@ def u9_install_candidates(config: dict) -> list[Path]:
     return list(dict.fromkeys(candidates))
 
 
-def configured_u9_path(key: str) -> Path | None:
-    """Resolve a U9 config path relative to its game base, retaining file case."""
-    section = _config.get_config().get("u9", {})
+def configured_u9_path(key: str, config: dict | None = None) -> Path | None:
+    """Resolve a U9 config path relative to its game base, retaining file case.
+
+    The rule behind :func:`configured_install`; code outside the install
+    module reads the configured install (``titan._meta.configured_install("u9")``).
+    """
+    section = (_config.get_config() if config is None else config).get("u9", {})
     base = section.get("game", {}).get("base")
     value = base if key == "base" else section.get("paths", {}).get(key)
     path = _config.resolve_config_path(value, base if key != "base" else None)
@@ -292,7 +297,7 @@ def configured_u9_path(key: str) -> Path | None:
         path = _config.resolve_config_path(key, base)
     if path is None and key in U9_FILE_PATHS:
         directory, filename = U9_FILE_PATHS[key]
-        owner = configured_u9_path(directory)
+        owner = configured_u9_path(directory, config)
         if owner is not None:
             path = owner / filename
     return existing_u9_path(path) if path is not None else None
@@ -320,6 +325,35 @@ def install_candidates(config: dict) -> list[Path]:
 def discover_installs(path: Path) -> list[Installation]:
     """Install protocol: U9 roots within three levels of *path*."""
     return [as_installation(item) for item in discover_u9_installs(path)]
+
+
+def configured_install(config: dict) -> Installation | None:
+    """Install protocol hook: what U9 commands use by default (:func:`configured_u9_path`).
+
+    ``resources`` hold every known or configured key that exists, with
+    folders defaulting under the base and files under their folder.
+    ``problems`` lists ``[u9.paths]`` entries that point at nothing
+    (``"NOT FOUND"``). ``settings["base"]`` is set only when ``[u9.game] base``
+    is; U9 also works from absolute ``[u9.paths]`` alone, and then ``root``
+    is ``Path()`` (no base).
+    """
+    section = config.get("u9", {})
+    declared = section.get("paths", {})
+    base = configured_u9_path("base", config)
+    if base is None and not declared:
+        return None
+    resources: dict[str, Path] = {}
+    problems: dict[str, str] = {}
+    for key in dict.fromkeys([*U9_PATH_KINDS, *declared]):
+        path = configured_u9_path(key, config)
+        if path is not None and path.exists():
+            resources[key] = path
+        elif key in declared:
+            problems[key] = "NOT FOUND"
+    settings = {"base": str(base)} if base is not None else {}
+    return Installation(
+        "u9", base or Path(), resources, problems, settings, frozenset(declared)
+    )
 
 
 def install_config(install: Installation) -> dict:

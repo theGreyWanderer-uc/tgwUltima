@@ -16,7 +16,6 @@ from titan.u9.avatar_animation_library import (
     export_avatar_animation_library,
 )
 
-
 BREATHE_PATH = r"u:\art\motions\humanoid\idle\lws\breathe_avatar.lws"
 WALK_PATH = r"u:\art\motions\humanoid\movement\lws\walkfoward_avatar_none.lws"
 BOW_PATH = r"u:\art\motions\humanoid\combat\lws\attack_avatar_bowaa.lws"

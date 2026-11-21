@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from titan.u7.flex import U7FlexArchive
+from titan.errors import InvalidDataError
 
 # Custom libraries (for example MINIMAPS.VGA) need not have a retail base.
 RETAIL_SHAPE_ARCHIVES = {
@@ -108,14 +109,16 @@ class U7ShapeArchive:
             else None
         )
         if base_path is not None and base_path.resolve() == path.resolve():
-            raise ValueError("The base archive must be distinct from the patch archive")
+            raise InvalidDataError(
+                "The base archive must be distinct from the patch archive"
+            )
         if (
             require_patch_base
             and is_patch_archive(path)
             and path.name.lower() in RETAIL_SHAPE_ARCHIVES
             and base_path is None
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "Cannot resolve this patch's base archive; supply --base-archive "
                 "before allocating or replacing shapes"
             )

@@ -28,6 +28,8 @@ from titan import _wizard_ui as ui
 from titan.u7 import install
 from titan.u7.cli import _common
 from titan._meta import meta
+from titan._config import export_output
+from titan.errors import exit_code
 
 
 def cmd_shape_import(args: SimpleNamespace) -> int:
@@ -43,8 +45,7 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
 
     source_dir = Path(args.directory)
     if not source_dir.is_dir():
-        print(f"ERROR: Shape import directory not found: {source_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Shape import directory not found: {source_dir}")
 
     palette_value = getattr(args, "palette", None)
     if not palette_value:
@@ -62,8 +63,7 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
 
     palette_path = Path(palette_value)
     if not palette_path.is_file():
-        print(f"ERROR: Shape import palette not found: {palette_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Shape import palette not found: {palette_path}")
 
     output_path = Path(args.output)
     if output_path.suffix.lower() != ".shp":
@@ -112,7 +112,7 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
         return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"ERROR: U7 shape import failed: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Shape created: {len(shape.frames)} frames -> {output_path}")
     print("  Frame order: Windows A-Z by PNG filename")
@@ -148,8 +148,7 @@ def cmd_shape_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     # Load palette
     if args.palette:
@@ -314,8 +313,7 @@ def cmd_shape_animate(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     pal = (
         U7Palette.from_file(args.palette)
@@ -524,8 +522,7 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
     if os.path.isdir(filepath):
         return cmd_shape_batch_dir(args)
     if not os.path.isfile(filepath):
-        print(f"ERROR: File or directory not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File or directory not found: {filepath}")
 
     # Load palette
     if args.palette:
@@ -618,8 +615,7 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
     if not args.static:
         print(
             "ERROR: --static DIR is required for TFA animation-type and "
@@ -643,7 +639,7 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
         else U7Palette.default_palette()
     )
 
-    outdir = args.output or "shape_cycle_scan"
+    outdir = export_output(args.output, "u7", "shape-cycle-scan")
     os.makedirs(outdir, exist_ok=True)
 
     num_records = len(archive.records)
@@ -1388,19 +1384,14 @@ def cmd_shape_frame_report(args: SimpleNamespace) -> int:
 
     archive_path = Path(args.file)
     if not archive_path.is_file():
-        print(
-            f"ERROR: U7 shape Flex archive not found: {archive_path}",
-            file=sys.stderr,
-        )
-        return 1
+        raise FileNotFoundError(f"U7 shape Flex archive not found: {archive_path}")
 
     explicit_wihh_path = getattr(args, "wihh", None)
     wihh_path: Optional[Path] = None
     if explicit_wihh_path:
         wihh_path = Path(explicit_wihh_path)
         if not wihh_path.is_file():
-            print(f"ERROR: WIHH.DAT not found: {wihh_path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"WIHH.DAT not found: {wihh_path}")
     else:
         for filename in ("WIHH.DAT", "wihh.dat"):
             candidate = archive_path.parent / filename
@@ -1429,7 +1420,7 @@ def cmd_shape_frame_report(args: SimpleNamespace) -> int:
         )
     except (OSError, ValueError) as exc:
         print(f"ERROR: Shape frame report failed: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1441,7 +1432,7 @@ def cmd_shape_frame_report(args: SimpleNamespace) -> int:
                 output_file.write("\n")
     except OSError as exc:
         print(f"ERROR: Could not write shape frame report: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     print(f"Shape frame report written to: {output_path}")
     print(

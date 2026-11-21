@@ -10,6 +10,7 @@ import struct
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u8 import U8MapItems, U8MapItemsError, U8MapRenderer
 from titan.u8.cli import u8_app
 from titan.u8.map_item_report import format_u8_map_item_report
@@ -362,13 +363,19 @@ def test_commands_exports_help_filters_and_output_protection(tmp_path, command):
     assert runner.invoke(u8_app, args).exit_code == 0
     assert len(list(csv.DictReader(io.StringIO(output.read_text())))) == 9
     before = output.read_bytes()
-    assert runner.invoke(u8_app, args).exit_code == 1 and output.read_bytes() == before
+    assert (
+        runner.invoke(u8_app, args).exit_code == EXIT_CODES["output-exists"]
+        and output.read_bytes() == before
+    )
     result = runner.invoke(u8_app, [command, str(source), "-o", str(source)])
     assert result.exit_code == 1 and "differ" in result.output
-    assert runner.invoke(u8_app, [command, str(source), "--record", "0"]).exit_code == 1
+    assert (
+        runner.invoke(u8_app, [command, str(source), "--record", "0"]).exit_code
+        == EXIT_CODES["invalid-data"]
+    )
     source.write_bytes(b"bad")
     result = runner.invoke(u8_app, [command, str(source)])
-    assert result.exit_code == 1 and "ERROR:" in result.output
+    assert result.exit_code == EXIT_CODES["invalid-data"] and "ERROR:" in result.output
 
 
 @pytest.mark.parametrize(

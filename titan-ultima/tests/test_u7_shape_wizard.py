@@ -1,9 +1,9 @@
 """Exercise the PNG wizard through conversion, approval and archive insertion."""
 
-import struct
 import re
-from functools import partial
+import struct
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -601,7 +601,7 @@ def test_interactive_gumps_selection_uses_gumps_base_and_patch_slots(
     if existing_patch:
         write_archive(target, [b"", shape_data(4)])
     before = base.read_bytes()
-    monkeypatch.setattr(wizard, "_static_path", lambda game: str(static))
+    monkeypatch.setattr(wizard, "_static_path", lambda config: str(static))
     paths = wizard.ExultGamePaths(
         game="SI", static_path=str(static), patch_path=str(target.parent)
     )
@@ -685,7 +685,7 @@ def test_interactive_mod_target_uses_own_patch_and_correct_base(
         write_archive(own_static / "GUMPS.VGA", [b"", shape_data(3)])
     write_archive(patch, [shape_data(4)])
     before = patch.read_bytes()
-    monkeypatch.setattr(wizard, "_static_path", lambda game: str(retail))
+    monkeypatch.setattr(wizard, "_static_path", lambda config: str(retail))
     # Select the manual folder; discovery is isolated from the machine profile.
     answers = [
         "2",
@@ -731,7 +731,7 @@ def test_standalone_patch_without_matching_static_does_not_inherit_retail(
     patch = own_static.parent / "patch/GUMPS.VGA"
     write_archive(retail / "GUMPS.VGA", [shape_data(2)] * 5)
     write_archive(patch, [b"", shape_data(3)])
-    monkeypatch.setattr(wizard, "_static_path", lambda game: str(retail))
+    monkeypatch.setattr(wizard, "_static_path", lambda config: str(retail))
     config = replace(
         artwork,
         output_format="flex",
@@ -849,4 +849,4 @@ def test_picker_discovers_registered_exult_game(tmp_path, monkeypatch, capsys):
     assert config.target_static == str(custom / "static")
     assert config.target_patch == str(custom / "patch")
     assert config.standalone
-    assert "My Game (Exult game)" in capsys.readouterr().out
+    assert "My Game (custom, Exult game)" in capsys.readouterr().out

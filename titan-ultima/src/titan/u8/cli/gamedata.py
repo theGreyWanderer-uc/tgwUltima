@@ -27,14 +27,14 @@ from titan.u8.save import U8SaveArchive
 from titan.u8.typeflag import U8TypeFlags
 from titan.u8.credits import decrypt_credit_text
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_credits_decrypt(args: SimpleNamespace) -> int:
     """Decrypt ECREDITS.DAT or QUOTES.DAT and write plain text."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -57,8 +57,7 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
     """Parse TYPEFLAG.DAT and dump all shape info as a readable table."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     entries = U8TypeFlags.from_file(filepath)
 
@@ -130,8 +129,7 @@ def cmd_gumpinfo_dump(args: SimpleNamespace) -> int:
     """Dump GUMPAGE.DAT container gump UI layout rectangles."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -177,8 +175,7 @@ def cmd_unkcoff_dump(args: SimpleNamespace) -> int:
     """Dump UNKCOFF.DAT code-offset table."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -309,7 +306,7 @@ def anim_dump_cmd(
             print(f"Animation report written to: {output}")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -395,7 +392,7 @@ def wpnovlay_dump_cmd(
             print(f"Weapon overlay report written to: {output}")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -451,7 +448,7 @@ def itemcach_dump_cmd(
         write_u8_state_report(report, output, (file,), "Item cache")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -531,7 +528,7 @@ def npcdata_dump_cmd(
         write_u8_state_report(report, output, sources, "NPC data")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -616,7 +613,7 @@ def map_items_dump_cmd(
         write_u8_state_report(report, output, sources, f"{kind.upper()} items")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(

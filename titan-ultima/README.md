@@ -811,8 +811,10 @@ titan config --edit
 
 TITAN can also be imported as a Python library. U8 modules live under
 `titan.u8`; U7 modules live under `titan.u7`; U6 modules live under
-`titan.u6`; early U9 modules live under `titan.u9`. Backward-compatible
-imports such as `from titan.shape import U8Shape` are still supported.
+`titan.u6`; early U9 modules live under `titan.u9`. The old top-level U8
+modules (`from titan.shape import U8Shape`, `titan.palette`, `titan.map`, ...)
+still work but are deprecated and warn on import; `from titan import U8Shape`
+keeps working without a warning.
 
 ```python
 from titan.u7.flex import U7FlexArchive

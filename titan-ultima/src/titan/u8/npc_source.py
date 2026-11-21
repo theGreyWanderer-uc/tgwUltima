@@ -10,6 +10,7 @@ from titan.u8.itemcach import U8ItemCache
 from titan.u8.npcdata import U8NpcData
 from titan.u8.save import U8SaveArchive
 from titan.u8.shape_browser import find_u8_browser_file
+from titan.errors import InvalidDataError
 
 
 @dataclass
@@ -43,7 +44,7 @@ def load_u8_npc_source(path: Path, *, itemcach: Path | None = None) -> U8NpcSour
         if native_save and U8SaveArchive.from_file(path).get_data("AVATAR.DAT") is None:
             avatar_path = None
     if npc_path is None or cache_path is None:
-        raise ValueError(
+        raise InvalidDataError(
             "NPC animation report requires paired NPCDATA.DAT and ITEMCACH.DAT"
         )
     source = U8NpcSource(

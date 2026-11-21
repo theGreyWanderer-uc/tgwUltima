@@ -7,6 +7,8 @@ from typing import Any, Callable, Optional
 
 import tomli_w
 
+from titan._config import migrate_legacy_u8
+
 try:
     import tomllib
 except ImportError:
@@ -54,8 +56,12 @@ def write_setup_config(
     if path.exists():
         original = path.read_bytes()
         existing = tomllib.loads(original.decode("utf-8"))
-        # Legacy U8 settings remain authoritative until explicitly migrated.
-        if "u8" not in existing and ("game" in existing or "paths" in existing):
+        # titan's original U8-only [game]/[paths] move under [u8] (the .bak
+        # keeps the old file). They are the user's U8 settings: detected U8
+        # defaults are not added to them (an empty language, say, would move
+        # STATIC from <base>/ENGLISH/STATIC to <base>).
+        had_u8 = "u8" in existing
+        if migrate_legacy_u8(existing) and not had_u8:
             generated.pop("u8", None)
         _merge_missing_config(existing, generated)
         _apply_updates(existing, updates or {})

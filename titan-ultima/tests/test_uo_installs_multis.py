@@ -11,7 +11,6 @@ from titan.uo.installs import configured_installs, resolve_install
 from titan.uo.multi import UOMulti, UOMultiComponent, UOMultis, detect_mul_stride
 from titan.uo.tiledata import UOStaticTile, UOTileData
 
-
 # -- installs ---------------------------------------------------------------
 
 
@@ -321,11 +320,10 @@ def test_region_layers_follow_region_find(tmp_path):
 
 def test_capacity_viewer_embeds_layers(tmp_path):
     import base64
-
-    import numpy as np
     import io
     import json
 
+    import numpy as np
     from PIL import Image
 
     from titan.uo.capacity_viewer import COVERED_BIT, write_capacity_viewer

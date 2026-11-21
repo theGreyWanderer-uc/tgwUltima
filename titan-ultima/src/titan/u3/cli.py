@@ -14,6 +14,7 @@ import typer
 from titan.u3.u3_nes_map_create import create_u3_nes_sosaria_map
 from titan._meta import meta
 from titan._cli_aliases import alias_group
+from titan.errors import exit_code
 
 
 u3_app = typer.Typer(
@@ -95,7 +96,7 @@ def cmd_map_create(args: SimpleNamespace) -> int:
         )
     except (OSError, U7MapJsonError, U7NativeMapCreateError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     if result.json_path is not None:
         print(f"Universal JSON: {result.json_path}")

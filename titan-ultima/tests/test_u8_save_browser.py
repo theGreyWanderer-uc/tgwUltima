@@ -9,7 +9,18 @@ import json
 import pytest
 from typer.testing import CliRunner
 
+from tests.test_u8_native_runtime_state import (
+    avatar_bytes,
+    container_bytes,
+    gumps_bytes,
+    kernel_records,
+)
+from tests.test_u8_npc_animation_report import Links
+from tests.test_u8_npc_animation_report import case as case
+from tests.test_u8_save_state import map_item, native_flex, native_nonfixed, native_save
 from titan import _wizard_ui as ui
+from titan.errors import EXIT_CODES
+from titan.u8 import save_browser_ui as browser
 from titan.u8.cli import u8_app
 from titan.u8.flags import U8FlagSymbols
 from titan.u8.npc_browser import describe_u8_npc_source_overview
@@ -20,17 +31,7 @@ from titan.u8.save_browser import (
     filter_u8_save_browser_rows,
     format_u8_save_browser_view,
 )
-from titan.u8 import save_browser_ui as browser
 from titan.u8.save_state import U8SaveSnapshot
-from tests.test_u8_native_runtime_state import (
-    avatar_bytes,
-    container_bytes,
-    gumps_bytes,
-    kernel_records,
-)
-from tests.test_u8_npc_animation_report import Links, case as case
-from tests.test_u8_save_state import native_flex, native_nonfixed, native_save, map_item
-from titan.errors import EXIT_CODES
 
 
 @pytest.fixture
@@ -408,8 +409,13 @@ def test_cancellation_exits_cleanly_without_exports(
 def test_invalid_source_and_optional_inputs_have_controlled_errors(tmp_path):
     bad = tmp_path / "bad"
     bad.write_bytes(b"bad")
-    for options in ([], ["--symbols", str(bad)], ["--names", str(bad)]):
+    # The browser reports a bad save itself; bad optional files are bad data.
+    for options, status in (
+        ([], EXIT_CODES["error"]),
+        (["--symbols", str(bad)], EXIT_CODES["invalid-data"]),
+        (["--names", str(bad)], EXIT_CODES["invalid-data"]),
+    ):
         result = CliRunner().invoke(
             u8_app, ["save-browse", str(bad), *options], input="Q\n"
         )
-        assert result.exit_code == 1 and "Traceback" not in result.output
+        assert result.exit_code == status and "Traceback" not in result.output

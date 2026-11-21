@@ -12,6 +12,11 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
+from tests.test_u8_cached_state import state_flex
+from tests.test_u8_map_render import _flex, _save
+from tests.test_u8_npc_animation_report import Links
+from tests.test_u8_npc_animation_report import case as case
+from titan.errors import EXIT_CODES
 from titan.u8 import map_browser_ui as browser
 from titan.u8.cli import u8_app
 from titan.u8.map_browser import (
@@ -28,9 +33,6 @@ from titan.u8.map_browser import (
     validate_u8_map_output,
 )
 from titan.u8.shape_browser import load_u8_shape_library
-from tests.test_u8_cached_state import state_flex
-from tests.test_u8_map_render import _flex, _save
-from tests.test_u8_npc_animation_report import Links, case as case
 
 
 def item(shape=1, *, x=512, y=512, z=0, status=0, quality=0, npc_num=0, frame=0):
@@ -358,7 +360,7 @@ def test_bad_snapshot_and_invalid_options_fail_clearly(assets, tmp_path):
     static, gamedat = assets
     (gamedat / "NONFIXED.DAT").write_bytes(b"broken")
     result = invoke(assets, tmp_path, "Q\n")
-    assert result.exit_code == 1 and "ERROR" in result.output
+    assert result.exit_code == EXIT_CODES["invalid-data"] and "ERROR" in result.output
     assert browser.run_u8_map_browser(export=True) == 1
     assert browser.run_u8_map_browser(map_id=256) == 1
     with pytest.raises(ValueError):

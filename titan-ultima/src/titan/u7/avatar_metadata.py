@@ -7,13 +7,14 @@ from dataclasses import dataclass, field
 
 from titan.u7.gump_metadata import U7GumpSources
 from titan.u7.text import U7TextMessages
+from titan.errors import InvalidDataError
 
 
 def _number(value: str) -> int:
     """Shapeinfo lookup accepts decimal integers and positive 0x hexadecimal integers."""
     value = value.strip()
     if re.fullmatch(r"(?:[+-]?[0-9]+|0[xX][0-9a-fA-F]+)", value) is None:
-        raise ValueError(f"U7 Avatar metadata: invalid integer {value!r}")
+        raise InvalidDataError(f"U7 Avatar metadata: invalid integer {value!r}")
     return int(value, 16 if value.lower().startswith("0x") else 10)
 
 
@@ -56,7 +57,7 @@ class U7AvatarMetadata:
         ):
             parts = row.split("#", 1)[0].strip().split("/")
             if len(parts) != 2:
-                raise ValueError(
+                raise InvalidDataError(
                     f"U7 Avatar metadata: malformed import in {source}: {row!r}"
                 )
             original = _number(parts[0].strip())

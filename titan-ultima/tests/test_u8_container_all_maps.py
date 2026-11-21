@@ -5,13 +5,19 @@ from __future__ import annotations
 import csv
 import json
 import struct
-from pathlib import Path
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
+from tests.test_u8_cached_state import state_flex
+from tests.test_u8_container_browser import inventory as inventory
+from tests.test_u8_map_items import item_bytes, map_flex
+from tests.test_u8_npc_animation_report import Links
+from tests.test_u8_npc_animation_report import case as case
+from tests.test_u8_shape_browser import shape_bytes
 from titan.u8 import container_browser_ui as browser
 from titan.u8.cli import u8_app
 from titan.u8.container_browser import (
@@ -25,11 +31,6 @@ from titan.u8.container_gump import U8ContainerGumpPreview
 from titan.u8.container_records import parse_u8_inventory_id, u8_inventory_file_stem
 from titan.u8.save_state import U8SaveSnapshot
 from titan.u8.shape_browser import load_u8_shape_library
-from tests.test_u8_cached_state import state_flex
-from tests.test_u8_container_browser import inventory as inventory
-from tests.test_u8_map_items import item_bytes, map_flex
-from tests.test_u8_npc_animation_report import Links, case as case
-from tests.test_u8_shape_browser import shape_bytes
 
 
 @pytest.fixture

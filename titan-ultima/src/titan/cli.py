@@ -54,6 +54,7 @@ from titan.flex import (
 )
 from titan.music import XMIDIConverter
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 # ============================================================================
@@ -123,8 +124,7 @@ def cmd_flex_info(args: SimpleNamespace) -> int:
     """Show detailed information about a Flex archive."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     if not FlexArchive.is_flex(filepath):
         print(f"ERROR: Not a valid Flex archive: {filepath}", file=sys.stderr)
@@ -152,8 +152,7 @@ def cmd_flex_list(args: SimpleNamespace) -> int:
     """List contents of a Flex archive."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     if not FlexArchive.is_flex(filepath):
         print(f"ERROR: Not a valid Flex archive: {filepath}", file=sys.stderr)
@@ -172,8 +171,7 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
     outdir = args.output
 
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     if not FlexArchive.is_flex(filepath):
         print(f"ERROR: Not a valid Flex archive: {filepath}", file=sys.stderr)
@@ -267,8 +265,7 @@ def cmd_flex_create(args: SimpleNamespace) -> int:
     comment = args.comment
 
     if not os.path.isdir(source_dir):
-        print(f"ERROR: Directory not found: {source_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Directory not found: {source_dir}")
 
     # Check if a manifest exists for guided reconstruction
     manifest_path = os.path.join(source_dir, "_manifest.txt")
@@ -423,13 +420,11 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
     """Replace a single record inside a Flex archive."""
     flex_path = args.file
     if not os.path.isfile(flex_path):
-        print(f"ERROR: File not found: {flex_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {flex_path}")
 
     data_path = args.data
     if not os.path.isfile(data_path):
-        print(f"ERROR: Replacement data file not found: {data_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Replacement data file not found: {data_path}")
 
     index = args.index
     if index < 0:
@@ -440,7 +435,7 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
         archive = FlexArchive.from_file(flex_path, strict=True)
     except (OSError, ValueError) as error:
         print(f"ERROR: Cannot update Flex archive: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     if index >= len(archive.records):
         print(
@@ -494,8 +489,7 @@ def cmd_music_export(args: SimpleNamespace) -> int:
     """Convert a single XMIDI file to standard MIDI."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -521,8 +515,7 @@ def cmd_music_batch(args: SimpleNamespace) -> int:
     """Batch-convert all XMIDI .xmi files in a directory to standard MIDI."""
     srcdir = args.directory
     if not os.path.isdir(srcdir):
-        print(f"ERROR: Directory not found: {srcdir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Directory not found: {srcdir}")
 
     outdir = args.output or os.path.join(srcdir, "midi")
     os.makedirs(outdir, exist_ok=True)
@@ -569,6 +562,20 @@ def cmd_music_batch(args: SimpleNamespace) -> int:
 # ============================================================================
 
 
+def _file_has_legacy_u8_tables(path: Path) -> bool:
+    """Whether the TOML file at *path* still has top-level ``[game]``/``[paths]``."""
+    from titan._config import has_legacy_u8_tables
+
+    try:
+        import tomllib
+    except ImportError:  # Python 3.10
+        import tomli as tomllib  # type: ignore[no-redef]
+    try:
+        return has_legacy_u8_tables(tomllib.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return False
+
+
 def cmd_config(args: SimpleNamespace) -> int:
     """Show the active titan.toml configuration (or open it for editing)."""
     import titan._config as _config_mod
@@ -590,8 +597,7 @@ def cmd_config(args: SimpleNamespace) -> int:
 
     if path is None or not path.exists():
         if explicit:
-            print(f"ERROR: Config file not found: {explicit}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"Config file not found: {explicit}")
         print("No titan.toml found.")
         print("  Locations checked:")
         for candidate in config_search_paths():
@@ -647,6 +653,11 @@ def cmd_config(args: SimpleNamespace) -> int:
 
     print(f"Active config: {path.absolute()}")
     print(f"Data folder:   {data_dir()}  (working data; {DATA_ENV} moves it)")
+    if _file_has_legacy_u8_tables(path):
+        print(
+            "Note: top-level [game]/[paths] are titan's old U8-only layout and are read"
+            " as [u8]; `titan setup` moves them under [u8] (keeping a .bak)."
+        )
 
     u8 = config.get("u8", {})
     uw1 = config.get("uw1", {})
@@ -750,15 +761,7 @@ def cmd_config(args: SimpleNamespace) -> int:
                     print(f"  {key:<12} = {value!r}")
         _print_kv_section("[exult.paths]", exult.get("paths", {}), check_exists=True)
     else:
-        game = config.get("game", {})
-        paths = config.get("paths", {})
-        _print_kv_section("[game]", game)
-        _print_kv_section(
-            "[paths]  (after base expansion)",
-            paths,
-            check_exists=True,
-            kinds="u8",
-        )
+        print("No game settings in this file; `titan setup` finds your installs.")
     return 0
 
 
@@ -856,7 +859,6 @@ def cmd_setup(args: SimpleNamespace) -> int:
     from titan._meta import find_installs, install_config
     from titan._setup_config import section_lines
     from titan.md.install import inspect_martian_install, martian_installation
-    from titan.uo.installs import detect_uo_install
 
     explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
     toml_path = Path(explicit).expanduser() if explicit else Path.cwd() / "titan.toml"
@@ -1036,18 +1038,15 @@ def cmd_setup(args: SimpleNamespace) -> int:
         setup_updates["md"] = {"game": {"base": md_base.as_posix()}}
 
     # -- UO install detection -------------------------------------
-    print("\nSearching for Ultima Online Classic Client installation...")
-    detected_uo = detect_uo_install()
-    if detected_uo is not None:
-        print(f"  Found UO Classic Client: {detected_uo}")
-    else:
-        print("  Not found in standard locations.")
-
-    uo_default = str(detected_uo) if detected_uo else ""
-    uo_input = ui.path(
-        f"Ultima Online Classic Client base [{uo_default or 'optional'}]: ", uo_default
-    ).strip()
-    uo_base = (uo_input or uo_default).replace("\\", "/")
+    uo_rejected = "No Ultima Online Classic Client at that path"
+    selected_installs["uo"] = _setup_detect_install(
+        "uo",
+        "Ultima Online Classic Client",
+        "Ultima Online Classic Client base",
+        existing_config,
+        setup_updates,
+        rejected=uo_rejected,
+    )
 
     # -- Third-party engine save detection -------------------------
     engine_save_file = find_u8_engine_save()
@@ -1127,7 +1126,6 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U7 SI base:   {u7si_base or '(empty)'}")
     print(f"  U7 SI STATIC: {u7si_static_detected or '(empty)'}")
     print(f"  U7 SI GAMEDAT:{u7si_gamedat or '(empty)'}")
-    print(f"  UO base:      {uo_base or '(empty)'}")
     print(f"  MD base:      {md_base or '(empty)'}")
     for game_id, selected in selected_installs.items():
         label = f"{game_id.upper()} base:"
@@ -1206,7 +1204,6 @@ def cmd_setup(args: SimpleNamespace) -> int:
         lang = ""
         u7bg_base = ""
         u7si_base = ""
-        uo_base = ""
         u7bg_gamedat = ""
         u7si_gamedat = ""
         u7bg_mod_sources = []
@@ -1260,8 +1257,12 @@ def cmd_setup(args: SimpleNamespace) -> int:
                 print(
                     "  No Martian Dreams map data at that path; existing settings kept."
                 )
-        uo_base = (
-            ui.path("UO Classic Client base [optional]: ").strip().replace("\\", "/")
+        selected_installs["uo"] = _setup_select_install(
+            "uo",
+            ui.path("UO Classic Client base [optional]: ").strip().strip('"'),
+            existing_config.get("uo", {}).get("game", {}).get("base"),
+            setup_updates,
+            rejected=uo_rejected,
         )
         exult_bg_flx = (
             ui.path("Exult BG FLX path [optional]: ").strip().replace("\\", "/")
@@ -1327,9 +1328,6 @@ def cmd_setup(args: SimpleNamespace) -> int:
             install_config(martian_installation(selected_md, md_base))
         )
 
-    if uo_base:
-        lines += section_lines({"uo": {"game": {"base": uo_base}}})
-
     exult_paths = {
         key: value
         for key, value in (("bg_flx", exult_bg_flx), ("si_flx", exult_si_flx))
@@ -1349,7 +1347,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
         )
     except (OSError, ValueError) as exc:
         print(f"ERROR: Could not write setup config: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
     if backup is not None:
         print(f"\n  Updated: {toml_path.absolute()} (custom settings kept)")
         print(f"  Backup:  {backup.absolute()}")

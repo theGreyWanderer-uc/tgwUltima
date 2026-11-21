@@ -20,6 +20,7 @@ from PIL import Image
 
 from titan.uo.radar import UORadarColors
 from titan.uo.uop import UOPArchive, hash_uop_path
+from titan.errors import InvalidDataError
 
 BLOCK_BYTES = 196
 STATIC_INDEX_BYTES = 12
@@ -109,9 +110,9 @@ def _read_uop_land(path: Path, stem: str) -> bytes:
         chunks.append(archive.read_entry(entry))
         index += 1
     if not chunks:
-        raise ValueError(f"no build/{stem}legacymul entries in {path}")
+        raise InvalidDataError(f"no build/{stem}legacymul entries in {path}")
     if index != len(archive.entries):
-        raise ValueError(
+        raise InvalidDataError(
             f"{path.name}: {len(archive.entries) - index} entr(ies) outside the "
             f"build/{stem}legacymul sequence"
         )
@@ -145,12 +146,12 @@ class UOMap:
         self.source = source
 
         if len(land) < self.block_count * BLOCK_BYTES:
-            raise ValueError(
+            raise InvalidDataError(
                 f"land data holds {len(land) // BLOCK_BYTES} block(s); "
                 f"{width}x{height} needs {self.block_count}"
             )
         if len(staidx) < self.block_count * STATIC_INDEX_BYTES:
-            raise ValueError(
+            raise InvalidDataError(
                 f"static index holds {len(staidx) // STATIC_INDEX_BYTES} block(s); "
                 f"{width}x{height} needs {self.block_count}"
             )
@@ -188,7 +189,7 @@ class UOMap:
         mul_path = client / f"{name}.mul"
 
         if container not in ("auto", "uop", "mul"):
-            raise ValueError(f"unknown map container: {container}")
+            raise InvalidDataError(f"unknown map container: {container}")
         use_uop = container == "uop" or (container == "auto" and uop_path.is_file())
         if use_uop:
             if not uop_path.is_file():
@@ -391,7 +392,7 @@ class UOMap:
         within = np.arange(total, dtype=np.int64) - np.repeat(firsts, counts)
         starts = np.repeat(offsets, counts) + within * STATIC_RECORD_BYTES
         if total and int(starts.max()) + STATIC_RECORD_BYTES > len(self.statics):
-            raise ValueError("static index points past end of statics data")
+            raise InvalidDataError("static index points past end of statics data")
 
         raw = np.frombuffer(self.statics, dtype=np.uint8)
         gathered = raw[starts[:, None] + np.arange(STATIC_RECORD_BYTES)]

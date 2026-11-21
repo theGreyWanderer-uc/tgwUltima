@@ -85,7 +85,7 @@ class UW2CliTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
 
-    @patch("titan.uw2.cli.extract_maps")
+    @patch("titan.uw2.cli.maps.extract_maps")
     def test_map_extract_uses_install_data_directory(self, extract_mock) -> None:
         (self.data / "LEV.ARK").write_bytes(b"placeholder")
         extract_mock.return_value = [{"slot_index": 0}]
@@ -108,9 +108,9 @@ class UW2CliTests(unittest.TestCase):
             write_decoded_blocks=False,
         )
 
-    @patch("titan.uw2.cli.render_maps_direct")
-    @patch("titan.uw2.cli.export_render_assets")
-    @patch("titan.uw2.cli.extract_maps")
+    @patch("titan.uw2.cli.maps.render_maps_direct")
+    @patch("titan.uw2.cli.maps.export_render_assets")
+    @patch("titan.uw2.cli.maps.extract_maps")
     def test_map_render_reads_original_files_without_intermediates(
         self, extract_mock, assets_mock, direct_render_mock
     ) -> None:
@@ -137,7 +137,7 @@ class UW2CliTests(unittest.TestCase):
             self.root, output, slots=[0], tile_size=64
         )
 
-    @patch("titan.uw2.cli.render_object_models")
+    @patch("titan.uw2.cli.models.render_object_models")
     def test_model_render_accepts_hex_item_ids(self, render_mock) -> None:
         output = self.root / "models"
         render_mock.return_value = [output / "table.png"]
@@ -163,7 +163,7 @@ class UW2CliTests(unittest.TestCase):
             views=["iso"],
         )
 
-    @patch("titan.uw2.cli.export_object_models")
+    @patch("titan.uw2.cli.models.export_object_models")
     def test_model_export_omits_item_filter_to_export_all(self, export_mock) -> None:
         output = self.root / "models"
         export_mock.return_value = [output / "table.obj"]
@@ -185,7 +185,7 @@ class UW2CliTests(unittest.TestCase):
             flags=0,
         )
 
-    @patch("titan.uw2.cli.render_map_scene")
+    @patch("titan.uw2.cli.maps.render_map_scene")
     def test_map_3d_render_parses_region_and_views(self, render_mock) -> None:
         output = self.root / "scene"
         render_mock.return_value = [output / "top.png"]
@@ -245,7 +245,7 @@ class UW2CliTests(unittest.TestCase):
             native=False,
         )
 
-    @patch("titan.uw2.cli.render_map_scene")
+    @patch("titan.uw2.cli.maps.render_map_scene")
     def test_map_3d_render_repeats_for_every_requested_slot(self, render_mock) -> None:
         output = self.root / "scene"
         render_mock.return_value = [output / "top.png"]
@@ -286,7 +286,7 @@ class UW2CliTests(unittest.TestCase):
         self.assertEqual(render_mock.call_args.kwargs["ceiling_source"], "ua")
         self.assertEqual(render_mock.call_args.kwargs["texture_filter"], "nearest")
 
-    @patch("titan.uw2.cli.export_map_scene")
+    @patch("titan.uw2.cli.maps.export_map_scene")
     def test_map_3d_export_preserves_sprite_option(self, export_mock) -> None:
         output = self.root / "scene"
         export_mock.return_value = output / "scene.glb"
@@ -322,7 +322,7 @@ class UW2CliTests(unittest.TestCase):
             name_files=False,
         )
 
-    @patch("titan.uw2.cli.verify_maps")
+    @patch("titan.uw2.cli.maps.verify_maps")
     def test_map_verify_reports_success_and_writes_optional_report(
         self, verify_mock
     ) -> None:
@@ -352,7 +352,7 @@ class UW2CliTests(unittest.TestCase):
         verify_mock.assert_called_once_with(self.root)
         self.assertTrue(json.loads(report.read_text(encoding="utf-8"))["ok"])
 
-    @patch("titan.uw2.cli.verify_maps")
+    @patch("titan.uw2.cli.maps.verify_maps")
     def test_map_verify_fails_when_the_report_lists_errors(self, verify_mock) -> None:
         (self.data / "LEV.ARK").write_bytes(b"placeholder")
         verify_mock.return_value = {
@@ -380,7 +380,7 @@ class UW2CliTests(unittest.TestCase):
 
         self.assertEqual(result, 1)
 
-    @patch("titan.uw2.cli.export_texture_catalog")
+    @patch("titan.uw2.cli.textures.export_texture_catalog")
     def test_texture_catalog_resolves_the_install_data_directory(
         self, catalog_mock
     ) -> None:
@@ -402,9 +402,9 @@ class UW2CliTests(unittest.TestCase):
 
         self.assertEqual(result, 1)
 
-    @patch("titan.uw2.cli.export_texture_usage")
-    @patch("titan.uw2.cli.load_levels")
-    @patch("titan.uw2.cli.build_texture_catalog")
+    @patch("titan.uw2.cli.textures.export_texture_usage")
+    @patch("titan.uw2.cli.textures.load_levels")
+    @patch("titan.uw2.cli.textures.build_texture_catalog")
     def test_texture_usage_defaults_to_every_map_slot(
         self, catalog_mock, levels_mock, usage_mock
     ) -> None:
@@ -431,9 +431,9 @@ class UW2CliTests(unittest.TestCase):
             [{"slot_index": 0}], {"textures": []}, str(output)
         )
 
-    @patch("titan.uw2.cli.export_texture_usage")
-    @patch("titan.uw2.cli.load_levels")
-    @patch("titan.uw2.cli.build_texture_catalog")
+    @patch("titan.uw2.cli.textures.export_texture_usage")
+    @patch("titan.uw2.cli.textures.load_levels")
+    @patch("titan.uw2.cli.textures.build_texture_catalog")
     def test_texture_usage_fails_when_no_requested_slot_is_populated(
         self, catalog_mock, levels_mock, usage_mock
     ) -> None:

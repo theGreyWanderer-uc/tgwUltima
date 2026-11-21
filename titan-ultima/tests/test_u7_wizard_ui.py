@@ -7,18 +7,18 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
+from titan import _wizard_ui as ui
+from titan.errors import EXIT_CODES
 from titan.fonts import wizard_ui as fonts
+from titan.u7 import container, container_ui, eggs_ui, target_picker
 from titan.u7 import shape_wizard as shapes
 from titan.u7 import shape_wizard_ui as shapes_ui
-from titan import _wizard_ui as ui
-from titan.u7.cli import u7_app
-from titan.u7.palette import U7Palette
-from titan.u7.shape import U7Shape
-from titan.u7 import container, container_ui, eggs_ui, target_picker
 from titan.u7.archive_targets import ArchiveTarget
+from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapObject
-from titan.errors import EXIT_CODES
+from titan.u7.palette import U7Palette
+from titan.u7.shape import U7Shape
 
 
 def scripted_menus(monkeypatch, answers):
@@ -93,7 +93,7 @@ def test_font_wizard_uses_named_menus_and_can_cancel_preview(tmp_path, monkeypat
 
 
 def test_gradient_menu_displays_swatches_for_every_preset(monkeypatch):
-    from titan.fonts.palette import list_gradient_presets, get_gradient_preset
+    from titan.fonts.palette import get_gradient_preset, list_gradient_presets
 
     prompts = scripted_menus(monkeypatch, ["1", False, "1", "6"])
     fonts._step_hollow_gradient(fonts.WizardConfig())

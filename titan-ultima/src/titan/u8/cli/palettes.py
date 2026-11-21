@@ -5,7 +5,6 @@ from __future__ import annotations
 __all__ = ["palette_export_cmd", "xformpal_export_cmd"]
 
 import os
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Annotated, Optional
@@ -23,8 +22,7 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
     """Export a U8 palette as a PNG swatch image."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     pal = U8Palette.from_file(filepath)
 

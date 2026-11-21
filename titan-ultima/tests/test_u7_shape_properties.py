@@ -83,7 +83,7 @@ def library(tmp_path, monkeypatch):
     (patch / "shape_info.txt").write_text(
         "%%section field_type\n:150/-1\n%%endsection\n%%section barge_type\n:150/3\n%%endsection\n"
     )
-    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.default_u7_exult_flx", lambda game: None)
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     return browser.load_library(target, "si", static / "SHAPES.VGA")
 

@@ -350,15 +350,19 @@ def test_resources_name_install_keys() -> None:
             continue
         section = sections.get(path[0], path[0])
         table = _meta._PATH_KIND_TABLES.get(section)
-        keys = (
-            set(getattr(__import__(table[0], fromlist=["x"]), table[1]))
-            if table
-            else set()
-        )
+        kinds = getattr(__import__(table[0], fromlist=["x"]), table[1]) if table else {}
         for name, resource in info.resources.items():
             where = f"{' '.join(path)} {name}"
-            assert info.params.get(name) in RESOURCE_KINDS, where
-            assert resource == ROOT or resource in keys, f"{where}: {resource!r}"
+            kind = info.params.get(name)
+            assert kind in RESOURCE_KINDS, where
+            assert resource == ROOT or resource in kinds, f"{where}: {resource!r}"
+            # The parameter means what the resource is: a working folder isn't
+            # an archive, and the root is a folder.
+            expected = "install-dir" if resource == ROOT else kinds[resource]
+            same = kind == expected or {kind, expected} <= {"install-file", "palette"}
+            assert same, (
+                f"{where}: a {kind} parameter can't take {resource!r} ({expected})"
+            )
 
 
 def test_input_kinds_for_known_commands() -> None:
@@ -379,3 +383,76 @@ def test_input_kinds_for_known_commands() -> None:
     assert tag(("uo", "art-export"), "client") == ("install-dir", "root")
     # Explicit tags win: a positional that takes a save or a loose file.
     assert tag(("u8", "npc-browse"), "source") == ("input-file", None)
+
+
+def test_output_options_have_no_relative_default() -> None:
+    """An omitted output goes to titan's export folder (``_config.export_output``),
+    not a name relative to wherever titan runs. ``"."`` defaults set in a
+    command's body (write into the current folder) are a separate, deliberate
+    convention and aren't parameter defaults."""
+    metas = _meta.command_metas()
+    relative = [
+        f"{' '.join(path)} {param.name}={param.default!r}"
+        for path, command in _leaf_commands()
+        for param in command.params
+        if path in metas
+        and metas[path].params.get(param.name) in ("output-file", "output-dir")
+        and isinstance(param.default, str)
+        and param.default
+        and not Path(param.default).is_absolute()
+    ]
+    assert relative == []
+
+
+def test_export_output_names_a_folder_per_command(tmp_path, monkeypatch) -> None:
+    from titan._config import export_output
+
+    monkeypatch.setenv("TITAN_DATA", str(tmp_path))
+    assert export_output("mine", "u9", "map-atlas") == "mine"
+    assert export_output(None, "u9", "map-atlas") == str(
+        tmp_path / "u9" / "exports" / "map-atlas"
+    )
+    assert export_output("", "u7", "map-export-json", "u7_map.json") == str(
+        tmp_path / "u7" / "exports" / "map-export-json" / "u7_map.json"
+    )
+
+
+def test_every_game_declares_working_support_modules() -> None:
+    """Each ``GAMES`` row names its support modules; each must provide its protocol."""
+    from importlib import import_module
+
+    protocols = {
+        "install": ("install_candidates", "discover_installs", "install_config"),
+        "saves": ("list_saves", "resolve_save"),
+        "mods": ("list_mods",),
+    }
+    for game in _meta.GAMES:
+        if game.config_section is None:
+            assert not (game.install or game.saves or game.mods or game.path_kinds)
+            continue
+        assert game.install, f"{game.id} has a config section but no install module"
+        for field_name, names in protocols.items():
+            module = getattr(game, field_name)
+            if module:
+                loaded = import_module(module)
+                missing = [name for name in names if not hasattr(loaded, name)]
+                assert not missing, f"{game.id} {module} lacks {missing}"
+        if game.path_kinds:
+            table = getattr(import_module(game.install), game.path_kinds)
+            assert isinstance(table, dict) and table
+        shared = [g.id for g in _meta.GAMES if g.install == game.install]
+        assert (len(shared) > 1) == (game.game_option is not None)
+
+
+def test_cli_code_lives_in_cli_modules() -> None:
+    """Commands live in a game's ``cli.py`` or ``cli/`` package, not in loose
+    ``*_cli.py`` modules beside the library (which the terminal-I/O and config
+    guards would otherwise have to exempt by name)."""
+    package = Path(titan.__file__).parent
+    loose = sorted(
+        path.relative_to(package).as_posix()
+        for path in package.rglob("*_cli.py")
+        if "cli" not in path.relative_to(package).parts[:-1]
+        and "third_party" not in path.parts
+    )
+    assert loose == []

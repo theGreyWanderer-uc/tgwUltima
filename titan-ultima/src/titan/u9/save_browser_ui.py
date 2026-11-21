@@ -36,6 +36,7 @@ from titan.u9.save_wording import (
     render_u9_plain_integrity,
 )
 from titan._meta import meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 25
 ACTION_KEYS = {
@@ -320,11 +321,13 @@ def run_u9_save_browser(
     if output is None:
         output = export_dir("u9", U9_SAVE_BROWSER_OUTPUT)
     if source is None and game_dir is None:
-        from titan.u9.install import configured_u9_path
+        from titan._meta import configured_install
 
-        game_dir = configured_u9_path("base")
-        if game_dir is not None and static_directory is None:
-            static_directory = configured_u9_path("static")
+        install = configured_install("u9")
+        if install is not None and install.settings.get("base"):
+            game_dir = install.root
+            if static_directory is None:
+                static_directory = install.resources.get("static")
     print("\nTitan U9 Save Browser")
     try:
         if source is None and slot is not None:
@@ -369,7 +372,7 @@ def run_u9_save_browser(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {clean_u9_browser_text(error)}")
-        return 1
+        return exit_code(error)
 
 
 @meta(results=("files",), params={"output": "output-dir"}, interactive=True)

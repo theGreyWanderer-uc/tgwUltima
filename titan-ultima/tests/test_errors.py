@@ -197,7 +197,65 @@ def test_results_file_lists_what_a_command_wrote(
     result = CliRunner().invoke(cli.app, ["flex-extract", str(source), "-o", str(out)])
     assert result.exit_code == 0, result.output
     document = json.loads(results.read_text(encoding="utf-8"))
-    assert document == {"outputs": [out.absolute().as_posix()], "exit_code": 0}
+    written = sorted(path.as_posix() for path in out.rglob("*") if path.is_file())
+    assert written and document == {
+        "outputs": [out.absolute().as_posix(), *written],
+        "exit_code": 0,
+    }
+
+
+def test_results_file_reports_tagged_outputs_and_default_folders(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Commands report their output parameter (and default export folder)
+    without calling record_output themselves."""
+    import typer
+
+    from titan._cli_aliases import root_group
+    from titan._config import export_output
+    from titan._meta import meta
+
+    app = typer.Typer(cls=root_group({}))
+
+    @app.command("one")
+    @meta(results=("file",), params={"output": "output-file"})
+    def one(output: str) -> None:
+        Path(output).write_text("x")
+
+    @app.command("many")
+    @meta(results=("files",), params={"output": "output-dir"})
+    def many(output: str = None) -> None:  # type: ignore[assignment]
+        folder = Path(export_output(output, "u9", "many"))
+        folder.mkdir(parents=True)
+        (folder / "a.txt").write_text("a")
+
+    @app.command("broken")
+    @meta(results=("file",), params={"output": "output-file"})
+    def broken(output: str) -> None:
+        raise SystemExit(1)
+
+    results = isolated / "results.json"
+    monkeypatch.setenv(_results.RESULTS_ENV, str(results))
+
+    def run(*args: str) -> dict:
+        result = CliRunner().invoke(app, list(args))
+        document = json.loads(results.read_text(encoding="utf-8"))
+        assert document["exit_code"] == result.exit_code
+        return document
+
+    target = isolated / "one.txt"
+    assert run("one", str(target))["outputs"] == [target.absolute().as_posix()]
+    folder = isolated / "data" / "u9" / "exports" / "many"
+    assert run("many")["outputs"] == [
+        folder.as_posix(),
+        (folder / "a.txt").as_posix(),
+    ]
+    # Nothing that doesn't exist is reported.
+    assert run("broken", str(isolated / "never.txt"))["outputs"] == []
+    monkeypatch.delenv(_results.RESULTS_ENV)
+    results.unlink()
+    CliRunner().invoke(app, ["one", str(target)])
+    assert not results.exists() and _results.recorded_outputs() == []
 
 
 def test_results_file_records_a_failed_run(

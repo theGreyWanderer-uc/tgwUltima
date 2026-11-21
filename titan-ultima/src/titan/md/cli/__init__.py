@@ -7,9 +7,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan._config import get_config
 from titan.md.map_render import MartianMapRenderer
-from titan.md.inspect_cli import register_martian_inspection_commands
+from titan.md.cli.inspect import register_martian_inspection_commands
 from titan.u6.lib import U6LibraryError
 from titan.u6.actor import U6ActorError
 from titan.u6.lzw import U6LzwError
@@ -137,7 +136,7 @@ def map_render_cmd(
     ] = None,
 ) -> None:
     """Render MD surface or underground terrain, optionally with world objects."""
-    directory = gamedir or get_config().get("md", {}).get("game", {}).get("base")
+    directory = gamedir  # when omitted, the CLI fills it from the configured install (titan._input_fill)
     if not directory:
         raise InstallNotFoundError(
             "Pass --game-dir or set [md.game] base in titan.toml"

@@ -77,6 +77,7 @@ from titan.u7.ireg_specials import (
     read_ireg_index,
     read_ireg_special,
 )
+from titan.errors import InvalidDataError
 
 # ---------------------------------------------------------------------------
 # Constants (from exult_constants.h)
@@ -142,7 +143,7 @@ def _frame_to_rgba(
     this boundary returns ``hotspot_x_from_left/hotspot_y_from_top``.
     """
     if fr.pixels is None:
-        raise ValueError("U7 frame has no pixel data")
+        raise InvalidDataError("U7 frame has no pixel data")
     indexed = Image.fromarray(fr.pixels, mode="P")
     indexed.putpalette(flat_rgb)
     rgba = indexed.convert("RGBA")

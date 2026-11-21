@@ -16,6 +16,7 @@ from titan.u7.ireg import decode_ireg_payload, nibble_swap
 from titan.u7.ireg_metadata import U7IregContext
 from titan.u7.ireg_specials import read_ireg_special
 from titan.u7.typeflag import U7TypeFlags
+from titan.errors import InvalidDataError
 
 U7IregFormat = Literal["retail", "exult"]
 
@@ -87,7 +88,7 @@ def read_ireg_wire_records(
         if marker in (0, 1):
             kind = "control"
         elif marker in (2, 253, 254, 255) and data_format == "retail":
-            raise ValueError(
+            raise InvalidDataError(
                 f"IREG rewrite: Exult control 0x{marker:02X} in retail stream at {start}"
             )
         elif marker == 2:
@@ -95,25 +96,25 @@ def read_ireg_wire_records(
         elif marker == 255:
             special, pos = read_ireg_special(data, start)
             if not special.complete:
-                raise ValueError(f"IREG rewrite: truncated special at {start}")
+                raise InvalidDataError(f"IREG rewrite: truncated special at {start}")
             kind = "control" if special.type_id == 2 else "special"
             header = 2 if special.type_id == 2 else 4
         else:
             if marker in (253, 254):
                 if pos == len(data):
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"IREG rewrite: truncated extended prefix at {start}"
                     )
                 marker = data[pos]
                 pos += 1
                 header = 2
                 if marker < 4 + int(data[start] == 254):
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"IREG rewrite: invalid extended length at {start}"
                     )
             pos += marker
         if pos > len(data):
-            raise ValueError(f"IREG rewrite: truncated {kind} at {start}")
+            raise InvalidDataError(f"IREG rewrite: truncated {kind} at {start}")
         records.append(U7IregWireRecord(start, kind, data[start:pos], header))
     return tuple(records)
 
@@ -152,12 +153,14 @@ def _edit_object_fields(
     }
     unknown = set(fields) - allowed
     if unknown:
-        raise ValueError(f"IREG rewrite: unsupported object fields: {sorted(unknown)}")
+        raise InvalidDataError(
+            f"IREG rewrite: unsupported object fields: {sorted(unknown)}"
+        )
     if (
         data_format == "retail"
         and {"invisible", "okay_to_take", "temporary"} & fields.keys()
     ):
-        raise ValueError(
+        raise InvalidDataError(
             "IREG rewrite: semantic flag edits are verified for Exult only"
         )
     payload = bytearray(record.payload)
@@ -165,7 +168,9 @@ def _edit_object_fields(
     length = len(payload) - adj
     supported = (6, 12, 18) if data_format == "retail" else (6, 10, 12, 13, 14, 18)
     if length not in supported:
-        raise ValueError(f"IREG rewrite: cannot edit opaque object at {record.offset}")
+        raise InvalidDataError(
+            f"IREG rewrite: cannot edit opaque object at {record.offset}"
+        )
     decoded = decode_ireg_payload(
         bytes(payload),
         entlen=len(payload),
@@ -174,7 +179,9 @@ def _edit_object_fields(
         context=context,
     )
     if decoded is None:
-        raise ValueError(f"IREG rewrite: unsupported class layout at {record.offset}")
+        raise InvalidDataError(
+            f"IREG rewrite: unsupported class layout at {record.offset}"
+        )
     class_fields = {
         "quality_byte",
         "invisible",
@@ -183,7 +190,7 @@ def _edit_object_fields(
     } & fields.keys()
     shape_info = context.tfa.get(decoded.shape) if context and context.tfa else None
     if class_fields and shape_info is None:
-        raise ValueError(
+        raise InvalidDataError(
             "IREG rewrite: quality/flag edits require matching TFA class metadata"
         )
     if "quality_byte" in fields and {"invisible", "okay_to_take"} & fields.keys():
@@ -195,7 +202,7 @@ def _edit_object_fields(
             index = 0 if name == "x_byte" else 1
             coordinate = _integer(name, value, 255)
             if data_format == "retail" and coordinate >> 4 != payload[index] >> 4:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG rewrite: retail coordinate edits must preserve the high nibble; chunk regrouping is not implemented"
                 )
             payload[index] = coordinate
@@ -215,7 +222,7 @@ def _edit_object_fields(
             )
         elif name == "quality_byte":
             if decoded.kind not in ("simple", "container", "body", "jawbone"):
-                raise ValueError(
+                raise InvalidDataError(
                     f"IREG rewrite: no editable quality byte for {decoded.kind}"
                 )
             payload[(5 if decoded.kind == "simple" else 7) + adj] = _integer(
@@ -230,7 +237,7 @@ def _edit_object_fields(
                     or length != 10
                     or shape_class == U7TypeFlags.SHAPE_CLASS_QUALITY_FLAGS
                 ):
-                    raise ValueError(
+                    raise InvalidDataError(
                         "IREG rewrite: temporary needs a 10-byte simple object without quality flags"
                     )
                 offset, mask = 6 + adj, 1
@@ -257,7 +264,7 @@ def _edit_object_fields(
             ):
                 offset, mask = 5 + adj, 128
             else:
-                raise ValueError(
+                raise InvalidDataError(
                     f"IREG rewrite: {name} has no stored flag in this class/layout"
                 )
             payload[offset] = (
@@ -277,20 +284,24 @@ def rewrite_ireg_stream(
     """Rewrite targeted IREG records; preserve all other bytes and reject stale edits."""
     source_hash = hashlib.sha256(data).hexdigest()
     if expected_sha256 is not None and expected_sha256.lower() != source_hash:
-        raise ValueError("IREG rewrite: source SHA-256 does not match the edit plan")
+        raise InvalidDataError(
+            "IREG rewrite: source SHA-256 does not match the edit plan"
+        )
     records = read_ireg_wire_records(data, data_format=data_format)
     pending: dict[int, U7IregEdit] = {}
     for requested_edit in edits:
         offset = _integer("offset", requested_edit.offset, len(data))
         if offset in pending:
-            raise ValueError(f"IREG rewrite: duplicate edit offset {offset}")
+            raise InvalidDataError(f"IREG rewrite: duplicate edit offset {offset}")
         operations = (
             bool(requested_edit.fields)
             + (requested_edit.special_payload is not None)
             + (requested_edit.index_word is not None)
         )
         if operations != 1:
-            raise ValueError("IREG rewrite: each edit requires exactly one operation")
+            raise InvalidDataError(
+                "IREG rewrite: each edit requires exactly one operation"
+            )
         pending[offset] = requested_edit
     output = bytearray()
     changes: list[dict[str, object]] = []
@@ -299,7 +310,7 @@ def rewrite_ireg_stream(
         rewritten = record.raw
         if edit is not None:
             if edit.expected_raw is not None and edit.expected_raw != record.raw:
-                raise ValueError(
+                raise InvalidDataError(
                     f"IREG rewrite: expected record bytes do not match at {record.offset}"
                 )
             if edit.fields and record.kind == "object":
@@ -315,7 +326,7 @@ def rewrite_ireg_stream(
                 )
                 parsed, _ = read_ireg_special(rewritten, 0)
                 if parsed.type_id in (1, 3, 4) and not parsed.decoded_complete:
-                    raise ValueError(
+                    raise InvalidDataError(
                         "IREG rewrite: replacement special payload fails known-type validation"
                     )
             elif edit.index_word is not None and record.kind == "index":
@@ -323,7 +334,7 @@ def rewrite_ireg_stream(
                     "index_word", edit.index_word, 65535
                 ).to_bytes(2, "little")
             else:
-                raise ValueError(
+                raise InvalidDataError(
                     f"IREG rewrite: operation does not match record kind at {record.offset}"
                 )
             changes.append(
@@ -337,7 +348,7 @@ def rewrite_ireg_stream(
             )
         output.extend(rewritten)
     if pending:
-        raise ValueError(
+        raise InvalidDataError(
             f"IREG rewrite: edit offsets are not record boundaries: {sorted(pending)}"
         )
     result = bytes(output)
@@ -348,21 +359,23 @@ def rewrite_ireg_stream(
 def read_ireg_edit_plan(plan: object) -> tuple[str, tuple[U7IregEdit, ...]]:
     """Validate JSON edit plans: mandatory source hash and expected original record bytes."""
     if not isinstance(plan, dict) or set(plan) != {"source_sha256", "edits"}:
-        raise ValueError("IREG rewrite: plan requires only source_sha256 and edits")
+        raise InvalidDataError(
+            "IREG rewrite: plan requires only source_sha256 and edits"
+        )
     source_hash, rows = plan["source_sha256"], plan["edits"]
     if not isinstance(source_hash, str) or len(source_hash) != 64:
-        raise ValueError(
+        raise InvalidDataError(
             "IREG rewrite: source_sha256 must contain 64 hexadecimal digits"
         )
     try:
         if len(bytes.fromhex(source_hash)) != 32:
             raise ValueError
     except ValueError as error:
-        raise ValueError(
+        raise InvalidDataError(
             "IREG rewrite: source_sha256 must contain 64 hexadecimal digits"
         ) from error
     if not isinstance(rows, list):
-        raise ValueError("IREG rewrite: edits must be an array")
+        raise InvalidDataError("IREG rewrite: edits must be an array")
     edits: list[U7IregEdit] = []
     for row in rows:
         if (
@@ -371,11 +384,11 @@ def read_ireg_edit_plan(plan: object) -> tuple[str, tuple[U7IregEdit, ...]]:
             or set(row)
             - {"offset", "expected_hex", "fields", "special_payload_hex", "index_word"}
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG rewrite: edit requires offset, expected_hex and one known operation"
             )
         if len({"fields", "special_payload_hex", "index_word"} & row.keys()) != 1:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG rewrite: each JSON edit requires exactly one operation"
             )
         try:
@@ -387,7 +400,7 @@ def read_ireg_edit_plan(plan: object) -> tuple[str, tuple[U7IregEdit, ...]]:
                 raise ValueError
             payload = bytes.fromhex(special) if isinstance(special, str) else None
         except ValueError as error:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG rewrite: expected_hex and special_payload_hex must be hex strings"
             ) from error
         fields = row.get("fields", {})
@@ -395,7 +408,9 @@ def read_ireg_edit_plan(plan: object) -> tuple[str, tuple[U7IregEdit, ...]]:
             not isinstance(key, str) or not isinstance(value, (int, bool))
             for key, value in fields.items()
         ):
-            raise ValueError("IREG rewrite: fields must map names to integers/booleans")
+            raise InvalidDataError(
+                "IREG rewrite: fields must map names to integers/booleans"
+            )
         if "index_word" in row:
             _integer("index_word", row["index_word"], 65535)
         edits.append(

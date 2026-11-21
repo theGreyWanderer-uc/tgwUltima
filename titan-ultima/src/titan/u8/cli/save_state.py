@@ -22,6 +22,7 @@ from titan.u8.save_diff import format_u8_save_diff
 from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
 from titan.u8.state_report_ui import write_u8_state_report
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 @meta(
@@ -102,7 +103,7 @@ def flags_dump_cmd(
         write_u8_state_report(report, output, sources, "Global flags")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -132,7 +133,7 @@ def save_info_cmd(
         )
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -190,7 +191,7 @@ def save_diff_cmd(
         write_u8_state_report(report, output, sources, "Save comparison")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -217,7 +218,7 @@ def avatar_dump_cmd(
         write_u8_state_report(report, output, (file,), "Avatar state")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -250,7 +251,7 @@ def gumps_dump_cmd(
         write_u8_state_report(report, output, (file,), "Container UI state")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -296,7 +297,7 @@ def kernel_dump_cmd(
         write_u8_state_report(report, output, (file,), "Kernel state")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 def register_u8_save_commands(app: typer.Typer) -> None:

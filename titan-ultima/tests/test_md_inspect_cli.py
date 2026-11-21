@@ -7,15 +7,16 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.md_fixtures import md_game as md_game
+from titan.errors import EXIT_CODES
 from titan.md.cli import md_app
-from titan.u6.converse import U6ConverseInstruction, disassemble
 from titan.md.references import (
+    disassemble_martian_dialogue,
     martian_dialogue_report,
     read_martian_books,
     read_martian_dialogue,
     read_martian_names,
-    disassemble_martian_dialogue,
 )
+from titan.u6.converse import U6ConverseInstruction, disassemble
 
 
 def test_md_reference_wrappers_and_non_npc_record(md_game: Path) -> None:
@@ -110,12 +111,17 @@ def test_df_name_is_scoped_to_md_and_preserves_operands_and_offsets() -> None:
 
 
 @pytest.mark.parametrize(
-    "command,extra",
-    [("converse-dump", ["--item", "0"]), ("book-dump", ["--book", "99"])],
+    "command,extra,status",
+    [
+        # A record that isn't a dialogue script is bad data; a book number
+        # outside the file is a bad argument.
+        ("converse-dump", ["--item", "0"], EXIT_CODES["invalid-data"]),
+        ("book-dump", ["--book", "99"], EXIT_CODES["error"]),
+    ],
 )
 def test_invalid_md_record_is_reported_cleanly(
-    md_game: Path, command: str, extra: list[str]
+    md_game: Path, command: str, extra: list[str], status: int
 ) -> None:
     result = CliRunner().invoke(md_app, [command, "-g", str(md_game), *extra])
-    assert result.exit_code == 1 and "ERROR:" in result.output
+    assert result.exit_code == status and "ERROR:" in result.output
     assert "Traceback" not in result.output

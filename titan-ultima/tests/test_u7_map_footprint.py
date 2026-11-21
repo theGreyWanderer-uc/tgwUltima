@@ -10,7 +10,6 @@ from pathlib import Path
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapRenderer
 
-
 SHAPE_376 = 376
 
 

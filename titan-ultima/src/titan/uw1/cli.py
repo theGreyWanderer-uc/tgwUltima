@@ -10,7 +10,6 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan._config import get_config
 from titan.uw1.texture import (
     UW1TextureError,
     export_all_textures,
@@ -36,9 +35,8 @@ uw1_app = typer.Typer(
 )
 
 
-def _game_directory(explicit: str | None) -> Path | None:
-    configured = get_config().get("uw1", {}).get("game", {}).get("base")
-    value = explicit or configured
+def _game_directory(value: str | None) -> Path | None:
+    """The ``--game-dir`` value; when omitted, the CLI fills it from the configured install (titan._input_fill)."""
     return Path(value).expanduser() if value else None
 
 

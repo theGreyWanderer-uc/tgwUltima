@@ -10,7 +10,6 @@ import typer
 
 from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan.u8.install import u8_cfg as cfg
 from titan._image_preview import open_preview
 from titan._inventory_browser import InventoryBrowser, InventoryFilters
 from titan.u8.container_browser import (
@@ -39,7 +38,8 @@ from titan.u8.save_browser_ui import choose_u8_save_browser_source
 from titan.u8.save_state import U8SaveSnapshot
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 25
 
@@ -306,7 +306,8 @@ def run_u8_container_browser(
         library = None
         gump_library = None
         if not data_only:
-            configured = cfg("u8shapes")
+            install = configured_install("u8")
+            configured = install.resources.get("u8shapes") if install else None
             shapes = shapes or (
                 Path(configured) if configured and not game_dir else None
             )
@@ -317,7 +318,7 @@ def run_u8_container_browser(
                 shapes = find_u8_browser_file(target.static, "U8SHAPES.FLX")
                 if shapes is None:
                     raise ValueError("U8SHAPES.FLX missing from selected STATIC")
-            library = load_u8_shape_library(shapes, palette=palette)
+            library = load_u8_shape_library(shapes, palette=palette, install=install)
             owner_gumps = gumps or find_u8_browser_file(
                 library.path.parent, "U8GUMPS.FLX"
             )
@@ -368,7 +369,7 @@ def run_u8_container_browser(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 @meta(
@@ -379,9 +380,10 @@ def run_u8_container_browser(
         "source": "save",
         "gumps": "install-file",
         "names": "input-file",
+        "shapes": "install-file",
     },
     interactive=True,
-    resources={"gumps": "u8gumps"},
+    resources={"gumps": "u8gumps", "shapes": "u8shapes"},
 )
 def container_browse_cmd(
     source: Annotated[

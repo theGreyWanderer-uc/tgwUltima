@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from titan.u7 import install
+from titan.u7.install import u7_static_and_palette
 from titan.u7.map import U7MapObject, U7MapRenderer
 from titan.u7.map_inventory import _ireg_entries
 from titan.u7.usecode import U7UsecodeFile
@@ -20,6 +20,9 @@ from titan.u7.world import (
 
 from .geometry import NUM_SUPERCHUNKS, TILES_PER_CHUNK, WORLD_TILES
 from .npcs import load_npcs
+
+if TYPE_CHECKING:
+    from titan._meta import Installation
 
 GAME_IDS = {"bg": "u7bg", "si": "u7si"}
 
@@ -89,18 +92,28 @@ class MapScan:
         map_num: int = 0,
         *,
         read_ireg: bool = True,
+        install: Installation | None = None,
     ) -> MapScan:
-        """Read a map from STATIC (or the configured install for ``game``)."""
+        """Read a map from STATIC, by default *install*'s (``titan._meta.configured_install``).
+
+        ``palette_path`` is *install*'s PALETTES.FLX, if it has one.
+        """
         if game not in GAME_IDS:
             raise ValueError(
                 f"unknown game {game!r}; expected one of {sorted(GAME_IDS)}"
             )
-        configured, palette_path = install.resolve_u7_static_and_palette(game)
+        configured, palette_path = u7_static_and_palette(install)
         static_dir = static_dir or configured
         if not static_dir or not Path(static_dir).is_dir():
             raise FileNotFoundError(f"STATIC directory not found: {static_dir}")
 
-        params = WorldQueryParams(static_dir=static_dir, game=game, map_num=map_num)
+        bundle = install.resources.get("exult_flx") if install is not None else None
+        params = WorldQueryParams(
+            static_dir=static_dir,
+            game=game,
+            map_num=map_num,
+            exult_flx_path=str(bundle) if bundle else None,
+        )
         base, patch = resolve_world_sources(params)
         tfa, names, _frames, count = load_query_metadata(params)
         renderer = U7MapRenderer(

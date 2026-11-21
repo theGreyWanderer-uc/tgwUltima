@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 
 from titan.u7.saved_values import U7SavedValueReader, saved_value_row
+from titan.errors import InvalidDataError
 
 SPECIAL_NAMES = {1: "usecode_script", 2: "endmark", 3: "attributes", 4: "string"}
 
@@ -78,7 +79,7 @@ def read_ireg_index(
     from titan.u7.save import _READY_SLOT_NAMES
 
     if not 0 <= offset < len(data) or data[offset] != 2:
-        raise ValueError(f"IREG index marker missing at offset {offset}")
+        raise InvalidDataError(f"IREG index marker missing at offset {offset}")
 
     end = min(offset + 3, len(data))
     complete = end == offset + 3
@@ -149,9 +150,9 @@ def _decode_attributes(record: U7IregSpecial, payload: bytes) -> None:
         start = pos
         end = payload.find(b"\0", pos)
         if end < 0:
-            raise ValueError("attribute name has no NUL terminator")
+            raise InvalidDataError("attribute name has no NUL terminator")
         if end + 3 > len(payload):
-            raise ValueError("attribute value is truncated")
+            raise InvalidDataError("attribute value is truncated")
         name = payload[pos:end]
         value = int.from_bytes(payload[end + 1 : end + 3], "little")
         pos = end + 3
@@ -173,7 +174,7 @@ def read_ireg_special(
 ) -> tuple[U7IregSpecial, int]:
     """Read FF/type/u16/payload, with the no-length FF02 terminator as a special case."""
     if not 0 <= offset < len(data) or data[offset] != 255:
-        raise ValueError(f"IREG special marker missing at offset {offset}")
+        raise InvalidDataError(f"IREG special marker missing at offset {offset}")
     type_id = data[offset + 1] if offset + 1 < len(data) else None
     kind = SPECIAL_NAMES.get(type_id, "unknown") if type_id is not None else "unknown"
     if type_id == 2:
@@ -219,7 +220,7 @@ def read_ireg_special(
                 "trailing_hex": trailing.hex(),
             }
             if not nul:
-                raise ValueError("string has no NUL terminator")
+                raise InvalidDataError("string has no NUL terminator")
             if trailing:
                 record.warnings.append("string has bytes after NUL; retained")
         else:

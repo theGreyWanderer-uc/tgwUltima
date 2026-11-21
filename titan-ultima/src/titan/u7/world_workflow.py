@@ -24,6 +24,7 @@ from titan.u7.world import (
     resolve_world_sources,
     validate_params,
 )
+from titan.errors import InvalidDataError
 
 
 log = logging.getLogger(__name__)
@@ -109,31 +110,33 @@ def load_recipe(
     changes: dict[str, Any] = {}
     for section, entries in data.items():
         if section not in schemas or not isinstance(entries, dict):
-            raise ValueError(f"Unknown or invalid recipe section: {section}")
+            raise InvalidDataError(f"Unknown or invalid recipe section: {section}")
         for key, value in entries.items():
             field = schemas[section].get(key)
             if field is None:
-                raise ValueError(f"Unknown recipe option: {section}.{key}")
+                raise InvalidDataError(f"Unknown recipe option: {section}.{key}")
             if field in path_fields:
                 if not isinstance(value, str) or not value.strip():
-                    raise ValueError(f"{section}.{key} must be a non-empty path")
+                    raise InvalidDataError(f"{section}.{key} must be a non-empty path")
                 p = Path(value).expanduser()
                 value = str(p if p.is_absolute() else recipe.parent / p)
             elif field in integer_fields:
                 if not isinstance(value, list) or any(
                     type(n) is not int for n in value
                 ):
-                    raise ValueError(f"{section}.{key} must be an integer array")
+                    raise InvalidDataError(f"{section}.{key} must be an integer array")
                 if field == "tile_rect":
                     if len(value) != 4:
-                        raise ValueError("filters.tile_rect must have four coordinates")
+                        raise InvalidDataError(
+                            "filters.tile_rect must have four coordinates"
+                        )
                     value = parse_rectangle(",".join(str(n) for n in value))
             elif field == "shape_classes":
                 class_codes = {v: k for k, v in U7TypeFlags.SHAPE_CLASS_NAMES.items()}
                 if not isinstance(value, list) or any(
                     not isinstance(c, str) or c not in class_codes for c in value
                 ):
-                    raise ValueError(
+                    raise InvalidDataError(
                         "filters.classes must be an array of valid class names"
                     )
                 value = [class_codes[c] for c in value]
@@ -141,15 +144,15 @@ def load_recipe(
                 if not isinstance(value, list) or any(
                     not isinstance(f, str) for f in value
                 ):
-                    raise ValueError("filters.flags must be a string array")
+                    raise InvalidDataError("filters.flags must be a string array")
             elif field in {"include_ifix", "include_ireg"}:
                 if type(value) is not bool:
-                    raise ValueError(f"{section}.{key} must be a boolean")
+                    raise InvalidDataError(f"{section}.{key} must be a boolean")
             elif field == "map_num":
                 if type(value) is not int:
-                    raise ValueError("world.map_num must be an integer")
+                    raise InvalidDataError("world.map_num must be an integer")
             elif not isinstance(value, str):
-                raise ValueError(f"{section}.{key} must be text")
+                raise InvalidDataError(f"{section}.{key} must be text")
             changes[field] = value
     params = replace(defaults or WorldQueryParams(static_dir=""), **changes)
     validate_params(params, require_gamedat=False)

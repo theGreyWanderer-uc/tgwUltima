@@ -6,7 +6,7 @@ Ultima 8's SOUND.FLX into PCM or WAV.
 
 Example::
 
-    from titan.sound import SonarcDecoder
+    from titan.u8.sound import SonarcDecoder
 
     with open("0001.raw", "rb") as f:
         data = f.read()

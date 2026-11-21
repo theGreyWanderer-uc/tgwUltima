@@ -11,7 +11,6 @@ from PIL import Image
 
 from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan.u8.install import u8_cfg as cfg
 from titan._terminal_image import terminal_image
 from titan.u8.npc_animation_report import export_u8_npc_animation_report
 from titan.u8.npc_browser import (
@@ -32,7 +31,8 @@ from titan.u8.shape_browser import (
 )
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
 from titan.u8.state_report_ui import write_u8_state_report
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 30
 
@@ -63,7 +63,9 @@ def _npc_optional_number(message: str, current: int | None, maximum: int) -> int
 
 
 def _choose_npc_source(library: U8ShapeLibrary) -> Path | None:
-    gamedats, saves = discover_u8_npc_sources(library.path.parent)
+    gamedats, saves = discover_u8_npc_sources(
+        library.path.parent, configured_install("u8")
+    )
     choices = [("GAMEDAT", path) for path in gamedats] + [
         ("Save", path) for path in saves
     ]
@@ -486,7 +488,8 @@ def run_u8_npc_browser(
     try:
         if npc is not None and not 0 <= npc <= 255:
             raise ValueError("U8 NPC browser: NPC ID must be 0-255")
-        configured_shapes = cfg("u8shapes")
+        install = configured_install("u8")
+        configured_shapes = install.resources.get("u8shapes") if install else None
         initial_shapes = shapes or (
             Path(configured_shapes) if configured_shapes else None
         )
@@ -504,7 +507,9 @@ def run_u8_npc_browser(
                         print("  U8SHAPES.FLX not found in selected graphics source.")
                         continue
                 try:
-                    library = load_u8_shape_library(path, palette=palette, anim=anim)
+                    library = load_u8_shape_library(
+                        path, palette=palette, anim=anim, install=install
+                    )
                     print(f"  Graphics: {library.path}")
                     for issue in library.diagnostics:
                         print(f"  Metadata unavailable: {issue}")
@@ -565,7 +570,7 @@ def run_u8_npc_browser(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 @meta(
@@ -577,8 +582,10 @@ def run_u8_npc_browser(
         "anim": "install-file",
         "itemcach": "input-file",
         "names": "input-file",
+        "shapes": "install-file",
     },
     interactive=True,
+    resources={"shapes": "u8shapes"},
 )
 def npc_browse_cmd(
     source: Annotated[

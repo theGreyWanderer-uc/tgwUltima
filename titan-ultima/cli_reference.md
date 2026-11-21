@@ -70,20 +70,25 @@ problems) and exits with a status that says what kind of problem it was:
 | Status | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | A reported error |
+| `1` | A reported error that isn't one of the kinds below, usually a bad option value |
 | `2` | Bad command-line arguments |
 | `65` | An input file isn't in the expected format, or is damaged |
 | `66` | A file that should exist doesn't |
 | `69` | Not supported here (format variant, or an optional library isn't installed) |
 | `70` | A bug in titan; the traceback is printed. Please report it |
+| `73` | An output already exists; pass the command's `--force` / `--replace` to overwrite it |
 | `74` | The system couldn't read or write a file |
 | `78` | titan isn't set up for this: no install configured, a missing configured path, or an invalid `titan.toml` |
 | `130` | Cancelled: Ctrl+C, or a wizard's input ended before it finished. Choosing a wizard's Quit is `0` |
 
+A command reports these whether the error reaches titan's top level or the
+command prints it itself.
+
 Front ends can set `TITAN_RESULTS_FILE` to a path; titan then writes a JSON
 document there when the command ends, `{"outputs": [...], "exit_code": N}`,
-listing the files and folders the command reported writing. Commands adopt
-this gradually; an empty list means "check the output option".
+listing what the command wrote: its output file, or its output folder followed
+by the files written into it during the run (up to 2000; a larger export lists
+only the folder). Only paths that exist when the command ends are listed.
 
 Older spellings still work, so existing scripts keep running; `--help`
 shows only the new names:
@@ -1251,7 +1256,7 @@ titan u8 shape-convert-u7-all <file> --typeflag FILE --u7-static DIR [--u8-palet
 | `--u7-static DIR` | Path to a real U7/Exult `STATIC` directory (`SHAPES.VGA` + `TFA.DAT`) |
 | `--u8-palette FILE` | Path to `U8PAL.PAL` |
 | `--u7-palette FILE` | Path to U7's `PALETTES.FLX` (default: `<u7-static>/PALETTES.FLX`) |
-| `-o DIR`, `--output-dir DIR` | Output directory (default: `u7_converted/`) |
+| `-o DIR`, `--output-dir DIR` | Output directory (default: `<data folder>/u8/exports/shape-convert-u7-all`) |
 
 **Example**
 ```bash
@@ -1583,7 +1588,7 @@ titan u8 map-render-all [path flags] [-o DIR] [--views VIEW ...] [--maps N ...] 
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `-o DIR`, `--output-dir DIR` | `map_renders/` | Output directory |
+| `-o DIR`, `--output-dir DIR` | `<data folder>/u8/exports/map-render-all` | Output directory |
 | `--views VIEW ...` | all views | One or more projection views to render |
 | `--maps N ...` | all non-empty | Specific map numbers to render |
 
@@ -1637,7 +1642,7 @@ titan u8 map-sample-all [path flags] [-o DIR] [-s N] [--scales N ...] [--maps N 
 
 | Argument | Default | Description |
 |----------|---------|-------------|
-| `-o DIR`, `--output-dir DIR` | `map_samples/` | Output directory |
+| `-o DIR`, `--output-dir DIR` | `<data folder>/u8/exports/map-sample-all` | Output directory |
 | `--scale N`, `-s N` | `64` | Scale to use when `--scales` is not given |
 | `--scales N ...` | | One or more scales (overrides `--scale`) |
 | `--maps N ...` | all non-empty | Specific map numbers to sample |
@@ -3217,7 +3222,7 @@ titan u7 map-inventory [STATIC] [--game bg|si] [--map-num N] [-o DIR]
                        [--cx0 X --cy0 Y [--cx1 X --cy1 Y]]
 ```
 
-Writes to `u7data/map-inventory/<game>-map<NN>/` by default:
+Writes to `<data folder>/u7/exports/map-inventory/<game>-map<NN>/` by default:
 - `objects.csv` and `flats.csv`, one row per shape:frame. Each row has its
   name, TFA class and flags, footprint, placements, share, cumulative
   coverage, per-source counts, lift range, superchunk spread and a sample
@@ -4264,7 +4269,7 @@ titan u7 shape-cycle-scan <file> --static DIR [-p PAL] [-o DIR]
 | `file` | Path to a VGA Flex archive (e.g. `SHAPES.VGA`) |
 | `--static DIR` | `STATIC/` directory for TFA animation-type and real `XFORM.TBL`/`BLENDS.DAT` translucency lookup (**required**) |
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX` or raw `.pal` (default: greyscale) — only affects the exported indexed PNGs' attached palette, not which pixel values are exported |
-| `-o DIR`, `--output-dir DIR` | Output directory (default: `shape_cycle_scan/`) |
+| `-o DIR`, `--output-dir DIR` | Output directory (default: `<data folder>/u7/exports/shape-cycle-scan`) |
 | `--range-start N` | First shape index to scan (default: 0) |
 | `--range-end N` | Last shape index (exclusive; default: all) |
 | `-f json\|csv`, `--format json\|csv` | Descriptor format (default: `json`) |
@@ -4572,7 +4577,7 @@ titan u7 map-export-json [static] [--game bg|si] [--map-num N]
 | `static` | Source STATIC/map root containing shared `U7CHUNKS`, graphics metadata, and root map data or a selected `mapNN`; defaults to configured BG/SI STATIC |
 | `--game bg\|si` | Select source format and configured path; default `bg` |
 | `--map-num N` | Export map `0` from the source root or secondary map `N` from `mapNN`; default `0` |
-| `-o FILE`, `--output FILE` | Output JSON path; default `u7_map.json` |
+| `-o FILE`, `--output FILE` | Output JSON path; default `<data folder>/u7/exports/map-export-json/u7_map.json` |
 | `--include-fixed`, `--no-fixed` | Include or omit IFIX objects such as mountain faces; included by default |
 | `--shape-metadata`, `--no-shape-metadata` | Include or omit dimensions, origins, names, and frame counts for referenced shapes; included by default |
 | `--wrap-x`, `--wrap-y` | Declare horizontal or vertical wrapping in JSON metadata; both default off and do not alter source map data |
@@ -5010,6 +5015,38 @@ titan u7 gflag-dump gamedat/flaginit -f detail -o gflags.txt
 
 ---
 
+#### `u7 mods`
+
+List the mods and Exult custom games titan finds for a game: the names
+`--mod` takes, whether each has been played, and where its files are.
+
+```
+titan u7 mods [--game bg|si] [--format text|json]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `--game bg|si` | Black Gate (`bg`, default) or Serpent Isle (`si`) |
+| `--format text|json` | `text` (default): one line per mod; `json`: every path, plus problems with configured paths |
+
+Mods come from their descriptions (`<mods>/<name>.cfg`), bare mod folders
+with a `patch/` folder, `[u7bg.mods."<name>".paths]` / `[u7si.mods."<name>".paths]`,
+and the custom game entries in `exult.cfg`. The mods folders are Exult's
+(`exult.cfg`) and the install's `mods/`. A configured path wins over what is
+found on disk; one that doesn't exist is listed as a problem.
+
+```
+BG mods and Exult games (pass the key to --mod):
+  Keyring            mod         played      BLACK GATE KEYRING
+  greatsoutnernland  Exult game  played      GREAT SOUTHN LAND O STRAYA
+  islefaq            mod         not played  SourceForge Island
+```
+
+`--mod` also completes these names in shells set up with
+`titan --install-completion`.
+
+---
+
 #### `u7 gamedat-info`
 
 Inspect a loose Exult `GAMEDAT/` directory or Exult archive in one pass and
@@ -5028,7 +5065,7 @@ titan u7 gamedat-info [GAMEDAT_DIR|ARCHIVE] [--game bg|si] [--mod NAME] [--stati
 |----------|-------------|
 | `GAMEDAT_DIR|ARCHIVE` | Directory containing loose Exult runtime files, or an Exult ZIP/FLEX archive containing GAMEDAT entries. Optional when config or user-profile discovery can resolve a source |
 | `--game bg|si` | Select config section for default GAMEDAT/STATIC lookup (`bg` default) |
-| `--mod NAME` | Resolve a configured or user-profile mod source such as `serpentisle/mods/NAME/gamedat`, falling back to `[u7si.mods."NAME".paths].archive` |
+| `--mod NAME` | Read this mod's or Exult custom game's GAMEDAT, else its `initgame.dat` (names from `titan u7 mods`; case-insensitive). Stops with an error when the name is unknown or the mod has neither |
 | `--static DIR` | Override STATIC directory for TFA container detection |
 | `-o FILE`, `--output FILE` | Write report to this file |
 | `-f FORMAT`, `--format FORMAT` | Output format: `summary` (default), `detail`, `csv` |
@@ -5542,7 +5579,7 @@ titan u6 tile-export-all [-g DIR] [-p FILE] [--start N] [--end N] [-o DIR]
 | `-p FILE`, `--palette FILE` | Path to `U6PAL` |
 | `--start N` | First tile number, inclusive (default: `0`) |
 | `--end N` | Last tile number, inclusive (default: the last tile) |
-| `-o DIR`, `--output-dir DIR` | Output directory (default: `tiles_png/`) |
+| `-o DIR`, `--output-dir DIR` | Output directory (default: `<data folder>/u6/exports/tile-export-all`) |
 
 **Example**
 ```bash
@@ -6211,7 +6248,7 @@ titan u9 dimension-csv <file> [-o DIR] [--models SAPPEAR.FLX]
 | `file` | Path to `static/dimension.dat` |
 | `id` | Model ID from `0` through `7999` |
 | `--models PATH` | Optional `static/sappear.flx` same-ID comparison |
-| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `dimension_csv`) |
+| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `<data folder>/u9/exports/dimension-csv`) |
 
 The parser follows the retail four-block layout. The two final 32,000-byte
 blocks are prefixes of vector arrays: complete bound triplets exist through ID
@@ -6239,7 +6276,7 @@ titan u9 spaces-csv <file> [-o DIR]
 |----------|-------------|
 | `file` | Path to `static/spaces.flx` |
 | `id` | Space ID (the FLX entry index) |
-| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `spaces_csv`) |
+| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `<data folder>/u9/exports/spaces-csv`) |
 
 `spaces-info` totals the volumes, boundary planes and portals and reports
 lifecycle anomalies: entries the game rebuilds at runtime, nonzero flag cells
@@ -6274,7 +6311,7 @@ titan u9 treedat-csv <file> [-o DIR] [--spaces SPACES.FLX]
 | `file` | Path to `static/treedat.flx` |
 | `id` | Map ID (the FLX entry index) |
 | `--spaces PATH` | Optional `static/spaces.flx`, to check each map's volume list against the volumes that name that map |
-| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `treedat_csv`) |
+| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `<data folder>/u9/exports/treedat-csv`) |
 
 `treedat-csv` writes `u9_treedat_maps.csv`, `u9_treedat_nodes.csv` and
 `u9_treedat_node_volumes.csv` (leaf membership). With `--spaces`, maps whose
@@ -6305,7 +6342,7 @@ titan u9 areas-csv <file> [-o DIR]
 |----------|-------------|
 | `file` | Path to `static/areas.flx` |
 | `id` | Gameplay-zone ID (the FLX entry index) |
-| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `areas_csv`) |
+| `-o DIR`, `--output-dir DIR` | CSV output directory (default: `<data folder>/u9/exports/areas-csv`) |
 
 `areas-info` counts zones, world boxes, trigger-enabled zones, encounter
 tables and unsupported records, and lists structural warnings. Retail 1.19F
@@ -6849,7 +6886,7 @@ titan u9 model-export-all <file> [-t TEXTURES] [-p PALETTE] [--types TYPES] [--t
 | `--typenames FILE` | Path to `static/TYPENAME.FLX` (with `--types`, names each output folder/files) |
 | `--lod N` | LOD level to export (default: `0`, highest detail) |
 | `-f FORMAT`, `--format FORMAT` | `obj`, `stl`, or `both` (default: `obj`) |
-| `-o DIR`, `--output-dir DIR` | Output directory (default: `model_export/`) |
+| `-o DIR`, `--output-dir DIR` | Output directory (default: `<data folder>/u9/exports/model-export-all`) |
 | `--preview` / `--no-preview` | Also render a preview for each model (default: `--preview`; needs `pyvista`) |
 
 **Example**
@@ -6981,7 +7018,7 @@ titan u9 texture-export-all [SOURCE] [-o DIR] [-p PALETTE]
 | Argument | Description |
 |----------|-------------|
 | `SOURCE` | Optional texture FLX, STATIC folder or U9 installation root; defaults to `[u9.paths].static` |
-| `-o DIR`, `--output-dir DIR` | Output root (default: `u9_textures/`), with one subfolder per archive |
+| `-o DIR`, `--output-dir DIR` | Output root (default: `<data folder>/u9/exports/texture-export-all`), with one subfolder per archive |
 | `-p FILE`, `--palette FILE` | Palette override; otherwise use configured or adjacent `ankh.pal` |
 | `--all-mips` | Include smaller stored mip levels; does **not** enable other quality tiers |
 | `--all-tiers` | Export every available bitmap tier from a directory; does **not** enable smaller mip levels |
@@ -6995,7 +7032,8 @@ zero frames are recorded, and decode errors are retained in each archive's
 status. Source archives are read only; matching output PNGs are replaced.
 
 For example, the default export writes
-`u9_textures/bitmap16/texture_04423_frame_000_mip_00.png`. A standard-library
+`texture-export-all/bitmap16/texture_04423_frame_000_mip_00.png` under the U9 exports
+folder. A standard-library
 progress bar reports processed entries and PNG counts.
 
 ```bash
@@ -7063,7 +7101,7 @@ titan u9 icon-export static/bitmapsh.flx 568 -p static/ankh.pal -o icon_568/
 
 Batch-export every candidate 2D UI icon (see `icon-list` above) to
 PNG, one file per entry (`icon_<id>.png`), into its own output
-directory -- separate from `model-export-all`'s `model_export/`.
+directory -- separate from `model-export-all`'s.
 
 ```
 titan u9 icon-export-all <file> <textures> [-p PALETTE] [-o DIR]
@@ -7074,7 +7112,7 @@ titan u9 icon-export-all <file> <textures> [-p PALETTE] [-o DIR]
 | `file` | Path to `static/sappear.flx` |
 | `textures` | Path to a texture archive, e.g. `bitmap16.flx` or `bitmapsh.flx` |
 | `-p FILE`, `--palette FILE` | Path to `static/ankh.pal` -- colors 8-bit textures (default: flat grayscale) |
-| `-o DIR`, `--output-dir DIR` | Output directory (default: `icon_export/`) |
+| `-o DIR`, `--output-dir DIR` | Output directory (default: `<data folder>/u9/exports/icon-export-all`) |
 
 **Example**
 ```bash
@@ -7778,7 +7816,7 @@ titan u9 animation-library-export <plan.json> <anim.flx> <sappear.flx> [options]
 | `--lod N` | Model LOD, default 0 |
 | `--coordinate-scale N` | GLB units per native U9 model unit, default `0.025` |
 | `--glb` / `--no-glb` | Toggle one multi-action GLB per skeleton; default on |
-| `-o DIR`, `--output-dir DIR` | Output directory (default: `u9_animation_library_export`) |
+| `-o DIR`, `--output-dir DIR` | Output directory (default: `<data folder>/u9/exports/animation-library-export`) |
 
 ```bash
 titan u9 animation-library-export animation_libraries.json static/anim.flx static/sappear.flx \
@@ -7917,7 +7955,7 @@ titan u9 script-research-export <triggers> <activities> [-o DIRECTORY]
 |----------|-------------|
 | `triggers` | Path to `static/triggers.flx` |
 | `activities` | Path to `static/activity.flx` |
-| `-o DIR`, `--output-dir DIR` | Output directory (default `u9-script-research`) |
+| `-o DIR`, `--output-dir DIR` | Output directory (default `<data folder>/u9/exports/script-research-export`) |
 
 The command writes occurrence CSVs (including repeat/end markers, trigger slack, raw operands,
 and entry-relative byte offsets), opcode summaries, resolved opcode-`0x31`
@@ -9296,7 +9334,7 @@ titan u9 map-atlas <static-directory> [--runtime runtime-directory]
   [--strict] [-o OUTPUT-DIRECTORY] [--metadata atlas.json]
 ```
 
-The default output directory is `u9_map_atlas/`. It contains `atlas.png`,
+The default output directory is `<data folder>/u9/exports/map-atlas/`. It contains `atlas.png`,
 `atlas.json`, and `regions/region_NNN.png`. The JSON manifest retains every
 source path, render option, region name and dimensions, water/object/texture
 diagnostic, and any per-region error. By default a malformed region becomes a

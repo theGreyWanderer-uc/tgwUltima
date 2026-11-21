@@ -8,6 +8,7 @@ from typing import Any
 from titan.u8.container_gump import resolve_u8_shape_container_gumps
 from titan.u8.map_items import U8MapItems
 from titan.u8.typeflag import U8TypeFlags
+from titan.errors import InvalidDataError
 
 U8InventoryId = int | str
 
@@ -31,7 +32,7 @@ def parse_u8_inventory_id(value: str) -> U8InventoryId:
             raise ValueError
         return f"{kind}:{map_id}:{record_index}"
     except ValueError as error:
-        raise ValueError(
+        raise InvalidDataError(
             "U8 container browser: use cache ID 1–9215 or FIXED:MAP:RECORD / NONFIXED:MAP:RECORD (map 1–255, record >= 0)"
         ) from error
 

@@ -6,7 +6,7 @@ QUOTES.DAT (position-dependent XOR cipher).
 
 Example::
 
-    from titan.credits import decrypt_credit_text
+    from titan.u8.credits import decrypt_credit_text
 
     with open("ECREDITS.DAT", "rb") as f:
         data = f.read()

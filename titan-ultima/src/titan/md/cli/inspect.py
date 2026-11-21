@@ -10,7 +10,6 @@ from typing import Annotated, Iterator, Optional
 
 import typer
 
-from titan._config import get_config
 from titan.md.actor import parse_martian_actors
 from titan.md.game_profile import resolve_martian_directory
 from titan.md.gamestate import MartianGameState
@@ -33,8 +32,8 @@ from titan.errors import InstallNotFoundError, exit_code
 __all__ = ["register_martian_inspection_commands"]
 
 
-def _directory(explicit: str | None) -> Path:
-    path = explicit or get_config().get("md", {}).get("game", {}).get("base")
+def _directory(path: str | None) -> Path:
+    """The ``--game-dir`` value; when omitted, the CLI fills it from the configured install (titan._input_fill)."""
     if not path:
         raise InstallNotFoundError(
             "Pass --game-dir or set [md.game] base in titan.toml"

@@ -1,7 +1,7 @@
 """Library modules don't print, prompt or import terminal UI toolkits.
 
 Terminal code belongs in the CLI layer: ``cli.py``, ``cli/`` packages,
-``*_cli.py`` and ``*_ui.py`` modules (plus the shared terminal helpers listed in
+``*_ui.py`` modules (plus the shared terminal helpers listed in
 ``TERMINAL_MODULES``). Library code logs through ``logging.getLogger(__name__)``
 instead (see :mod:`titan._log`), so a front end can run it without a terminal.
 
@@ -57,7 +57,7 @@ def _is_cli_layer(relative: str) -> bool:
         relative in TERMINAL_MODULES
         or path.name == "cli.py"
         or "cli" in path.parts[:-1]
-        or path.stem.endswith(("_cli", "_ui"))
+        or path.stem.endswith("_ui")
         or path.parts[0] == "third_party"
     )
 

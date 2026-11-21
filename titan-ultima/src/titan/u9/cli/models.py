@@ -44,6 +44,8 @@ from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan.u9.cli import _common
 from titan._meta import meta
+from titan._config import export_output
+from titan.errors import exit_code
 
 
 def _load_naming(types_path: Optional[str], typenames_path: Optional[str]):
@@ -68,14 +70,9 @@ def _load_naming(types_path: Optional[str], typenames_path: Optional[str]):
 def cmd_model_info(args: SimpleNamespace) -> int:
     """Print a model's limb/LOD/material/texture summary."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
 
-    try:
-        model = _common._load_model(args.file, args.model_id)
-    except (U9FlxArchiveError, U9ModelError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    model = _common._load_model(args.file, args.model_id)
 
     naming = _load_naming(args.types, args.typenames)
     if naming is not None:
@@ -157,7 +154,7 @@ def cmd_model_material_report(args: SimpleNamespace) -> int:
         )
     except (U9AssetReportError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(f"Wrote {len(rows)} model/material row(s) to {output}")
@@ -171,11 +168,7 @@ def cmd_model_export(args: SimpleNamespace) -> int:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    try:
-        model = _common._load_model(args.file, args.model_id)
-    except (U9FlxArchiveError, U9ModelError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    model = _common._load_model(args.file, args.model_id)
 
     resolver = _common._make_texture_resolver(args.textures, args.palette)
 
@@ -188,18 +181,12 @@ def cmd_model_export(args: SimpleNamespace) -> int:
     base = os.path.join(outdir, stem)
 
     wrote = []
-    try:
-        if args.format in ("obj", "both"):
-            export_obj(
-                model, base + ".obj", lod_level=args.lod, texture_resolver=resolver
-            )
-            wrote.append(base + ".obj")
-        if args.format in ("stl", "both"):
-            export_stl(model, base + ".stl", lod_level=args.lod)
-            wrote.append(base + ".stl")
-    except MeshExportError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    if args.format in ("obj", "both"):
+        export_obj(model, base + ".obj", lod_level=args.lod, texture_resolver=resolver)
+        wrote.append(base + ".obj")
+    if args.format in ("stl", "both"):
+        export_stl(model, base + ".stl", lod_level=args.lod)
+        wrote.append(base + ".stl")
 
     print(f"Exported model {args.model_id} (LOD {args.lod}) -> {outdir}/")
     for path in wrote:
@@ -283,15 +270,11 @@ def cmd_model_export_all(args: SimpleNamespace) -> int:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    try:
-        archive = U9FlxArchive.from_file(args.file)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(args.file)
 
     resolver = _common._make_texture_resolver(args.textures, args.palette)
     naming = _load_naming(args.types, args.typenames)
-    outdir = args.output or "model_export"
+    outdir = export_output(args.output, "u9", "model-export-all")
     os.makedirs(outdir, exist_ok=True)
 
     used = archive.used_entry_indices()
@@ -442,7 +425,7 @@ def cmd_dimension_show(args: SimpleNamespace) -> int:
         record = table.record(args.id)
     except IndexError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     warnings = record.structural_warnings()
     join_status, differences, model = _geometry_model_join(record, source)
@@ -484,7 +467,7 @@ def cmd_dimension_csv(args: SimpleNamespace) -> int:
     if args.models and source is None:
         return 1
 
-    output = Path(args.output or "dimension_csv")
+    output = Path(export_output(args.output, "u9", "dimension-csv"))
     try:
         output.mkdir(parents=True, exist_ok=True)
         output_path = output / "u9_dimensions.csv"
@@ -568,7 +551,7 @@ def cmd_dimension_csv(args: SimpleNamespace) -> int:
                 )
     except OSError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Wrote {MODEL_SLOT_COUNT} model geometry rows -> {output_path}")
     return 0

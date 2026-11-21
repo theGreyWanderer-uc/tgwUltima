@@ -15,9 +15,15 @@ Example::
 
 from __future__ import annotations
 
-__all__ = ["U8Palette"]
+__all__ = ["U8Palette", "U8PaletteError"]
 
 from PIL import Image
+
+from titan.errors import InvalidDataError
+
+
+class U8PaletteError(InvalidDataError):
+    """Raised when a U8 ``.pal`` file is too short to hold a palette."""
 
 
 class U8Palette:
@@ -50,7 +56,7 @@ class U8Palette:
             data = f.read()
 
         if len(data) < cls.TOTAL_SIZE:
-            raise ValueError(
+            raise U8PaletteError(
                 f"Palette file too small: {len(data)} bytes (need {cls.TOTAL_SIZE})"
             )
 
@@ -74,7 +80,7 @@ class U8Palette:
         """Load palette from raw bytes (with 4-byte header)."""
         pal = cls()
         if len(data) < cls.TOTAL_SIZE:
-            raise ValueError(f"Palette data too small: {len(data)} bytes")
+            raise U8PaletteError(f"Palette data too small: {len(data)} bytes")
         raw = data[cls.HEADER_SIZE : cls.HEADER_SIZE + cls.PALETTE_DATA_SIZE]
         for i in range(256):
             r, g, b = raw[i * 3], raw[i * 3 + 1], raw[i * 3 + 2]

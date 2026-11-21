@@ -22,6 +22,8 @@ import typer
 
 from titan.u7 import install
 from titan._meta import ANY_PARAM, meta
+from titan._config import DEFAULT_OUTPUT, export_output
+from titan.errors import exit_code
 
 
 def _parse_hex_rgba(color: str) -> tuple[int, int, int, int]:
@@ -78,21 +80,18 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     if not static_dir:
         static_dir = configured_static
     if not static_dir or not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"STATIC directory not found: {static_dir}")
 
     map_root = getattr(args, "map_root", None)
     if map_root and not os.path.isdir(map_root):
-        print(f"ERROR: Map root directory not found: {map_root}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Map root directory not found: {map_root}")
 
     patch_dir = getattr(args, "patch_dir", None)
     shapes_path = (
         find_archive(Path(patch_dir), "SHAPES.VGA") if patch_dir else None
     ) or find_archive(Path(static_dir), "SHAPES.VGA")
     if shapes_path is None:
-        print(f"ERROR: SHAPES.VGA not found in {static_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"SHAPES.VGA not found in {static_dir}")
 
     base_static_dir = (
         getattr(args, "base_static", None)
@@ -111,8 +110,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     if not palette_path:
         palette_path = os.path.join(static_dir, "PALETTES.FLX")
     if not os.path.isfile(palette_path):
-        print(f"ERROR: Palette not found: {palette_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette not found: {palette_path}")
 
     palette_index = getattr(args, "palette_index", 0)
     pal = (
@@ -282,7 +280,7 @@ def cmd_map_create(args: SimpleNamespace) -> int:
         )
     except (OSError, U7NativeMapCreateError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     action = "Would create" if result.dry_run else "Created"
     print(f"{action} native U7 map {result.map_number:02x}: {result.map_directory}")
@@ -337,7 +335,7 @@ def cmd_map_export_json(args: SimpleNamespace) -> int:
         write_u7_map_document(document, args.output, pretty=args.pretty)
     except (OSError, U7MapJsonError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     counts = document["counts"]
     print(
@@ -471,7 +469,7 @@ def cmd_map_render_json(args: SimpleNamespace) -> int:
             print(f"Tiles: 144 -> {args.tiles_dir}")
     except (OSError, U7MapJsonError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
     return 0
 
 
@@ -486,8 +484,7 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
             getattr(args, "game", "bg")
         )
     if not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"STATIC directory not found: {static_dir}")
 
     palette_path = args.palette
     if not palette_path:
@@ -497,8 +494,7 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     if not palette_path:
         palette_path = os.path.join(static_dir, "PALETTES.FLX")
     if not os.path.isfile(palette_path):
-        print(f"ERROR: Palette not found: {palette_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette not found: {palette_path}")
 
     pal = U7Palette.from_file(palette_path)
     renderer = U7MapRenderer(static_dir)
@@ -658,8 +654,8 @@ def map_export_json_cmd(
     ] = 0,
     output: Annotated[
         str,
-        typer.Option("-o", "--output", help="Output JSON path"),
-    ] = "u7_map.json",
+        typer.Option("-o", "--output", help="Output JSON path" + DEFAULT_OUTPUT),
+    ] = None,
     include_fixed: Annotated[
         bool,
         typer.Option(
@@ -688,6 +684,7 @@ def map_export_json_cmd(
     ] = False,
 ) -> None:
     """Export a complete U7 map to universal JSON."""
+    output = export_output(output, "u7", "map-export-json", "u7_map.json")
     raise SystemExit(
         cmd_map_export_json(
             SimpleNamespace(
@@ -1050,7 +1047,7 @@ def map_render_cmd(
                 parsed_highlights.append(_parse_highlight_tile_rect(raw))
             except ValueError as exc:
                 print(f"ERROR: --highlight-tile-rect '{raw}': {exc}", file=sys.stderr)
-                raise SystemExit(1)
+                raise SystemExit(exit_code(exc))
 
     if zone_profile is None and (zone_id or all_zones):
         print("ERROR: --zone-id/--all-zones requires --zone-profile.", file=sys.stderr)
@@ -1070,7 +1067,7 @@ def map_render_cmd(
             )
         except U7ZoneProfileError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
-            raise SystemExit(1)
+            raise SystemExit(exit_code(exc))
 
         parsed_highlights.extend(profile_rects)
         print(f"Zone profile '{zone_profile}' -> {len(profile_rects)} rectangle(s)")
@@ -1351,7 +1348,7 @@ def map_inventory_cmd(
             )
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(exit_code(error))
 
     game = game or "bg"
     configured_static, _ = install.resolve_u7_static_and_palette(game)
@@ -1379,15 +1376,16 @@ def map_inventory_cmd(
             mod_data_dir=mod_data,
             text_flx_path=text_flx,
             area=area or None,
+            exult_flx=install.resolve_u7_exult_flx(game),
         )
         stem = f"{game}-map{map_num:02d}" + "".join(f"-{label}" for label in labels)
-        outdir = Path(output or Path("u7data") / "map-inventory" / stem)
+        outdir = Path(output or Path(export_output(None, "u7", "map-inventory")) / stem)
         summary = write_u7_map_inventory(
             inventory, outdir, previews=not no_previews, palette_index=palette
         )
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(exit_code(error))
 
     objects, flats = summary["objects"], summary["flats"]
     print("Sources: " + "; ".join(f"{k}: {v}" for k, v in summary["sources"].items()))

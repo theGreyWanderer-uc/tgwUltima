@@ -14,6 +14,7 @@ import typer
 from titan._wizard_ui import menus_enabled
 from titan.u7 import install
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 @meta(results=("json",), params={"output": "output-file", "file": "input-file"})
@@ -86,7 +87,7 @@ def ireg_dump_cmd(
                 print(f"WARNING: {warning}", file=sys.stderr)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(exit_code(error))
 
 
 @meta(
@@ -256,6 +257,9 @@ def world_query_cmd(
     try:
         params = load_recipe(config) if config else WorldQueryParams(static_dir="")
         params.game = game or params.game
+        params.exult_flx_path = params.exult_flx_path or install.resolve_u7_exult_flx(
+            params.game
+        )
         configured_static, _ = install.resolve_u7_static_and_palette(params.game)
         params.static_dir = (
             static or params.static_dir or base_static or configured_static or ""
@@ -372,7 +376,7 @@ def world_query_cmd(
             typer.echo(format_result(result))
     except (OSError, ValueError) as error:
         typer.echo(f"World query failed: {error}", err=True)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
@@ -520,7 +524,6 @@ def container_browse_cmd(
     from titan.u7.container_ui import run_wizard as _container_wizard
     from titan.u7.text_names import load_u7_text_names
     from titan.u7.typeflag import U7TypeFlags
-    from titan._config import exult_cfg
 
     static_dir = static
     if not static_dir:
@@ -544,7 +547,7 @@ def container_browse_cmd(
         ]
     )
 
-    _exult_flx = exult_flx or exult_cfg(f"{game}_flx") or None
+    _exult_flx = exult_flx or install.resolve_u7_exult_flx(game)
 
     if not _non_interactive and menus_enabled():
         raise SystemExit(
@@ -612,7 +615,7 @@ def container_browse_cmd(
         static_dir,
         patch_dirs=[mod_data] if mod_data else (),
         text_flx_path=text,
-        exult_flx_path=_exult_flx or install.resolve_u7_exult_flx(game),
+        exult_flx_path=_exult_flx,
         game=game,
     )
     names, frame_names = selected_names.names, selected_names.frames

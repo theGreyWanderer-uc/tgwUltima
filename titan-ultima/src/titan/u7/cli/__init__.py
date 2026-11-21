@@ -15,10 +15,9 @@ __all__ = ["u7_app"]
 
 import typer
 
-from titan.u7.ireg_rewrite_cli import ireg_rewrite_cmd
-from titan.u7.save_repack_cli import save_repack_cmd
-from titan.u7.ireg_tree_cli import ireg_tree_cmd, ireg_tree_edit_cmd
-from titan.u7.actor_rewrite_cli import actor_headers_cmd, actor_rewrite_cmd
+from titan.u7.cli.ireg import ireg_rewrite_cmd, ireg_tree_cmd, ireg_tree_edit_cmd
+from titan.u7.cli.saves import save_repack_cmd
+from titan.u7.cli.actors import actor_headers_cmd, actor_rewrite_cmd
 
 from titan.u7.cli import (
     archives,
@@ -92,6 +91,7 @@ u7_app.command("save-browse")(saves.save_browse_cmd)
 u7_app.command("npc-dump")(npcs.npc_dump_cmd)
 u7_app.command("schedule-dump")(npcs.schedule_dump_cmd)
 u7_app.command("gamedat-info")(saves.gamedat_info_cmd)
+u7_app.command("mods")(saves.mods_cmd)
 u7_app.command("monster-defs")(npcs.monster_defs_cmd)
 u7_app.command("monster-dump")(npcs.monster_dump_cmd)
 u7_app.command("monster-equipment")(npcs.monster_equipment_cmd)

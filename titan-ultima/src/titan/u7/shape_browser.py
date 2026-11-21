@@ -28,6 +28,7 @@ from titan.u7.shapeinfo import U7Blends, U7Xforms
 from titan.u7.translucency import U7Translucency
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.world import WorldQueryParams, load_query_metadata
+from titan.errors import InvalidDataError
 
 if TYPE_CHECKING:
     from titan.u7.shape_properties import ShapeProperties
@@ -52,7 +53,7 @@ def load_palette(
             if index >= len(slots):
                 continue
             if not slots[index].is_valid:
-                raise ValueError(
+                raise InvalidDataError(
                     f"Invalid palette record {index} in {path}: {slots[index].error}"
                 )
             try:
@@ -80,6 +81,9 @@ class ShapeLibrary:
     game: str = "bg"
     property_filter: str = "all"
     properties: ShapeProperties | None = None
+    exult_flx: str | None = None
+    """Exult's bundle for this game (the UI passes the configured one);
+    ``None`` means a standard Exult install's."""
 
     @property
     def is_shapes(self) -> bool:
@@ -137,6 +141,7 @@ def load_library(
     palette_index: int = 0,
     palette_file: Path | None = None,
     base_archive: Path | None = None,
+    exult_flx: str | None = None,
 ) -> ShapeLibrary:
     base = base_archive
     # Infer inheritance only for an archive actually in the selected patch.
@@ -171,6 +176,7 @@ def load_library(
                 base_static=str(target.static),
                 patch_dir=str(patch) if patch else None,
                 game=game,
+                exult_flx_path=exult_flx,
             )
         )
     xforms = owner_file(target, "XFORM.TBL")
@@ -192,6 +198,7 @@ def load_library(
         translucency,
         base,
         game=game,
+        exult_flx=exult_flx,
     )
 
 

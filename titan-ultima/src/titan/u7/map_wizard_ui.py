@@ -20,6 +20,7 @@ from titan.u7.map_wizard import (
     save_preview,
     validate_sources,
 )
+from titan.errors import exit_code
 
 _menu = ui.menu
 
@@ -479,6 +480,6 @@ def run_wizard(defaults: SimpleNamespace) -> int:
         return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     finally:
         shutil.rmtree(preview_dir, ignore_errors=True)

@@ -15,6 +15,7 @@ __all__ = [
     "RESULT_KINDS",
     "RecipeField",
     "RecipeSpec",
+    "ModInfo",
     "SaveInfo",
     "GAMES",
     "CommandMeta",
@@ -26,10 +27,13 @@ __all__ = [
     "find_installs",
     "get_game",
     "has_install_support",
+    "has_mods",
     "has_saves",
     "inspect_install",
     "install_candidates",
+    "configured_install",
     "install_config",
+    "list_mods",
     "list_saves",
     "meta",
     "path_kind",
@@ -41,6 +45,7 @@ from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, Optional, TypeVar
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -61,21 +66,60 @@ class GameMeta:
     and every input is a command parameter."""
     game_option: Optional[str] = None
     """Value for commands in a shared group that take ``--game`` (``bg``/``si``)."""
+    install: Optional[str] = None
+    """Module with the install protocol (``install_candidates``,
+    ``discover_installs``, ``install_config``, optionally ``configured_install``);
+    ``None`` when titan finds no installs for the game."""
+    saves: Optional[str] = None
+    """Module with ``list_saves`` and ``resolve_save``, when titan lists saves."""
+    mods: Optional[str] = None
+    """Module with ``list_mods``, when the game has mods."""
+    path_kinds: Optional[str] = None
+    """Name of the ``[<section>.paths]`` key -> kind table in :attr:`install`."""
 
 
 GAMES: tuple[GameMeta, ...] = (
     GameMeta("u3nes", "u3", "u3", "nes", None),
-    GameMeta("u6", "u6", "u6", "dos", "u6"),
-    GameMeta("md", "md", "md", "dos", "md"),
-    GameMeta("uw1", "uw1", "uw1", "dos", "uw1"),
-    GameMeta("u7bg", "u7bg", "u7", "dos", "u7bg", game_option="bg"),
-    GameMeta("u7si", "u7si", "u7", "dos", "u7si", game_option="si"),
-    GameMeta("uw2", "uw2", "uw2", "dos", "uw2"),
-    GameMeta("u8", "u8", "u8", "dos", "u8"),
-    GameMeta("uo", "uo", "uo", "windows", "uo"),
-    GameMeta("u9", "u9", "u9", "windows", "u9"),
-)
-"""Every game and platform titan supports. A game absent here is unsupported."""
+    GameMeta(
+        "u6", "u6", "u6", "dos", "u6",
+        install="titan.u6.install", saves="titan.u6.saves", path_kinds="U6_PATH_KINDS",
+    ),
+    GameMeta(
+        "md", "md", "md", "dos", "md",
+        install="titan.md.install", saves="titan.md.saves", path_kinds="MD_PATH_KINDS",
+    ),
+    GameMeta("uw1", "uw1", "uw1", "dos", "uw1", install="titan.uw1.install"),
+    GameMeta(
+        "u7bg", "u7bg", "u7", "dos", "u7bg", game_option="bg",
+        install="titan.u7.install", saves="titan.u7.saves", mods="titan.u7.mods",
+        path_kinds="U7_PATH_KINDS",
+    ),
+    GameMeta(
+        "u7si", "u7si", "u7", "dos", "u7si", game_option="si",
+        install="titan.u7.install", saves="titan.u7.saves", mods="titan.u7.mods",
+        path_kinds="U7_PATH_KINDS",
+    ),
+    GameMeta("uw2", "uw2", "uw2", "dos", "uw2", install="titan.uw2.install"),
+    GameMeta(
+        "u8", "u8", "u8", "dos", "u8",
+        install="titan.u8.install", saves="titan.u8.saves", path_kinds="U8_PATH_KINDS",
+    ),
+    GameMeta("uo", "uo", "uo", "windows", "uo", install="titan.uo.installs"),
+    GameMeta(
+        "u9", "u9", "u9", "windows", "u9",
+        install="titan.u9.install", saves="titan.u9.saves", path_kinds="U9_PATH_KINDS",
+    ),
+)  # fmt: skip
+"""Every game and platform titan supports. A game absent here is unsupported.
+
+Each row also names the modules that support it (installs, saves, mods, config
+path kinds), so a game is registered in one place. They are imported only when
+called; a module two rows share (U7 BG and SI) gets the game id."""
+
+
+def _shared(field_name: str, module: Optional[str]) -> bool:
+    return sum(getattr(entry, field_name) == module for entry in GAMES) > 1
+
 
 _BY_ID = {entry.id: entry for entry in GAMES}
 
@@ -93,6 +137,7 @@ ANY_PARAM = "*"
 PARAM_KINDS = frozenset(
     {
         "save",  # a save slot, save file or save folder for this game
+        "mod",  # a mod or Exult custom game key for this game (list_mods)
         "palette",  # a palette file
         "install-file",  # a file inside the game install
         "install-dir",  # a folder of the game install: its root, STATIC, a patch folder
@@ -306,7 +351,7 @@ class RecipeSpec:
         for name, value in values.items():
             spec = self.field(name)
             if spec is None:
-                raise ValueError(f"Unknown recipe field: {name}")
+                raise InvalidDataError(f"Unknown recipe field: {name}")
             if value is None:
                 continue
             data.setdefault(spec.section, {})[spec.key] = _recipe_value(spec, value)
@@ -316,7 +361,7 @@ class RecipeSpec:
             if f.required and f.key not in data.get(f.section, {})
         ]
         if missing:
-            raise ValueError(f"Missing recipe fields: {', '.join(missing)}")
+            raise InvalidDataError(f"Missing recipe fields: {', '.join(missing)}")
         return tomli_w.dumps(data)
 
 
@@ -346,7 +391,7 @@ def _recipe_value(spec: RecipeField, value: object) -> object:
         raise bad()
     if spec.choices and not spec.open and result not in spec.choices:
         choices = ", ".join(map(str, spec.choices))
-        raise ValueError(f"{spec.name}: {value!r} is not one of {choices}")
+        raise InvalidDataError(f"{spec.name}: {value!r} is not one of {choices}")
     return result
 
 
@@ -369,14 +414,11 @@ class SaveInfo:
 
 
 _SAVE_PROVIDERS = {
-    "u6": ("titan.u6.saves", False),
-    "md": ("titan.md.saves", False),
-    "u7bg": ("titan.u7.saves", True),
-    "u7si": ("titan.u7.saves", True),
-    "u8": ("titan.u8.saves", False),
-    "u9": ("titan.u9.saves", False),
+    entry.id: (entry.saves, _shared("saves", entry.saves))
+    for entry in GAMES
+    if entry.saves
 }
-"""Game id -> (module, takes game id). The module has ``list_saves(config)`` and
+"""From :data:`GAMES`: game id -> (module, takes game id). The module has ``list_saves(config)`` and
 ``resolve_save(value, config)``; a shared module (U7 BG and SI) also gets the
 game id: ``list_saves(config, game_id)``."""
 
@@ -399,17 +441,60 @@ def _loaded_config(config: Optional[dict]) -> dict:
     return get_config()
 
 
-def list_saves(game_id: str, config: Optional[dict] = None) -> list[SaveInfo]:
+def list_saves(
+    game_id: str, config: Optional[dict] = None, mod: Optional[str] = None
+) -> list[SaveInfo]:
     """Saves for *game_id* found through titan's config; ``[]`` if none or unsupported.
 
     *config* is a loaded config (:func:`titan._config.load_config`); by default
-    the one titan already loaded.
+    the one titan already loaded. *mod* (a :func:`list_mods` key) lists that
+    mod's saves instead; ``[]`` for a game without mods.
     """
     provider = _save_provider(game_id)
-    if provider is None:
+    if provider is None or (mod and not has_mods(game_id)):
         return []
     extra = (game_id,) if _SAVE_PROVIDERS[game_id][1] else ()
+    if mod:
+        return provider.list_saves(_loaded_config(config), *extra, mod=mod)
     return provider.list_saves(_loaded_config(config), *extra)
+
+
+@dataclass(frozen=True)
+class ModInfo:
+    """One mod (or Exult custom game) a front end can offer for ``mod`` parameters."""
+
+    key: str
+    """The value to pass to ``mod`` parameters (``--mod``)."""
+    title: str
+    kind: str
+    """``"mod"`` or ``"exult-game"``."""
+    played: bool
+    """Whether it has live game state (a GAMEDAT with ``npc.dat``)."""
+    paths: Mapping[str, Path] = field(default_factory=dict)
+    """What was found: ``install_dir``, ``profile_dir``, ``patch``, ``static``,
+    ``gamedat``, ``saves``, ``archive`` (only those it has)."""
+    problems: Mapping[str, str] = field(default_factory=dict)
+    """Configured path key -> ``"NOT FOUND"``."""
+
+
+_MOD_PROVIDERS = {entry.id: entry.mods for entry in GAMES if entry.mods}
+"""From :data:`GAMES`: game id -> module with ``list_mods(config, game_id)``."""
+
+
+def has_mods(game_id: str) -> bool:
+    """Whether titan can list mods for *game_id* (U7 BG and SI)."""
+    return game_id in _MOD_PROVIDERS
+
+
+def list_mods(game_id: str, config: Optional[dict] = None) -> list[ModInfo]:
+    """Mods and Exult custom games for *game_id*, sorted by title; ``[]`` if unsupported.
+
+    *config* is a loaded config; by default the one titan already loaded.
+    """
+    module = _MOD_PROVIDERS.get(game_id)
+    if module is None:
+        return []
+    return import_module(module).list_mods(_loaded_config(config), game_id)
 
 
 def resolve_save(
@@ -441,6 +526,9 @@ class Installation:
     the files a valid install needs. Empty for a usable install."""
     settings: Mapping[str, str] = field(default_factory=dict)
     """Other facts ``[<section>.game]`` records, e.g. U8 ``language``."""
+    configured: frozenset[str] = frozenset()
+    """For :func:`configured_install`: the resource keys ``[<section>.paths]``
+    sets explicitly (the rest were detected). Empty for a detected install."""
 
     @property
     def valid(self) -> bool:
@@ -449,17 +537,11 @@ class Installation:
 
 
 _INSTALL_PROVIDERS = {
-    "u6": ("titan.u6.install", False),
-    "md": ("titan.md.install", False),
-    "uw1": ("titan.uw1.install", False),
-    "uw2": ("titan.uw2.install", False),
-    "u7bg": ("titan.u7.install", True),
-    "u7si": ("titan.u7.install", True),
-    "u8": ("titan.u8.install", False),
-    "u9": ("titan.u9.install", False),
-    "uo": ("titan.uo.installs", False),
+    entry.id: (entry.install, _shared("install", entry.install))
+    for entry in GAMES
+    if entry.install
 }
-"""Game id -> (module, takes game id). The module has
+"""From :data:`GAMES`: game id -> (module, takes game id). The module has
 ``install_candidates(config)``, ``discover_installs(path)`` and
 ``install_config(install)``; a shared module (U7 BG and SI) also gets the game
 id as the last argument of the first two."""
@@ -517,6 +599,70 @@ def install_config(install: Installation) -> dict:
     return {section: provider.install_config(install)}
 
 
+def configured_install(
+    game_id: str, config: Optional[dict] = None
+) -> Optional[Installation]:
+    """The install *config* selects for *game_id*: what commands use by default.
+
+    ``root`` is ``[<section>.game] base`` as configured. ``resources`` are
+    what :func:`inspect_install` finds there, with each ``[<section>.paths]``
+    key on top (relative paths are under the base). A configured path that
+    doesn't exist is left out of ``resources`` and reported in ``problems``
+    as ``"NOT FOUND"``; a ``working-dir`` that doesn't exist yet stays in
+    ``resources`` (commands extract into it) and is reported as
+    ``"NOT EXTRACTED"``. ``settings`` are the other ``[<section>.game]`` keys
+    (U8 ``language``) over what detection found. ``None`` when the config
+    sets no base.
+
+    A game whose install module defines ``configured_install(config)`` decides
+    itself (UO: ``[uo.game] install`` names a ``[uo.installs.*]`` entry).
+    """
+    game = get_game(game_id)
+    if game is None or game.config_section is None:
+        return None
+    if game_id in _INSTALL_PROVIDERS:
+        provider, extra = _install_provider(game_id)
+        hook = getattr(provider, "configured_install", None)
+        if hook is not None:
+            return hook(_loaded_config(config), *extra)
+    from titan._config import resolve_config_path
+
+    section = _loaded_config(config).get(game.config_section, {})
+    base = section.get("game", {}).get("base")
+    if not base:
+        return None
+    root = Path(str(base)).expanduser()
+    found = None
+    if root.is_dir() and game_id in _INSTALL_PROVIDERS:
+        found = inspect_install(game_id, root)
+    resources = dict(found.resources) if found else {}
+    problems: dict[str, str] = {}
+    for key, value in section.get("paths", {}).items():
+        if not isinstance(value, (str, Path)):
+            continue
+        path = resolve_config_path(value, root)
+        if path is not None and path.exists():
+            resources[key] = path
+        elif path is not None and path_kind(game.config_section, key) == "working-dir":
+            resources[key] = path
+            problems[key] = "NOT EXTRACTED"
+        else:
+            resources.pop(key, None)
+            problems[key] = "NOT FOUND"
+    settings = dict(found.settings) if found else {}
+    settings.update(
+        (key, str(value))
+        for key, value in section.get("game", {}).items()
+        if key != "base" and isinstance(value, (str, int, float, bool))
+    )
+    configured = frozenset(
+        key
+        for key, value in section.get("paths", {}).items()
+        if isinstance(value, (str, Path))
+    )
+    return Installation(game_id, root, resources, problems, settings, configured)
+
+
 # --- config paths --------------------------------------------------------
 
 PATH_KINDS = frozenset(
@@ -531,14 +677,11 @@ PATH_KINDS = frozenset(
 """What a ``[<section>.paths]`` key names; see :func:`path_kind`."""
 
 _PATH_KIND_TABLES = {
-    "u6": ("titan.u6.install", "U6_PATH_KINDS"),
-    "md": ("titan.md.install", "MD_PATH_KINDS"),
-    "u7bg": ("titan.u7.install", "U7_PATH_KINDS"),
-    "u7si": ("titan.u7.install", "U7_PATH_KINDS"),
-    "u8": ("titan.u8.install", "U8_PATH_KINDS"),
-    "u9": ("titan.u9.install", "U9_PATH_KINDS"),
+    entry.config_section: (entry.install, entry.path_kinds)
+    for entry in GAMES
+    if entry.config_section and entry.install and entry.path_kinds
 }
-"""Config section -> (module, table). Each game keeps its table beside its
+"""From :data:`GAMES`: config section -> (module, table). Each game keeps its table beside its
 install rules; it is imported only when asked for."""
 
 

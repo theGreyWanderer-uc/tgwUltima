@@ -50,6 +50,7 @@ from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan.fonts.preview import preview_items, preview_sheet, validate_preview_text
 from titan.u7.palette import U7Palette
+from titan.errors import exit_code
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +251,12 @@ def _step_slot(
     # Use live data from archive if available, else static presets
     if source_archive and source_archive.is_file():
         live_slots = wiz.read_archive_slots(
-            source_archive, game, base_archive, paths=paths, infer_base=infer_base
+            source_archive,
+            game,
+            base_archive,
+            paths=paths,
+            infer_base=infer_base,
+            install=_install_for(game),
         )
     else:
         live_slots = None
@@ -873,6 +879,7 @@ def run_wizard(
             allow_cycling=allow_cycling,
             base_archive=base_archive,
             standalone=target.standalone,
+            install=_install_for(game),
         )
         if source_archive:
             config.template_archive = str(source_archive)
@@ -995,7 +1002,7 @@ def run_wizard(
         return ui.cancelled()
     except (ValueError, OSError, KeyError, TypeError, freetype.FT_Exception) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
 
 # ---------------------------------------------------------------------------
@@ -1059,6 +1066,13 @@ def _generate(config: WizardConfig, rendered: RenderedFont) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _install_for(game: str):
+    """The configured install for ``"BG"``/``"SI"``."""
+    from titan._meta import configured_install
+
+    return configured_install("u7bg" if game.upper() == "BG" else "u7si")
+
+
 def run_from_config(
     config_path: str,
     output_override: str | None = None,
@@ -1076,6 +1090,7 @@ def run_from_config(
             allow_cycling=allow_cycling,
             base_archive=base_archive,
         )
+        config.install = _install_for(config.game)
         rendered = _render(config)
         _show_palette_info(config)
         return _generate(config, rendered)
@@ -1088,4 +1103,4 @@ def run_from_config(
         freetype.FT_Exception,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)

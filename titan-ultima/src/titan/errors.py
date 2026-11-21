@@ -76,6 +76,9 @@ EXIT_CODES = {
     "file-not-found": 66,  # EX_NOINPUT: a file that isn't there
     "unsupported": UnsupportedError.exit_code,
     "internal": 70,  # EX_SOFTWARE: a bug in titan (a traceback is printed)
+    # EX_CANTCREAT: an output already exists and titan won't overwrite it without
+    # the command's --force / --replace.
+    "output-exists": 73,
     "io": 74,  # EX_IOERR: the system couldn't read or write a file
     "config": ConfigError.exit_code,
     # Stopped before finishing: Ctrl+C, or a wizard's input ended mid-prompt.
@@ -91,6 +94,8 @@ def exit_code(error: BaseException) -> int:
         return error.exit_code
     if isinstance(error, FileNotFoundError):
         return EXIT_CODES["file-not-found"]
+    if isinstance(error, FileExistsError):
+        return EXIT_CODES["output-exists"]
     if isinstance(error, OSError):
         return EXIT_CODES["io"]
     return EXIT_CODES["error"]

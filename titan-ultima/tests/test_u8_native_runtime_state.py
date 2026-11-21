@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests.test_u8_save_state import native_flex, native_save
+from titan.errors import EXIT_CODES
 from titan.u8.avatar import U8AvatarState
 from titan.u8.cli import u8_app
 from titan.u8.gumps import U8GumpState
@@ -22,8 +24,6 @@ from titan.u8.native_state_report import (
 )
 from titan.u8.save_diff import compare_u8_save_snapshots
 from titan.u8.save_state import U8SaveSnapshot, describe_u8_save_snapshot
-
-from tests.test_u8_save_state import native_flex, native_save
 
 
 def avatar_bytes() -> bytes:
@@ -479,7 +479,8 @@ def test_commands_loose_and_archive_equivalence_and_output_safety(
     )
     saved_output = output.read_bytes()
     assert (
-        runner.invoke(u8_app, [command, str(archive), "-o", str(output)]).exit_code == 1
+        runner.invoke(u8_app, [command, str(archive), "-o", str(output)]).exit_code
+        == EXIT_CODES["output-exists"]
     )
     assert output.read_bytes() == saved_output
     assert (
@@ -490,7 +491,10 @@ def test_commands_loose_and_archive_equivalence_and_output_safety(
     missing = tmp_path / "initial.save"
     missing.write_bytes(native_save([]))
     missing_result = runner.invoke(u8_app, [command, str(missing)])
-    assert missing_result.exit_code == 1 and "has no" in missing_result.output
+    assert (
+        missing_result.exit_code == EXIT_CODES["invalid-data"]
+        and "has no" in missing_result.output
+    )
 
 
 @pytest.mark.parametrize("output_format", ["text", "json", "csv"])

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from titan.u8.install import u8_cfg as cfg
+from titan._meta import Installation
 from titan.u8.npc_names import describe_u8_npc_identity, load_u8_npc_labels
 from titan.u8.npc_source import U8NpcSource, load_u8_npc_source
 from titan.u8.gumps import U8GumpState
@@ -17,6 +17,7 @@ from titan.u8.save import U8SaveArchive
 from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
 from titan.u8.shape_browser import U8ShapeLibrary, find_u8_browser_file
 from titan.u8.state_report import format_u8_npcdata_report
+from titan.errors import InvalidDataError
 
 U8_NPC_BROWSER_OUTPUT = "npc-browse"
 """Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
@@ -56,7 +57,7 @@ def load_u8_npc_session(
     if itemcach is None and (path.is_dir() or native_save):
         snapshot = U8SaveSnapshot.from_path(path)
         if snapshot.npc_data is None or snapshot.item_cache is None:
-            raise ValueError(
+            raise InvalidDataError(
                 "U8 NPC browser requires paired valid NPCDATA.DAT and ITEMCACH.DAT"
             )
         source = U8NpcSource(
@@ -249,8 +250,14 @@ def describe_u8_npc_source_overview(session: U8NpcSession) -> str:
     )
 
 
-def discover_u8_npc_sources(static: Path) -> tuple[list[Path], list[Path]]:
-    """Discover only the selected installation's GAMEDAT and U8SAVE siblings."""
+def discover_u8_npc_sources(
+    static: Path, install: Installation | None = None
+) -> tuple[list[Path], list[Path]]:
+    """Discover only the selected installation's GAMEDAT and U8SAVE siblings.
+
+    *install* (the configured install) can add its ``gamedat`` / ``savegame``
+    folders when they belong to this installation.
+    """
     roots: tuple[Path, ...] = (static.parent,)
     if static.parent.name.upper() in {"ENGLISH", "FRENCH", "GERMAN"}:
         roots += (static.parent.parent,)
@@ -271,7 +278,7 @@ def discover_u8_npc_sources(static: Path) -> tuple[list[Path], list[Path]]:
                     save_dirs.append(path)
     # An explicit configured source must belong to this installation.
     for key, collection in (("gamedat", game_dirs), ("savegame", save_dirs)):
-        value = cfg(key)
+        value = install.resources.get(key) if install is not None else None
         if value:
             path = Path(value).expanduser().resolve()
             if path.is_dir() and any(root.resolve() in path.parents for root in roots):

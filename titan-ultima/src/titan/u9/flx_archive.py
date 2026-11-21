@@ -169,6 +169,20 @@ class U9FlxArchive:
             return None
         return self.entries[index]
 
+    @property
+    def entry_count(self) -> int:
+        """Number of slots, used or not (:class:`titan.protocols.IndexedArchive`)."""
+        return len(self.entries)
+
+    def read(self, index: int) -> bytes | None:
+        """Slot *index*'s bytes, or ``None`` for an empty slot
+        (:class:`titan.protocols.IndexedArchive`)."""
+        if not 0 <= index < self.entry_count:
+            raise IndexError(
+                f"U9 FLX entry index {index} out of range (0..{self.entry_count - 1})"
+            )
+        return self.read_entry(index) or None
+
     def read_entry(self, index: int) -> bytes:
         """Return raw bytes for one entry; ``b""`` if that slot is unused."""
         entry = self.get_entry(index)

@@ -102,11 +102,7 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
     npcs = _load_npcs(args.file, args.save)
     if npcs is None:
         return 1
-    try:
-        n = npcs.npc(args.index)
-    except U9NpcError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    n = npcs.npc(args.index)
 
     print(f"{args.file} -- NPC {n.index}")
     print(f"  Name        : {n.name!r}")

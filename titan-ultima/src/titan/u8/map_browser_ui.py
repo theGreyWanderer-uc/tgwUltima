@@ -34,7 +34,8 @@ from titan.u8.npc_browser_ui import browse_u8_npc_session
 from titan.u8.save_browser_ui import choose_u8_save_browser_source
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 25
 
@@ -402,7 +403,9 @@ def run_u8_map_browser(
             shapes = find_u8_browser_file(target.static, "U8SHAPES.FLX")
             if shapes is None:
                 raise ValueError("U8 map browser: selected STATIC has no U8SHAPES.FLX")
-        library = load_u8_shape_library(shapes, palette=palette)
+        library = load_u8_shape_library(
+            shapes, palette=palette, install=configured_install("u8")
+        )
         if source is None and not static_only:
             selected = _map_menu(
                 "Map state:",
@@ -439,7 +442,7 @@ def run_u8_map_browser(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 def browse_u8_map_session(
@@ -463,8 +466,11 @@ def browse_u8_map_session(
         "palette": "palette",
         "source": "input-file",
         "names": "input-file",
+        "shapes": "install-file",
+        "globs": "install-file",
     },
     interactive=True,
+    resources={"shapes": "u8shapes", "globs": "glob"},
 )
 def map_browse_cmd(
     source: Annotated[

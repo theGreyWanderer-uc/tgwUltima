@@ -15,6 +15,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Optional
+from titan.errors import InvalidDataError
 
 COMPLETE_MARKER = ".titan-complete"
 
@@ -52,11 +53,11 @@ def u7_gamedat_folder(
     try:
         save = U7Save.from_bytes(data)
     except ValueError as error:
-        raise ValueError(
+        raise InvalidDataError(
             f"Not a U7 save or GAMEDAT folder: {path} ({error})"
         ) from error
     if not save.members:
-        raise ValueError(f"Not a U7 save or GAMEDAT folder: {path}")
+        raise InvalidDataError(f"Not a U7 save or GAMEDAT folder: {path}")
     root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix="unpack-", dir=root))
     try:

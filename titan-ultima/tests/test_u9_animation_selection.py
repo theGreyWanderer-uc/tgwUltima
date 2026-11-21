@@ -10,7 +10,6 @@ from titan.u9.animation_selection import (
     resolve_animation_selector,
 )
 
-
 LABELS = U9AnimationLabels(
     {
         172: "humanoid/idle/breathe_avatar",

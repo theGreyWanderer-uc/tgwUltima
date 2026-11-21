@@ -87,9 +87,9 @@ def merge_inputs(
 ) -> tuple[dict[str, str], dict[str, str]]:
     """The command's ``params`` and ``resources``: the rules, then its own tags.
 
-    An explicit kind replaces an inferred one; the inferred resource stays
-    when the explicit kind can name one (an explicit ``palette`` keeps the
-    install's palette as its resource).
+    An explicit kind replaces an inferred one. The inferred resource stays
+    only when the explicit kind agrees: the same kind, or ``palette`` for an
+    inferred ``install-file`` (the install's palette).
     """
     kinds: dict[str, str] = {}
     resources: dict[str, str] = {}
@@ -102,9 +102,10 @@ def merge_inputs(
         if inferred is None:
             continue
         kind, resource = inferred
-        kind = explicit.get(name, kind)
-        kinds[name] = kind
-        if resource is not None and kind in RESOURCE_KINDS:
+        chosen = explicit.get(name, kind)
+        kinds[name] = chosen
+        agrees = chosen == kind or (chosen == "palette" and kind == "install-file")
+        if resource is not None and agrees:
             resources[name] = resource
     kinds.update(explicit)
     resources.update(info.resources)

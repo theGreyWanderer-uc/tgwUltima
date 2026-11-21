@@ -17,16 +17,14 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import struct
 import tempfile
 import unittest
 from types import SimpleNamespace
 
-import struct
-
 from PIL import Image
 
-from titan.errors import InstallNotFoundError
-
+from titan.errors import EXIT_CODES, InstallNotFoundError
 from titan.u6.actor import OFFSET_TALK_FLAGS
 from titan.u6.actor import REQUIRED_SIZE as ACTOR_REQUIRED_SIZE
 from titan.u6.cli import (
@@ -52,10 +50,10 @@ from titan.u6.cli import (
     cmd_tile_export,
     cmd_tile_export_all,
     cmd_tileflag_dump,
-    _parse_region,
-    _parse_tile_num,
-    _u6_gamedir,
 )
+from titan.u6.cli._common import _require_gamedir
+from titan.u6.cli.graphics import _parse_tile_num
+from titan.u6.cli.maps import _parse_region
 from titan.u6.font import FILE_SIZE as FONT_FILE_SIZE
 from titan.u6.gamestate import (
     OFFSET_NUM_IN_PARTY,
@@ -66,6 +64,17 @@ from titan.u6.gamestate import REQUIRED_SIZE as GAMESTATE_REQUIRED_SIZE
 from titan.u6.map import DUNGEON_LEVELS, SURFACE_SIDE_SUPERCHUNKS, SURFACE_SUPERCHUNKS
 from titan.u6.object import EGG_OBJ_N, pack_position
 from titan.u6.tile import NUM_TILES
+
+
+def _status(command, args) -> int:
+    """*command*'s exit status as the CLI reports it: a titan error or OSError it
+    raises becomes its category code (``titan.errors.exit_code``)."""
+    from titan.errors import TitanError, exit_code
+
+    try:
+        return command(args)
+    except (TitanError, OSError) as error:
+        return exit_code(error)
 
 
 def _make_synthetic_gamedir(dirpath: str) -> None:
@@ -138,11 +147,17 @@ class HelperTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             _parse_region("a,b,c,d")
 
-    def test_u6_gamedir_prefers_explicit(self):
-        self.assertEqual(_u6_gamedir("/explicit/path"), "/explicit/path")
+    def test_require_gamedir_keeps_an_existing_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(_require_gamedir(folder), folder)
 
-    def test_u6_gamedir_none_without_config_or_explicit(self):
-        self.assertIsNone(_u6_gamedir(None))
+    def test_require_gamedir_without_a_folder_is_a_config_error(self):
+        # The CLI fills an omitted --game-dir from the configured install
+        # before the command runs; the helper itself never reads titan.toml.
+        from titan.errors import InstallNotFoundError
+
+        with self.assertRaises(InstallNotFoundError):
+            _require_gamedir(None)
 
 
 class LzwCliTests(unittest.TestCase):
@@ -153,8 +168,10 @@ class LzwCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_returns_error(self):
-        rc = cmd_lzw_decompress(SimpleNamespace(file="/nope/missing", output=None))
-        self.assertEqual(rc, 1)
+        rc = _status(
+            cmd_lzw_decompress, SimpleNamespace(file="/nope/missing", output=None)
+        )
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_decompresses_raw_file_passthrough(self):
         path = os.path.join(self.tmpdir.name, "SOMEFILE")
@@ -180,10 +197,10 @@ class LibraryCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_lib_list_missing_file(self):
-        rc = cmd_lib_list(
-            SimpleNamespace(file="/nope", entry_size=4, size_header=False)
+        rc = _status(
+            cmd_lib_list, SimpleNamespace(file="/nope", entry_size=4, size_header=False)
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_lib_list_succeeds(self):
         rc = cmd_lib_list(
@@ -235,8 +252,8 @@ class LibraryCliTests(unittest.TestCase):
 
 class TileflagCliTests(unittest.TestCase):
     def test_missing_file(self):
-        rc = cmd_tileflag_dump(SimpleNamespace(file="/nope", output=None))
-        self.assertEqual(rc, 1)
+        rc = _status(cmd_tileflag_dump, SimpleNamespace(file="/nope", output=None))
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_dumps_successfully(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -251,8 +268,8 @@ class TileflagCliTests(unittest.TestCase):
 
 class PaletteCliTests(unittest.TestCase):
     def test_missing_file(self):
-        rc = cmd_palette_export(SimpleNamespace(file="/nope", output=None))
-        self.assertEqual(rc, 1)
+        rc = _status(cmd_palette_export, SimpleNamespace(file="/nope", output=None))
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_exports_successfully(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -385,13 +402,13 @@ class MapRenderCliTests(unittest.TestCase):
 
     def test_objects_missing_lzobjblk_errors(self):
         os.remove(os.path.join(self.tmpdir.name, "LZOBJBLK"))
-        rc = cmd_map_render(self._args(region="0,0,4,4", objects=True))
-        self.assertEqual(rc, 1)
+        rc = _status(cmd_map_render, self._args(region="0,0,4,4", objects=True))
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_objects_missing_tileflag_errors(self):
         os.remove(os.path.join(self.tmpdir.name, "TILEFLAG"))
-        rc = cmd_map_render(self._args(region="0,0,4,4", objects=True))
-        self.assertEqual(rc, 1)
+        rc = _status(cmd_map_render, self._args(region="0,0,4,4", objects=True))
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
 
 class MapAuditZorderCliTests(unittest.TestCase):
@@ -445,8 +462,8 @@ class MapAuditZorderCliTests(unittest.TestCase):
 
     def test_missing_look_lzd_errors(self):
         os.remove(os.path.join(self.tmpdir.name, "LOOK.LZD"))
-        rc = cmd_map_audit_zorder(self._args())
-        self.assertEqual(rc, 1)
+        rc = _status(cmd_map_audit_zorder, self._args())
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_describes_the_seeded_overlap(self):
         buf = io.StringIO()
@@ -2281,12 +2298,13 @@ class EggListCliTests(unittest.TestCase):
 
     def test_missing_look_lzd_errors(self):
         os.remove(os.path.join(self.tmpdir.name, "LOOK.LZD"))
-        rc = cmd_egg_list(
+        rc = _status(
+            cmd_egg_list,
             SimpleNamespace(
                 gamedir=self.tmpdir.name, block=None, dungeon=None, limit=200
-            )
+            ),
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_lists_the_seeded_egg_with_its_spawn_target(self):
         buf = io.StringIO()
@@ -2403,8 +2421,8 @@ class GamestateDumpCliTests(unittest.TestCase):
 
     def test_missing_lzdngblk_errors(self):
         os.remove(os.path.join(self.tmpdir.name, "LZDNGBLK"))
-        rc = cmd_gamestate_dump(SimpleNamespace(gamedir=self.tmpdir.name))
-        self.assertEqual(rc, 1)
+        rc = _status(cmd_gamestate_dump, SimpleNamespace(gamedir=self.tmpdir.name))
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_dumps_successfully(self):
         rc = cmd_gamestate_dump(SimpleNamespace(gamedir=self.tmpdir.name))
@@ -2512,7 +2530,8 @@ class FlagsCliTests(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     def test_set_missing_objlist_errors(self):
-        rc = cmd_flags_set(
+        rc = _status(
+            cmd_flags_set,
             SimpleNamespace(
                 savegame=self.tmpdir_a.name + "_nope",
                 actor=1,
@@ -2522,9 +2541,9 @@ class FlagsCliTests(unittest.TestCase):
                 gargish=None,
                 output=None,
                 in_place=False,
-            )
+            ),
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_set_actor_without_flag_and_value_errors(self):
         rc = cmd_flags_set(
@@ -2571,16 +2590,17 @@ class ConverseDumpCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_errors(self):
-        rc = cmd_converse_dump(
+        rc = _status(
+            cmd_converse_dump,
             SimpleNamespace(
                 file="/nope",
                 item=None,
                 entry_size=4,
                 size_header=False,
                 output=None,
-            )
+            ),
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_out_of_range_item_errors(self):
         rc = cmd_converse_dump(
@@ -2632,10 +2652,11 @@ class FontExportCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_errors(self):
-        rc = cmd_font_export(
-            SimpleNamespace(file="/nope", text=None, scale=3, output=None)
+        rc = _status(
+            cmd_font_export,
+            SimpleNamespace(file="/nope", text=None, scale=3, output=None),
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_exports_both_font_sheets(self):
         outdir = os.path.join(self.tmpdir.name, "out")
@@ -2667,8 +2688,8 @@ class LookDumpCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_errors(self):
-        rc = cmd_look_dump(SimpleNamespace(file="/nope", output=None))
-        self.assertEqual(rc, 1)
+        rc = _status(cmd_look_dump, SimpleNamespace(file="/nope", output=None))
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_dumps_successfully(self):
         outdir = os.path.join(self.tmpdir.name, "out")
@@ -2690,8 +2711,10 @@ class BookDumpCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_errors(self):
-        rc = cmd_book_dump(SimpleNamespace(file="/nope", book=None, output=None))
-        self.assertEqual(rc, 1)
+        rc = _status(
+            cmd_book_dump, SimpleNamespace(file="/nope", book=None, output=None)
+        )
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_single_book_out_of_range_errors(self):
         rc = cmd_book_dump(SimpleNamespace(file=self.path, book=99, output=None))
@@ -2719,8 +2742,10 @@ class ScheduleDumpCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_file_errors(self):
-        rc = cmd_schedule_dump(SimpleNamespace(file="/nope", actor=None, output=None))
-        self.assertEqual(rc, 1)
+        rc = _status(
+            cmd_schedule_dump, SimpleNamespace(file="/nope", actor=None, output=None)
+        )
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_out_of_range_actor_errors(self):
         rc = cmd_schedule_dump(SimpleNamespace(file=self.path, actor=9999, output=None))

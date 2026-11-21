@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
+from titan.u7 import install as u7_install
+from titan.u7 import world_workflow as workflow
+from titan.u7 import world_workflow_ui as workflow_ui
 from titan.u7.cli import u7_app
 from titan.u7.cli import world as world_cli
 from titan.u7.flex import U7FlexArchive
 from titan.u7.world import WorldQueryParams, parse_numbers, parse_rectangle, run_query
-from titan.u7 import world_workflow as workflow
-from titan.u7 import world_workflow_ui as workflow_ui
-from titan.u7 import install as u7_install
-from titan.errors import EXIT_CODES
 
 
 def write_ifix(directory, sc, objects):
@@ -58,6 +58,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(u7_install, "resolve_u7_gamedat", lambda game: None)
     monkeypatch.setattr(u7_install, "resolve_u7_text_flx", lambda game, static: None)
     monkeypatch.setattr(u7_install, "resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr(u7_install, "default_u7_exult_flx", lambda game: None)
     return WorldQueryParams(static_dir=str(static), superchunks=[0, 1])
 
 
@@ -634,7 +635,7 @@ def test_cli_existing_output_requires_force(world, tmp_path):
     path.write_text("preserve me")
     args = ["world-query", world.static_dir, "--shape", "150", "-o", str(path)]
     failed = CliRunner().invoke(u7_app, args)
-    assert failed.exit_code == 1
+    assert failed.exit_code == EXIT_CODES["output-exists"]
     assert path.read_text() == "preserve me"
     assert CliRunner().invoke(u7_app, [*args, "--force"]).exit_code == 0
     assert "matched 2" in path.read_text()

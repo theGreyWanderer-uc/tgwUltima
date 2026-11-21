@@ -34,7 +34,8 @@ from titan.u8.world_search import (
     next_u8_world_search_export,
     query_u8_world_items,
 )
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 
 def parse_u8_search_number(value: str) -> int:
@@ -436,7 +437,9 @@ def run_u8_world_search(
             shapes = find_u8_browser_file(target.static, "U8SHAPES.FLX")
             if shapes is None:
                 raise ValueError("U8 world search: selected STATIC has no U8SHAPES.FLX")
-        library = load_u8_shape_library(shapes, palette=palette)
+        library = load_u8_shape_library(
+            shapes, palette=palette, install=configured_install("u8")
+        )
         if source is None and not static_only:
             source = choose_u8_save_browser_source(library.path.parent)
             if source is None:
@@ -474,7 +477,7 @@ def run_u8_world_search(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 def _make_u8_search_command(eggs: bool) -> Callable[..., None]:
@@ -486,8 +489,10 @@ def _make_u8_search_command(eggs: bool) -> Callable[..., None]:
             "palette": "palette",
             "source": "input-file",
             "names": "input-file",
+            "shapes": "install-file",
         },
         interactive=True,
+        resources={"shapes": "u8shapes"},
     )
     def u8_search_cmd(
         source: Annotated[
@@ -667,7 +672,7 @@ def _make_u8_search_command(eggs: bool) -> Callable[..., None]:
             )
         except ValueError as error:
             typer.echo(f"Error: {error}", err=True)
-            raise typer.Exit(1) from error
+            raise typer.Exit(exit_code(error)) from error
         raise typer.Exit(
             run_u8_world_search(
                 source=source,

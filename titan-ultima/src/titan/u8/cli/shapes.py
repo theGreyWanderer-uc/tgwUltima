@@ -33,14 +33,14 @@ from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
 from titan.u7.typeflag import U7TypeFlags
 from titan._meta import meta
+from titan._config import export_output
 
 
 def cmd_shape_export(args: SimpleNamespace) -> int:
     """Export frames from a single Shape file to PNG images."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     if args.palette and os.path.isfile(args.palette):
         pal = U8Palette.from_file(args.palette)
@@ -81,8 +81,7 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
     """Batch-export all U8 shapes from a directory of .shp files or U8SHAPES.FLX."""
     srcpath = args.directory
     if not os.path.isdir(srcpath) and not os.path.isfile(srcpath):
-        print(f"ERROR: Path not found: {srcpath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Path not found: {srcpath}")
 
     if args.palette and os.path.isfile(args.palette):
         pal = U8Palette.from_file(args.palette)
@@ -181,11 +180,9 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
     output_path = args.output
 
     if not os.path.isdir(png_dir):
-        print(f"ERROR: Directory not found: {png_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Directory not found: {png_dir}")
     if not os.path.isfile(original_path):
-        print(f"ERROR: Original shape not found: {original_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Original shape not found: {original_path}")
 
     if args.palette and os.path.isfile(args.palette):
         pal = U8Palette.from_file(args.palette)
@@ -274,21 +271,15 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
 def cmd_shape_convert_u7(args: SimpleNamespace) -> int:
     """Convert one U8 shape into a U7/Exult-compatible shape (see titan.u8.u7_shape_convert)."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
     if not os.path.isfile(args.typeflag):
-        print(f"ERROR: TYPEFLAG.DAT not found: {args.typeflag}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"TYPEFLAG.DAT not found: {args.typeflag}")
     if not os.path.isdir(args.u7_static):
-        print(
-            f"ERROR: U7 STATIC directory not found: {args.u7_static}", file=sys.stderr
-        )
-        return 1
+        raise FileNotFoundError(f"U7 STATIC directory not found: {args.u7_static}")
 
     u7_shapes_path = os.path.join(args.u7_static, "SHAPES.VGA")
     if not os.path.isfile(u7_shapes_path):
-        print(f"ERROR: SHAPES.VGA not found in {args.u7_static}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"SHAPES.VGA not found in {args.u7_static}")
 
     if args.u8_palette and os.path.isfile(args.u8_palette):
         u8_pal = U8Palette.from_file(args.u8_palette)
@@ -301,8 +292,7 @@ def cmd_shape_convert_u7(args: SimpleNamespace) -> int:
 
     u7_pal_path = args.u7_palette or os.path.join(args.u7_static, "PALETTES.FLX")
     if not os.path.isfile(u7_pal_path):
-        print(f"ERROR: U7 palette not found: {u7_pal_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"U7 palette not found: {u7_pal_path}")
     u7_pal = U7Palette.from_file(u7_pal_path)
 
     u8_tfa = U8TypeFlags.from_file(args.typeflag)
@@ -350,21 +340,15 @@ def cmd_shape_convert_u7(args: SimpleNamespace) -> int:
 def cmd_shape_convert_u7_all(args: SimpleNamespace) -> int:
     """Batch-convert every used U8 shape in U8SHAPES.FLX into U7/Exult-compatible shapes."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
     if not os.path.isfile(args.typeflag):
-        print(f"ERROR: TYPEFLAG.DAT not found: {args.typeflag}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"TYPEFLAG.DAT not found: {args.typeflag}")
     if not os.path.isdir(args.u7_static):
-        print(
-            f"ERROR: U7 STATIC directory not found: {args.u7_static}", file=sys.stderr
-        )
-        return 1
+        raise FileNotFoundError(f"U7 STATIC directory not found: {args.u7_static}")
 
     u7_shapes_path = os.path.join(args.u7_static, "SHAPES.VGA")
     if not os.path.isfile(u7_shapes_path):
-        print(f"ERROR: SHAPES.VGA not found in {args.u7_static}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"SHAPES.VGA not found in {args.u7_static}")
 
     if args.u8_palette and os.path.isfile(args.u8_palette):
         u8_pal = U8Palette.from_file(args.u8_palette)
@@ -377,8 +361,7 @@ def cmd_shape_convert_u7_all(args: SimpleNamespace) -> int:
 
     u7_pal_path = args.u7_palette or os.path.join(args.u7_static, "PALETTES.FLX")
     if not os.path.isfile(u7_pal_path):
-        print(f"ERROR: U7 palette not found: {u7_pal_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"U7 palette not found: {u7_pal_path}")
     u7_pal = U7Palette.from_file(u7_pal_path)
 
     print("Loading U8SHAPES.FLX and TYPEFLAG.DAT...")
@@ -390,7 +373,7 @@ def cmd_shape_convert_u7_all(args: SimpleNamespace) -> int:
     u7_tfa = U7TypeFlags.from_dir(args.u7_static)
     size_table = build_footprint_size_table(u7_tfa, u7_shapes)
 
-    outdir = args.output or "u7_converted"
+    outdir = export_output(args.output, "u8", "shape-convert-u7-all")
     os.makedirs(outdir, exist_ok=True)
 
     total = len(u8_shapes_flx.records)

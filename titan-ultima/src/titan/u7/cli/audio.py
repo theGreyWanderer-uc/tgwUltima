@@ -20,8 +20,7 @@ def cmd_music_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or f"{Path(filepath).stem}_midi"
     os.makedirs(outdir, exist_ok=True)
@@ -55,8 +54,7 @@ def cmd_voc_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or Path(filepath).stem
     os.makedirs(outdir, exist_ok=True)
@@ -84,8 +82,7 @@ def cmd_speech_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or f"{Path(filepath).stem}_wav"
 

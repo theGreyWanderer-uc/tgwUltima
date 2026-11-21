@@ -13,6 +13,7 @@ from titan.u7.gameplay_metadata import (
     validate_gameplay_format,
 )
 from titan.u7.shape_archive import find_archive
+from titan.errors import InvalidDataError
 
 COMBAT_RECORD_WIDTHS = {"weapon": 21, "ammo": 13, "armor": 10}
 COMBAT_FILENAMES = {"weapon": "WEAPONS.DAT", "ammo": "AMMO.DAT", "armor": "ARMOR.DAT"}
@@ -55,7 +56,7 @@ class U7CombatLayer:
         data_format: U7GameplayFormat = "exult",
     ) -> U7CombatLayer:
         if kind not in COMBAT_RECORD_WIDTHS:
-            raise ValueError(f"U7 combat metadata: unknown table kind {kind}")
+            raise InvalidDataError(f"U7 combat metadata: unknown table kind {kind}")
         table = read_gameplay_table(
             data,
             COMBAT_RECORD_WIDTHS[kind],
@@ -65,7 +66,7 @@ class U7CombatLayer:
         if strict and (
             table.declared_count is None or table.parsed_count != table.declared_count
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 combat metadata: incomplete {kind} table in {source}: {'; '.join(table.warnings)}"
             )
         return cls(kind, table, source)
@@ -123,9 +124,11 @@ class U7CombatLayer:
     def removal_record(self, shape: int) -> bytes:
         """Construct an Exult removal row without changing any source stream."""
         if self.table.data_format != "exult":
-            raise ValueError("U7 combat metadata: removal records require Exult format")
+            raise InvalidDataError(
+                "U7 combat metadata: removal records require Exult format"
+            )
         if not 0 <= shape <= 65535:
-            raise ValueError("U7 combat metadata: removal shape outside u16")
+            raise InvalidDataError("U7 combat metadata: removal shape outside u16")
         return (
             shape.to_bytes(2, "little") + bytes(self.table.record_width - 3) + b"\xff"
         )
@@ -135,11 +138,11 @@ class U7CombatLayer:
             self.table.declared_count is None
             or self.table.parsed_count != self.table.declared_count
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "U7 combat metadata: cannot edit an incomplete source table"
             )
         if len(raw) != self.table.record_width:
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 combat metadata: expected {self.table.record_width} record bytes"
             )
 
@@ -155,7 +158,9 @@ class U7CombatMetadata:
     def __post_init__(self) -> None:
         validate_gameplay_format(self.data_format)
         if any(layer.table.data_format != self.data_format for layer in self.layers):
-            raise ValueError("U7 combat metadata: cannot mix retail and Exult layers")
+            raise InvalidDataError(
+                "U7 combat metadata: cannot mix retail and Exult layers"
+            )
 
     @classmethod
     def from_dir(
@@ -168,7 +173,7 @@ class U7CombatMetadata:
         data_format: U7GameplayFormat = "exult",
     ) -> U7CombatMetadata:
         if kind not in COMBAT_FILENAMES:
-            raise ValueError(f"U7 combat metadata: unknown table kind {kind}")
+            raise InvalidDataError(f"U7 combat metadata: unknown table kind {kind}")
         paths: list[Path] = []
         for directory in (static_dir, patch_dir):
             path = (
@@ -198,7 +203,7 @@ class U7CombatMetadata:
         result: dict[int, U7CombatRecord] = {}
         for layer in self.layers:
             if layer.kind != self.kind:
-                raise ValueError(
+                raise InvalidDataError(
                     "U7 combat metadata: cannot overlay different table kinds"
                 )
             for record in layer.records:

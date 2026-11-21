@@ -14,20 +14,20 @@ import typer
 
 from titan.u8.save import U8SaveArchive
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_save_list(args: SimpleNamespace) -> int:
     """List contents of a U8 save file."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     try:
         save = U8SaveArchive.from_file(filepath)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     entries = save.list_entries()
 
     print(f"U8 Save Archive: {filepath}")
@@ -47,14 +47,13 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
     """Extract files from a U8 save archive."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     try:
         save = U8SaveArchive.from_file(filepath)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     entries = save.list_entries()
 
     outdir = args.output or Path(filepath).stem

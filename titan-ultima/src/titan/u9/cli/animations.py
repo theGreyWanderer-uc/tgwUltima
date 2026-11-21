@@ -53,7 +53,7 @@ from titan.u9.avatar_animation_library import (
     export_avatar_animation_library,
 )
 from titan.u9.flx_archive import U9FlxArchiveError
-from titan.u9.mesh_export import MeshExportError, export_obj, export_stl
+from titan.u9.mesh_export import export_obj, export_stl
 from titan.u9.model import U9ModelError
 from titan.u9.animation_labels import U9AnimationLabels, parse_animation_source_hints
 from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
@@ -64,6 +64,8 @@ from titan.u9.planned_animation_library_export import (
 )
 from titan.u9.cli import _common
 from titan._meta import meta
+from titan._config import export_output
+from titan.errors import exit_code
 
 
 def _load_animations(filepath: str) -> Optional[U9Animations]:
@@ -101,11 +103,7 @@ def cmd_animation_list(args: SimpleNamespace) -> int:
     )
     print("-" * 152)
     for animation_id in shown:
-        try:
-            animation = animations.animation(animation_id)
-        except U9AnimationError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            return 1
+        animation = animations.animation(animation_id)
         if animation is None:
             continue
         print(
@@ -128,11 +126,7 @@ def cmd_animation_show(args: SimpleNamespace) -> int:
     if animations is None:
         return 1
 
-    try:
-        animation = animations.animation(args.id)
-    except U9AnimationError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    animation = animations.animation(args.id)
     if animation is None:
         print(f"Animation {args.id} is an unused slot.")
         return 0
@@ -242,7 +236,7 @@ def cmd_animation_model_report(args: SimpleNamespace) -> int:
         )
     except (U9AnimationModelReportError, U9AssetReportError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(f"Wrote {len(rows)} animation/model row(s) to {output}")
@@ -275,7 +269,7 @@ def cmd_animation_library_plan(args: SimpleNamespace) -> int:
         OSError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in plan.warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     summary = plan.document["summary"]
@@ -303,8 +297,7 @@ def cmd_animation_library_export(args: SimpleNamespace) -> int:
         ("Node registry", args.registry),
     ):
         if path is not None and not Path(path).is_file():
-            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"{label} not found: {path}")
 
     animations = _load_animations(args.animations)
     if animations is None:
@@ -322,7 +315,7 @@ def cmd_animation_library_export(args: SimpleNamespace) -> int:
         )
         palette_path, _ = _common._find_palette(args.palette, args.textures)
         texture_resolver = _common._make_texture_resolver(args.textures, palette_path)
-        output = args.output or "u9_animation_library_export"
+        output = export_output(args.output, "u9", "animation-library-export")
         result = export_planned_animation_libraries(
             args.plan,
             animations.animations(),
@@ -351,7 +344,7 @@ def cmd_animation_library_export(args: SimpleNamespace) -> int:
         U9PlannedAnimationLibraryExportError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(
         f"Exported {len(result.libraries)} actor/skeleton libraries containing "
@@ -385,45 +378,35 @@ def cmd_animation_pose_export(args: SimpleNamespace) -> int:
     if animations is None:
         return 1
 
-    try:
-        animation = animations.animation(args.animation_id)
-        if animation is None:
-            raise U9AnimationPoseError(
-                f"animation {args.animation_id} is an unused anim.flx slot"
-            )
-        model = _common._load_model(args.sappear, args.model_id)
-        result = pose_model(model, animation, args.time_ms)
-        resolver = _common._make_texture_resolver(args.textures, args.palette)
-        clip_label = _animation_label(animation).replace("/", "_")
-        clip_suffix = f"_{clip_label}" if clip_label else ""
-        stem = (
-            f"animation_{args.animation_id:05d}{clip_suffix}_"
-            f"model_{args.model_id:05d}_{args.time_ms:06d}ms"
+    animation = animations.animation(args.animation_id)
+    if animation is None:
+        raise U9AnimationPoseError(
+            f"animation {args.animation_id} is an unused anim.flx slot"
         )
-        outdir = args.output or stem
-        os.makedirs(outdir, exist_ok=True)
-        base = os.path.join(outdir, stem)
-        wrote = []
-        if args.format in ("obj", "both"):
-            export_obj(
-                result.model,
-                base + ".obj",
-                lod_level=args.lod,
-                texture_resolver=resolver,
-            )
-            wrote.append(base + ".obj")
-        if args.format in ("stl", "both"):
-            export_stl(result.model, base + ".stl", lod_level=args.lod)
-            wrote.append(base + ".stl")
-    except (
-        U9AnimationError,
-        U9AnimationPoseError,
-        U9FlxArchiveError,
-        U9ModelError,
-        MeshExportError,
-    ) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    model = _common._load_model(args.sappear, args.model_id)
+    result = pose_model(model, animation, args.time_ms)
+    resolver = _common._make_texture_resolver(args.textures, args.palette)
+    clip_label = _animation_label(animation).replace("/", "_")
+    clip_suffix = f"_{clip_label}" if clip_label else ""
+    stem = (
+        f"animation_{args.animation_id:05d}{clip_suffix}_"
+        f"model_{args.model_id:05d}_{args.time_ms:06d}ms"
+    )
+    outdir = args.output or stem
+    os.makedirs(outdir, exist_ok=True)
+    base = os.path.join(outdir, stem)
+    wrote = []
+    if args.format in ("obj", "both"):
+        export_obj(
+            result.model,
+            base + ".obj",
+            lod_level=args.lod,
+            texture_resolver=resolver,
+        )
+        wrote.append(base + ".obj")
+    if args.format in ("stl", "both"):
+        export_stl(result.model, base + ".stl", lod_level=args.lod)
+        wrote.append(base + ".stl")
 
     print(
         f"Exported animation {args.animation_id} on model {args.model_id} "
@@ -452,8 +435,7 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
         ("Node registry", args.registry),
     ):
         if path is not None and not Path(path).is_file():
-            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"{label} not found: {path}")
 
     animations = _load_animations(args.animations)
     if animations is None:
@@ -506,7 +488,7 @@ def cmd_animation_bundle_export(args: SimpleNamespace) -> int:
         U9NodeRegistryError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(
         f"Exported model {args.model_id} with animation {args.animation_id} "
@@ -537,8 +519,7 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
         ("Node registry", args.registry),
     ):
         if path is not None and not Path(path).is_file():
-            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"{label} not found: {path}")
 
     animations = _load_animations(args.animations)
     if animations is None:
@@ -596,7 +577,7 @@ def cmd_animation_set_export(args: SimpleNamespace) -> int:
         U9NodeRegistryError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(
         f"Exported {result.clip_count} animation clip(s) for model {args.model_id} "
@@ -624,8 +605,7 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
         ("Node registry", args.registry),
     ):
         if path is not None and not Path(path).is_file():
-            print(f"ERROR: {label} not found: {path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"{label} not found: {path}")
 
     animations = _load_animations(args.animations)
     if animations is None:
@@ -671,7 +651,7 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
         U9NodeRegistryError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     exported = result.export
     print(

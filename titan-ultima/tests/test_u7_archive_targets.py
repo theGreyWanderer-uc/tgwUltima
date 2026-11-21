@@ -28,8 +28,8 @@ def test_mod_descriptions_macros_and_folder_discovery(tmp_path):
         "SI", {}, static, ExultGamePaths("SI", mods_path=str(mods)), None
     )
     assert [(target.name, target.patch) for target in targets] == [
-        ("Other Title", mods / "other/patch"),
-        ("Pagan Edition", mods / "pagan/patch"),
+        ("Other Title (remapped)", mods / "other/patch"),
+        ("Pagan Edition (pagan)", mods / "pagan/patch"),
     ]
     assert all(target.static == static and not target.standalone for target in targets)
 
@@ -60,13 +60,17 @@ def test_titan_settings_and_custom_exult_game_paths(tmp_path):
         target.name: target
         for target in discover_targets("SI", config, tmp_path / "STATIC", None, cfg)
     }
-    assert set(targets) == {"configured", "custom_library", "My SI Game (Exult game)"}
+    assert set(targets) == {
+        "configured",
+        "custom_library",
+        "My SI Game (mygame, Exult game)",
+    }
     assert targets["configured"].patch == tmp_path / "mods/configured/patch"
     assert not targets["configured"].standalone
     assert targets["custom_library"].standalone
-    assert targets["My SI Game (Exult game)"].static == custom / "assets"
-    assert targets["My SI Game (Exult game)"].patch == custom / "edits"
-    assert targets["My SI Game (Exult game)"].standalone
+    assert targets["My SI Game (mygame, Exult game)"].static == custom / "assets"
+    assert targets["My SI Game (mygame, Exult game)"].patch == custom / "edits"
+    assert targets["My SI Game (mygame, Exult game)"].standalone
 
 
 @pytest.mark.parametrize("own_static", [False, True])
@@ -117,3 +121,31 @@ def test_mod_runtime_paths_follow_exult_savegame_macros(tmp_path):
     )[0]
     assert target.gamedat == tmp_path / "saves/mods/pagan/current"
     assert target.root == mods / "pagan"
+
+
+def test_mod_saves_setting_sets_the_save_folder(tmp_path):
+    mods = tmp_path / "mods"
+    (mods / "described/patch").mkdir(parents=True)
+    (mods / "described.cfg").write_text("<modinfo></modinfo>")
+    (mods / "plain/patch").mkdir(parents=True)
+    config = {
+        "u7si": {
+            "game": {"base": str(tmp_path)},
+            "mods": {
+                "described": {"paths": {"saves": "profile/described/saves"}},
+                "plain": {"paths": {"patch": "mods/plain/patch", "saves": "p/s"}},
+                "legacy": {
+                    "paths": {"patch": "mods/legacy/patch", "savegame": "p/legacy"}
+                },
+            },
+        }
+    }
+    targets = {
+        target.name: target
+        for target in discover_targets(
+            "SI", config, tmp_path / "STATIC", ExultGamePaths("SI"), None
+        )
+    }
+    assert targets["described"].save_root == tmp_path / "profile/described/saves"
+    assert targets["plain"].save_root == tmp_path / "p/s"
+    assert targets["legacy"].save_root == tmp_path / "p/legacy"

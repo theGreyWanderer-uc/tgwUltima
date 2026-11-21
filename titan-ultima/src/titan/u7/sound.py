@@ -20,6 +20,7 @@ __all__ = ["VocDecoder"]
 import os
 import struct
 from typing import Optional
+from titan.errors import InvalidDataError
 
 
 # ---------------------------------------------------------------------------
@@ -121,10 +122,10 @@ class VocDecoder:
         Creative Voice File magic string.
         """
         if not data or len(data) < VOC_DATA_OFFSET:
-            raise ValueError("Data too short for a VOC file")
+            raise InvalidDataError("Data too short for a VOC file")
 
         if not data[: len(VOC_MAGIC)] == VOC_MAGIC:
-            raise ValueError("Not a Creative Voice File (missing magic header)")
+            raise InvalidDataError("Not a Creative Voice File (missing magic header)")
 
         pcm = bytearray()
         pos = VOC_DATA_OFFSET

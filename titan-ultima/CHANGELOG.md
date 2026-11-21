@@ -10,6 +10,19 @@ work for the next release.
 
 ### Added
 
+- **The configured install, for front ends:** `titan._meta.configured_install()`
+  returns the install your `titan.toml` selects for a game, with its files
+  and any `[<game>.paths]` overrides, and the configured paths that are
+  missing. Commands now take their default game folders from it in one
+  shared place, now for U6, Martian Dreams, both Ultima Underworlds,
+  Ultima 7 (both games), Ultima Online, Ultima 8 and Ultima 9; nothing changes in how the
+  commands behave, except that some setup mistakes now exit 78 with the
+  setup hint and the missing path, like other setup problems (was 1): a
+  `[uo.game] install` naming a missing `[uo.installs.*]` entry, and a
+  `[u8.paths]` map file or `[u9.paths]` file that doesn't exist.
+- **U8 front-end metadata fix:** the browsers' and `npc-animation-report`'s
+  `--shapes` (and `map-browse --globs`) are now described as the
+  `U8SHAPES.FLX` / `GLOB.FLX` archives they take, not as extracted folders.
 - **Every file and folder input is described for front ends:** each
   command's file and folder parameters now say what they take (a game file
   or folder from the install, the user's own file or folder, a save, a
@@ -126,6 +139,105 @@ work for the next release.
   it wrote. `flex-extract` and `uw1 texture-export` report so far; more
   commands will follow. `titan._config.export_dir(game, name)` gives the
   default export folder.
+
+### Fixed
+
+- **`u7 monster-report --game si`:** the world-object part of the report
+  (`monster_world_objects.csv`) was read with Black Gate's shape metadata;
+  it now uses Serpent Isle's.
+- **`u7 monster-report --mod` and `u7 gamedat-info --mod`:** a mod name that is
+  not configured, or a mod with no saved game state yet, quietly used the base
+  game's GAMEDAT. Both commands now stop with an error naming the mod (and, for
+  an unknown name, the configured ones).
+- **U7 mod save folders:** `titan setup` writes each mod's save folder as
+  `saves` under `[u7bg.mods."<name>".paths]`, but the world picker only read
+  `savegame`, so the setting was ignored. The picker now reads `saves` (and
+  still accepts `savegame`), and `titan config` checks it as a save folder.
+- **`u7 monster-report` and `u7 gamedat-info` without `--mod`:** when Exult's
+  profile held a played game, they read it even if `[u7bg.paths] gamedat` /
+  `[u7si.paths] gamedat` named another folder. A configured gamedat now wins, as
+  in every other command.
+
+### Added
+
+- **`titan.protocols`:** small interfaces the games share, for cross-game tools.
+  `Palette` (`colors`, `to_flat_rgb()`, `to_pil_image()`) is met by every
+  game's palette (U6 and MD, U7, U8, U9, UW1, UW2); `IndexedArchive`
+  (`entry_count`, `read(index)`, `None` for an empty slot) by the U8/U7 Flex
+  readers, U9 FLX, U6 `.LIB` and UW2 `.ARK` archives.
+- **`titan u7 mods`:** lists a game's mods and Exult custom games, with the
+  names `--mod` takes, whether each has been played, and its paths
+  (`--format json` for every path). `--mod` completes these names in the shell.
+
+### Changed
+
+- **Exit codes:** commands now exit with the kind of problem they hit instead
+  of `1`: `65` for a damaged or unexpected input file (including a malformed
+  plan or recipe), `66` for a missing file, `73` (new) for an output that
+  already exists without `--force`/`--replace`, `74` for a read/write failure
+  and `78` for setup problems. `1` now means an error of none of those kinds,
+  usually a bad option value. The messages are the same. See "Errors and exit
+  codes" in `cli_reference.md`.
+- **`TITAN_RESULTS_FILE`:** every command with an output file or folder now
+  reports what it wrote (the file, or the folder and the files written into
+  it), not only the three that did before.
+- **Old U8-only config layout:** top-level `[game]`/`[paths]` (titan's
+  original U8-only `titan.toml`) are read as `[u8]`, and `titan setup` now
+  moves them under `[u8]` (keeping a `.bak`). The loaded config no longer has a
+  top-level `game`/`paths` copy of `[u8]`: code reading
+  `get_config()["paths"]` should read `get_config()["u8"]["paths"]`
+  (`titan._config.cfg()` already does). `titan config` notes a file that still
+  uses the old layout.
+- **Faster `import titan`:** the names `titan` re-exports (`FlexArchive`,
+  `U8Shape`, `U7Palette`, ...) now load on first use, so importing any titan
+  module no longer loads the U8 and U7 readers (`import titan._meta`: 0.35 s
+  to 0.06 s). `from titan import U8Shape` works as before.
+- **Deprecated:** the old top-level U8 modules `titan.palette`, `titan.map`,
+  `titan.shape`, `titan.save`, `titan.credits`, `titan.sound`,
+  `titan.typeflag` and `titan.xformpal` warn on import; import from `titan.u8.*`
+  (or `from titan import ...`) instead.
+- **UW1/UW2 palettes:** `to_flat_rgb()` (bytes) and `to_pil_image()`, as in the
+  other games; `flattened_rgb()` and `to_swatch_image()` still work. U8 palette
+  read errors are `U8PaletteError` (still a `ValueError`).
+- **Code layout (no command changes):** U6 and UW2 commands moved from one
+  `cli.py` into `cli/` packages split by topic; the loose U7, U8 and MD
+  `*_cli.py` modules moved into their `cli/` packages; the U7 edit-plan readers
+  (`ireg-tree-edit`, `actor-rewrite`, `save-repack`) are now
+  `titan.u7.edit_plans`.
+- **`titan setup` and Ultima Online:** setup now finds and checks the Classic
+  Client the same way as the other games: your configured base is the default,
+  a folder without client files is rejected (keeping the current setting), and
+  a corrected base is proposed like any other. Before, it offered only the
+  detected client and saved whatever path was typed.
+- **Default output folders:** 24 commands that wrote to a folder (or file) of
+  their own name in the current directory when `-o` was omitted now write to
+  titan's export folder, `<data folder>/<game>/exports/<command>`, as the
+  browsers already did, and print where. They are U6 `tile-export-all`; U7
+  `map-export-json`, `map-inventory`, `palette-export`, `shape-cycle-scan`; U8
+  `map-render-all`, `map-sample-all`, `shape-convert-u7-all`; U9
+  `texture-export-all`, `icon-export-all`, `model-export-all`, `map-atlas`,
+  `animation-library-export`, `script-research-export`, `dimension-csv`,
+  `spaces-csv`, `treedat-csv`, `areas-csv`; UW2 `map-render`, `map-3d-render`,
+  `map-3d-export`, `map-stack`, `model-render`, `model-export`. Pass `-o` to
+  write somewhere else. Commands whose default is the current folder itself
+  (most extract commands) are unchanged.
+- **Ultima 7 mods, one list everywhere:** `--mod`, the world picker (shape,
+  NPC, monster and palette browsers, the map, shape and font wizards) and
+  `titan setup` now find mods the same way: their `.cfg` descriptions and
+  folders in Exult's and the install's `mods` folders, `[u7xx.mods]` tables
+  and Exult custom games.
+  - `--mod` accepts Exult custom games too, and any letter case.
+  - The picker shows each mod's title with the name `--mod` takes, e.g.
+    "BLACK GATE KEYRING (Keyring)".
+- **Ultima 7 GAMEDAT and saves, one rule everywhere:** with no
+  `[u7bg.paths] gamedat` / `[u7si.paths] gamedat` set, every U7 command, the
+  world picker and `titan setup` now use Exult's live game state (`exult.cfg`'s
+  `gamedat_path`, else Exult's profile folder) when it holds a played game, then
+  the install's own `gamedat`. Before, most commands used only the install's
+  `gamedat`, and failed when there was none. Exult's save folder (`exult.cfg`'s
+  `savegame_path`, else its profile folder) is now where Exult saves are listed
+  from, so saves Exult wrote there are found even when GAMEDAT is configured
+  elsewhere.
 
 ## [0.8.0]
 

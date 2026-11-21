@@ -247,6 +247,7 @@ def build_u7_map_inventory(
     mod_data_dir: Optional[str] = None,
     text_flx_path: Optional[str] = None,
     area: Optional[list[Rect]] = None,
+    exult_flx: Optional[str] = None,
 ) -> U7MapInventory:
     """Scan one U7 map and return its inventory.
 
@@ -263,6 +264,7 @@ def build_u7_map_inventory(
         patch_dir=patch_dir,
         mod_data_dir=mod_data_dir,
         text_flx_path=text_flx_path,
+        exult_flx_path=exult_flx,
     )
     base, patch = resolve_world_sources(params)
     tfa, shape_names, frame_names, _count = load_query_metadata(params)

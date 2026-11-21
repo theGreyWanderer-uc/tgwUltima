@@ -300,7 +300,7 @@ class U7Palette:
         input as a single 768-colour table.
         """
         if encoding not in ("auto", "6bit", "8bit"):
-            raise ValueError(
+            raise InvalidDataError(
                 f"Unknown encoding {encoding!r}; expected 'auto', '6bit', or '8bit'"
             )
 

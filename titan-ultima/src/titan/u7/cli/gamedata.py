@@ -15,6 +15,7 @@ import typer
 from titan.u7 import install
 from titan.u7.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_typeflag_dump(args: SimpleNamespace) -> int:
@@ -27,8 +28,7 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
             getattr(args, "game", "bg")
         )
     if not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"STATIC directory not found: {static_dir}")
 
     tfa = U7TypeFlags.from_dir(static_dir)
     print(f"Loaded {len(tfa)} shape entries from {static_dir}")
@@ -73,8 +73,7 @@ def cmd_wihh_dump(args: SimpleNamespace) -> int:
             getattr(args, "game", "bg")
         )
     if not static_dir or not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"STATIC directory not found: {static_dir}")
 
     shape_count = _common._load_shape_count(args, fallback_static=static_dir)
     wihh = U7WeaponInHandOffsets.from_dir(static_dir, shape_count=shape_count)
@@ -117,7 +116,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
         data_format = validate_gameplay_format(getattr(args, "data_format", "exult"))
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     if data_format == "retail" and kind not in (
         "weapons",
         "weapon",
@@ -153,8 +152,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
             getattr(args, "game", "bg")
         )
     if not static_dir or not os.path.isdir(static_dir):
-        print(f"ERROR: STATIC directory not found: {static_dir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"STATIC directory not found: {static_dir}")
 
     names = U7ShapeNames.from_static_dir(static_dir)
     game = getattr(args, "game", "bg")
@@ -176,7 +174,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
             )
         except (OSError, ValueError) as error:
             print(f"ERROR: weapon metadata unavailable: {error}", file=sys.stderr)
-            return 1
+            return exit_code(error)
         content = weapons.dump_csv(names)
         label = f"{len(weapons.records)} weapon row(s)"
         metadata_warnings = weapons.warnings
@@ -193,7 +191,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
             )
         except (OSError, ValueError) as error:
             print(f"ERROR: ammo metadata unavailable: {error}", file=sys.stderr)
-            return 1
+            return exit_code(error)
         content = ammos.dump_csv(names)
         label = f"{len(ammos.records)} ammo row(s)"
         metadata_warnings = ammos.warnings
@@ -210,7 +208,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
             )
         except (OSError, ValueError) as error:
             print(f"ERROR: armor metadata unavailable: {error}", file=sys.stderr)
-            return 1
+            return exit_code(error)
         content = armors.dump_csv(names)
         label = f"{len(armors.records)} armor row(s)"
         metadata_warnings = armors.warnings
@@ -229,7 +227,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
             )
         except (OSError, ValueError) as error:
             print(f"ERROR: container metadata unavailable: {error}", file=sys.stderr)
-            return 1
+            return exit_code(error)
         content = containers.dump_csv(names)
         label = f"{len(containers.records)} container row(s)"
         metadata_warnings = containers.warnings
@@ -248,7 +246,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
             )
         except (OSError, ValueError) as error:
             print(f"ERROR: gump metadata unavailable: {error}", file=sys.stderr)
-            return 1
+            return exit_code(error)
         content = gumps.dump_csv()
         label = "gump layout/checkmark metadata"
         metadata_warnings = gumps.warnings
@@ -268,7 +266,7 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
             )
         except (OSError, ValueError) as error:
             print(f"ERROR: paperdoll metadata unavailable: {error}", file=sys.stderr)
-            return 1
+            return exit_code(error)
         content = paperdoll.dump_csv()
         label = "paperdoll character/item/layout metadata"
         metadata_warnings = paperdoll.warnings
@@ -289,13 +287,12 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
         if not path.is_file():
             path = Path(static_dir) / "USECODE"
         if not path.is_file():
-            print(f"ERROR: usecode file not found in {static_dir}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"usecode file not found in {static_dir}")
         try:
             usecode = U7UsecodeIndex.from_file(str(path))
         except (OSError, ValueError) as error:
             print(f"ERROR: {error}", file=sys.stderr)
-            return 1
+            return exit_code(error)
         content = usecode.dump_csv()
         label = f"{len(usecode.functions)} usecode function row(s)"
         metadata_warnings = usecode.warnings

@@ -4,8 +4,7 @@ from itertools import product
 
 import pytest
 
-from titan.fonts import wizard
-from titan.fonts import wizard_ui
+from titan.fonts import wizard, wizard_ui
 from titan.fonts.palette import (
     GRADIENT_PRESETS,
     GradientPreset,

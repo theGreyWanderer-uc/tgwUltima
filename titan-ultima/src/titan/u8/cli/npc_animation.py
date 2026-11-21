@@ -9,14 +9,14 @@ from typing import Annotated
 import typer
 
 from titan._config import export_dir
-from titan.u8.install import u8_cfg as cfg
 from titan.u8.npc_source import load_u8_npc_source
 from titan.u8.npc_animation_report import (
     export_u8_npc_animation_report,
     load_u8_npc_labels,
 )
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 
 @meta(
@@ -28,7 +28,9 @@ from titan._meta import meta
         "anim": "install-file",
         "itemcach": "input-file",
         "names": "input-file",
+        "shapes": "install-file",
     },
+    resources={"shapes": "u8shapes"},
 )
 def npc_animation_report_cmd(
     source: Annotated[
@@ -85,8 +87,9 @@ def npc_animation_report_cmd(
     if output is None:
         output = export_dir("u8", U8_NPC_ANIMATION_OUTPUT)
     try:
+        install = configured_install("u8")
         if shapes is None:
-            configured = cfg("u8shapes")
+            configured = install.resources.get("u8shapes") if install else None
             if configured:
                 shapes = Path(configured)
         if shapes is None:
@@ -96,7 +99,9 @@ def npc_animation_report_cmd(
         anim = anim or find_u8_browser_file(shapes.parent, "ANIM.DAT")
         if anim is None:
             raise ValueError("NPC animation report: supply matching --anim ANIM.DAT")
-        library = load_u8_shape_library(shapes, anim=anim, palette=palette)
+        library = load_u8_shape_library(
+            shapes, anim=anim, palette=palette, install=install
+        )
         native = load_u8_npc_source(source, itemcach=itemcach)
         for issue in native.diagnostics:
             typer.echo(issue)
@@ -119,7 +124,7 @@ def npc_animation_report_cmd(
         print(f"Open: {output / 'index.html'}")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 U8_NPC_ANIMATION_OUTPUT = "npc-animation-report"

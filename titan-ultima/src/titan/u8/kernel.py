@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from titan.u8.state_io import parse_u8_state_flex, read_u8_state_bytes
+from titan.errors import InvalidDataError
 
 PROCESS_FLAG_NAMES = (
     "suspended",
@@ -97,10 +98,10 @@ class U8KernelState:
     def from_bytes(cls, data: bytes) -> U8KernelState:
         """Validate native 1.00 record structure and decode the 42-byte Process base."""
         if len(data) < 128:
-            raise ValueError("KERNEL.DAT: truncated Flex header")
+            raise InvalidDataError("KERNEL.DAT: truncated Flex header")
         count = struct.unpack_from("<I", data, 84)[0]
         if count < 12 or (count - 10) % 2:
-            raise ValueError(
+            raise InvalidDataError(
                 "KERNEL.DAT: expected ten shared records and paired process slots"
             )
         archive = parse_u8_state_flex(data, "KERNEL.DAT", count)
@@ -114,7 +115,7 @@ class U8KernelState:
             offset + size > following
             for (offset, size), (following, _) in zip(intervals, intervals[1:])
         ):
-            raise ValueError("KERNEL.DAT: record payloads overlap")
+            raise InvalidDataError("KERNEL.DAT: record payloads overlap")
         max_processes = (count - 10) // 2
         for index, expected in (
             (1, 157),
@@ -125,26 +126,28 @@ class U8KernelState:
             (7, max_processes * 4),
         ):
             if len(records[index]) != expected:
-                raise ValueError(
+                raise InvalidDataError(
                     f"KERNEL.DAT: record {index} requires {expected} bytes"
                 )
         try:
             description = records[0].decode("ascii")
         except UnicodeDecodeError as error:
-            raise ValueError("KERNEL.DAT: build description must be ASCII") from error
+            raise InvalidDataError(
+                "KERNEL.DAT: build description must be ASCII"
+            ) from error
         match = re.fullmatch(
             r"Defines=([0-9a-fA-F]+) Id=Kernel Ver\. 1\.00[^\x00]*\x00", description
         )
         if match is None:
-            raise ValueError(
+            raise InvalidDataError(
                 "KERNEL.DAT: unsupported or invalid native build description"
             )
         if struct.unpack_from("<H", records[1], 14)[0] != max_processes:
-            raise ValueError(
+            raise InvalidDataError(
                 "KERNEL.DAT: scheduler capacity differs from record directory"
             )
         if len(records[2]) % 2:
-            raise ValueError("KERNEL.DAT: partial realtime list word")
+            raise InvalidDataError("KERNEL.DAT: partial realtime list word")
         sizes = struct.unpack(f"<{max_processes}H", records[3])
         processes = []
         for slot, size in enumerate(sizes):
@@ -152,12 +155,12 @@ class U8KernelState:
             raw, payload = records[object_index : object_index + 2]
             if not size:
                 if raw or payload:
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"KERNEL.DAT: unused slot {slot} has process records"
                     )
                 continue
             if len(raw) != size or size < 42:
-                raise ValueError(
+                raise InvalidDataError(
                     f"KERNEL.DAT: slot {slot} has invalid process object size"
                 )
             base = struct.unpack_from("<HHHBBiHHHH", raw, 2)

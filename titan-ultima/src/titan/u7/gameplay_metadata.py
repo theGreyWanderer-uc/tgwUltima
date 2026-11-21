@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
+from titan.errors import InvalidDataError
 
 U7GameplayFormat = Literal["exult", "retail"]
 
@@ -26,7 +27,9 @@ def gameplay_count_prefix(
     validate_gameplay_format(data_format)
     limit = 255 if data_format == "retail" else 65535
     if not 0 <= count <= limit:
-        raise ValueError(f"U7 gameplay metadata: {data_format} count exceeds {limit}")
+        raise InvalidDataError(
+            f"U7 gameplay metadata: {data_format} count exceeds {limit}"
+        )
     if data_format == "exult" and (extended or count >= 255):
         return b"\xff" + count.to_bytes(2, "little")
     return bytes([count])
@@ -91,7 +94,7 @@ def read_gameplay_table(
     """Read an original u8 count or Exult FF/u16 count without guessing a version header."""
     data_format = validate_gameplay_format(data_format)
     if record_width <= 0:
-        raise ValueError("Gameplay table record width must be positive")
+        raise InvalidDataError("Gameplay table record width must be positive")
     count: int | None = None
     header = 0
     if not headerless:

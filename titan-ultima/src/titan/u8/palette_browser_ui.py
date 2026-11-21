@@ -27,7 +27,8 @@ from titan.u8.palette_browser import (
     u8_palette_sheet,
 )
 from titan.u8.shape_browser_ui import choose_u8_shape_target
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 
 _menu = ui.menu
@@ -136,7 +137,7 @@ def run_u8_palette_browser(
             target = choose_u8_shape_target(game_dir)
             if target is None:
                 return 0
-            source = resolve_u8_palette_source(target.static)
+            source = resolve_u8_palette_source(target.static, configured_install("u8"))
             protected = (*protected, target.static)
         loaded = U8PaletteSource.load(source, protected=protected)
         if export:
@@ -238,7 +239,9 @@ def run_u8_palette_browser(
                         target = choose_u8_shape_target(game_dir)
                         if target:
                             loaded = U8PaletteSource.load(
-                                resolve_u8_palette_source(target.static),
+                                resolve_u8_palette_source(
+                                    target.static, configured_install("u8")
+                                ),
                                 protected=(*protected, target.static),
                             )
                             page, index, effect = 0, 0, 0
@@ -248,7 +251,7 @@ def run_u8_palette_browser(
         return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 @meta(

@@ -25,6 +25,7 @@ import typer
 from titan.u7 import install
 from titan.u7.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_npc_dump(args: SimpleNamespace) -> int:
@@ -61,11 +62,7 @@ def cmd_npc_dump(args: SimpleNamespace) -> int:
         )
     )
     if not archive_source and not os.path.isfile(filepath):
-        print(
-            f"ERROR: npc.dat or INITGAME.DAT not found: {filepath}",
-            file=sys.stderr,
-        )
-        return 1
+        raise FileNotFoundError(f"npc.dat or INITGAME.DAT not found: {filepath}")
 
     if initgame_source:
         source_note = "INITGAME.DAT Flex:npc.dat"
@@ -148,15 +145,14 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
 
     filepath = _common._resolve_loose_data_file(args.file, "schedule.dat")
     if not os.path.isfile(filepath):
-        print(f"ERROR: schedule.dat not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"schedule.dat not found: {filepath}")
 
     print(f"Source: {filepath} (loose schedule.dat)")
     try:
         sched = U7Schedules.from_file(filepath, strict=True)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in sched.warnings:
         print(f"Warning: {warning}", file=sys.stderr)
 
@@ -259,13 +255,14 @@ def cmd_monster_defs(args: SimpleNamespace) -> int:
     try:
         actor_flags = load_u7_actor_flags(
             game=args.game,
-            exult_flx_path=getattr(args, "exult_flx", None),
+            exult_flx_path=getattr(args, "exult_flx", None)
+            or install.resolve_u7_exult_flx(args.game),
             patch_dirs=patch_dirs,
             patch_files=[shape_info] if shape_info is not None else (),
         )
     except (OSError, ValueError) as error:
         print(f"ERROR: actor flag metadata unavailable: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     fmt = getattr(args, "format", "summary") or "summary"
     content = (
@@ -399,11 +396,15 @@ def cmd_monster_report(args: SimpleNamespace) -> int:
         return 1
 
     gamedat = getattr(args, "gamedat", None)
-    if not gamedat:
-        gamedat = install.resolve_u7_mod_gamedat(
-            getattr(args, "game", "bg"),
-            getattr(args, "mod", None),
-        )
+    mod = getattr(args, "mod", None)
+    if not gamedat and mod:
+        gamedat = install.resolve_u7_mod_gamedat(getattr(args, "game", "bg"), mod)
+        if not gamedat:
+            print(
+                _common.mod_gamedat_error(getattr(args, "game", "bg"), mod),
+                file=sys.stderr,
+            )
+            return 1
     if not gamedat:
         gamedat = install.resolve_u7_gamedat(getattr(args, "game", "bg"))
 
@@ -417,6 +418,7 @@ def cmd_monster_report(args: SimpleNamespace) -> int:
         mod_monsters=getattr(args, "mod_monsters", None),
         mod_equip=getattr(args, "mod_equip", None),
         output_dir=out_dir,
+        exult_flx_path=install.resolve_u7_exult_flx(getattr(args, "game", "bg")),
     )
     if out_dir:
         print(f"Monster report written to: {out_dir}")
@@ -456,6 +458,7 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
         patch_dir=getattr(args, "patch_dir", None),
         game=getattr(args, "game", "bg"),
         custom_game=getattr(args, "custom_game", False),
+        exult_flx_path=install.resolve_u7_exult_flx(getattr(args, "game", "bg")),
     )
     tfa, _, _, _ = load_query_metadata(metadata_params)
     ireg_context = load_ireg_context(metadata_params, tfa)
@@ -498,6 +501,7 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
         patch_dir=getattr(args, "patch_dir", None),
         game=getattr(args, "game", "bg"),
         custom_game=getattr(args, "custom_game", False),
+        exult_flx=metadata_params.exult_flx_path,
     )
     ready_types = U7ReadyTypes(
         dict(effective_ready.preferred), list(effective_ready.records)
@@ -847,6 +851,7 @@ def monster_equipment_cmd(
 @meta(
     params={
         "gamedat": "save",
+        "mod": "mod",
         "live_source": "input-file",
         "mod_monsters": "input-file",
         "mod_equip": "input-file",
@@ -877,7 +882,9 @@ def monster_report_cmd(
     mod: Annotated[
         Optional[str],
         typer.Option(
-            "--mod", help="Resolve user-profile Exult runtime GAMEDAT for this mod"
+            "--mod",
+            help="Use this mod's or Exult game's GAMEDAT (see `titan u7 mods`)",
+            autocompletion=_common.complete_mod,
         ),
     ] = None,
     game: Annotated[

@@ -14,6 +14,7 @@ import pytest
 from typer.testing import CliRunner
 
 from titan import _wizard_ui as ui
+from titan.errors import EXIT_CODES
 from titan.fonts.exult_cfg import ExultGamePaths
 from titan.u7 import npc_browser as browser
 from titan.u7 import npc_browser_ui as browser_ui
@@ -22,7 +23,6 @@ from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.save import U7NPCInventoryItem, U7ReadyTypes
 from titan.u7.shape import U7Shape
-from titan.errors import EXIT_CODES
 
 
 def npc_bytes(name="Avatar", *, flags=0, inventory=b"", unused=False):
@@ -111,10 +111,10 @@ def owner(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(browser_ui, "game_targets", lambda game: (target, []))
     # Keep the tests independent of any Exult bundle installed on this machine.
-    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.default_u7_exult_flx", lambda game: None)
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     # Keep sessions independent of any Exult data bundle installed on this machine.
-    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.default_u7_exult_flx", lambda game: None)
     return target
 
 
@@ -292,7 +292,7 @@ def test_titan_archive_override_still_discovers_matching_exult_runtime_paths(tmp
         ExultGamePaths("SI", mods_path=str(mods)),
         cfg,
     )[0]
-    assert target.name == "My Pagan"
+    assert target.name == "pagan (My Pagan)"
     assert target.save_root == tmp_path / "profile/mods/pagan/saves"
     assert target.gamedat == tmp_path / "profile/mods/pagan/gamedat"
     config["u7si"]["mods"]["My Pagan"]["paths"]["savegame"] = str(
@@ -308,14 +308,19 @@ def test_titan_archive_override_still_discovers_matching_exult_runtime_paths(tmp
     assert target.save_root == tmp_path / "explicit-saves"
 
 
-def test_base_and_custom_game_save_roots_follow_configured_paths(tmp_path):
+def test_base_and_custom_game_save_roots_follow_configured_paths(tmp_path, monkeypatch):
     custom = tmp_path / "custom"
     custom.mkdir()
     cfg = tmp_path / "exult.cfg"
     cfg.write_text(
         f"<config><disk><game><serpentisle><savegame_path>{tmp_path}/si-saves</savegame_path></serpentisle><mine><path>{custom}</path><savegame_path>profiles</savegame_path><gamedat_path>working</gamedat_path></mine></game></disk></config>"
     )
-    retail = base_target("SI", {}, tmp_path / "STATIC", None, cfg)
+    (tmp_path / "si-saves").mkdir()
+    monkeypatch.setattr("titan.u7.install.find_exult_cfg", lambda: cfg)
+    from titan.u7.install import configured_install
+
+    record = configured_install({"u7si": {"game": {"base": str(tmp_path)}}}, "u7si")
+    retail = base_target("SI", record, tmp_path / "STATIC", None)
     assert retail.save_root == tmp_path / "si-saves"
     own = discover_targets("SI", {}, tmp_path / "STATIC", None, cfg)[0]
     assert own.save_root == custom / "profiles"

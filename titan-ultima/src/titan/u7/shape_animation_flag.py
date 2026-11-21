@@ -19,6 +19,7 @@ from typing import Callable
 
 from titan.u7.shape import U7Shape
 from titan.u7.shape_archive import find_archive
+from titan.errors import InvalidDataError
 
 log = logging.getLogger(__name__)
 
@@ -59,11 +60,11 @@ def read_u7_shape_animation(path: Path, data: bytes) -> bool | None:
         not isinstance(report, dict)
         or report.get("format") != "titan-u7-shape-animation-1"
     ):
-        raise ValueError(f"Invalid U7 animation sidecar: {sidecar}")
+        raise InvalidDataError(f"Invalid U7 animation sidecar: {sidecar}")
     if report.get("sha256") != hashlib.sha256(data).hexdigest():
         return None
     if type(report.get("animated")) is not bool:
-        raise ValueError(f"Invalid U7 animation choice: {sidecar}")
+        raise InvalidDataError(f"Invalid U7 animation choice: {sidecar}")
     return report["animated"]
 
 
@@ -111,7 +112,7 @@ def prepare_u7_archive_animation(
             or old.get("format") != "titan-u7-archive-animation-1"
             or not isinstance(old.get("shapes"), dict)
         ):
-            raise ValueError(f"Invalid U7 archive animation sidecar: {sidecar}")
+            raise InvalidDataError(f"Invalid U7 archive animation sidecar: {sidecar}")
         choices.update(old["shapes"])
     for number, (data, animated) in updates.items():
         choices[str(number)] = {
@@ -142,7 +143,7 @@ def prepare_u7_archive_animation(
     )
     raw = original.read_bytes() if original else b""
     if raw and len(raw) != 3584 and len(raw) % 3:
-        raise ValueError(f"U7 animation: incomplete TFA records in {original}")
+        raise InvalidDataError(f"U7 animation: incomplete TFA records in {original}")
     highest = max(updates)
     if not 150 <= min(updates) <= highest <= 65535:
         raise ValueError("U7 animated object flags require world shape IDs 150-65535")

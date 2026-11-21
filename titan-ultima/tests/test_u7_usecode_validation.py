@@ -9,16 +9,17 @@ import struct
 import pytest
 from typer.testing import CliRunner
 
-from titan.u7 import cli
-from titan.u7.shapeinfo import U7UsecodeIndex
-from titan.u7.usecode import U7UsecodeFile, load_u7_intrinsic_names
-from titan.u7 import install as u7_install
 from tests.test_u7_usecode import (
     _extended_function_record,
     _function_record,
     _scope,
     _symbol,
 )
+from titan.errors import EXIT_CODES
+from titan.u7 import cli
+from titan.u7 import install as u7_install
+from titan.u7.shapeinfo import U7UsecodeIndex
+from titan.u7.usecode import U7UsecodeFile, load_u7_intrinsic_names
 
 
 def record(form: str, code: bytes = b"\x25") -> bytes:
@@ -296,12 +297,12 @@ def test_cli_reports_permissive_prefix_and_unrecoverable_symbol_errors(
         cli.u7_app, [command, str(usecode_path), target, "--strict"]
     )
     assert (
-        strict.exit_code == 1
+        strict.exit_code == EXIT_CODES["invalid-data"]
         and "ERROR: Truncated U7 USECODE function header" in strict.output
     )
     usecode_path.write_bytes(b"\xff\xff\xff\xffYSCU" + struct.pack("<II", 1, 0))
     bad = CliRunner().invoke(cli.u7_app, [command, str(usecode_path), target])
-    assert bad.exit_code == 1 and "symbol name" in bad.output
+    assert bad.exit_code == EXIT_CODES["invalid-data"] and "symbol name" in bad.output
 
 
 def test_metadata_dump_uses_symbol_prefix_and_propagates_warnings(usecode_path):

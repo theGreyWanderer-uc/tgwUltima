@@ -11,15 +11,16 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from titan import _wizard_ui as ui
-from titan.u7 import cli, map_wizard_ui as wizard
+from titan.errors import EXIT_CODES
+from titan.u7 import cli
+from titan.u7 import install as u7_install
+from titan.u7 import map_wizard_ui as wizard
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapRenderer, U7TileRectOverlay
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.u7.target_picker import select_map
-from titan.u7 import install as u7_install
-from titan.errors import EXIT_CODES
 
 
 def archive(path: Path, records: list[bytes]) -> None:

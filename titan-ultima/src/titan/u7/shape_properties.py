@@ -16,6 +16,7 @@ from titan.u7.shape_extra import _parse_single_value_section, U7FieldType
 from titan.u7.shapeinfo import U7Ammos, U7Armors, U7Containers, U7Weapons
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.ready_metadata import U7ReadyMetadata
+from titan.errors import InvalidDataError
 
 if TYPE_CHECKING:
     from titan.u7.shape_browser import ShapeLibrary
@@ -65,7 +66,7 @@ def overlay_table(
     size = sizes[kind]
     table = read_gameplay_table(data, size, kind, data_format=data_format)
     if table.declared_count is None or table.parsed_count < table.declared_count:
-        raise ValueError(f"Incomplete {kind} table: {'; '.join(table.warnings)}")
+        raise InvalidDataError(f"Incomplete {kind} table: {'; '.join(table.warnings)}")
     properties.warnings.extend(f"{source}: {warning}" for warning in table.warnings)
     if kind == "ammo":
         properties.warnings.extend(
@@ -101,7 +102,7 @@ def container_records(data: bytes) -> U7Containers:
 
 def load_properties(library: ShapeLibrary) -> ShapeProperties:
     from titan.u7 import shape_browser as browser
-    from titan.u7.install import resolve_u7_exult_flx
+    from titan.u7.install import default_u7_exult_flx
     from titan.u7.shapeinfo import _exult_record
 
     result = ShapeProperties()
@@ -165,7 +166,7 @@ def load_properties(library: ShapeLibrary) -> ShapeProperties:
                     result.warnings.append(
                         f"{path}: {error}; {kind} properties unavailable."
                     )
-    exult = resolve_u7_exult_flx(library.game)
+    exult = library.exult_flx or default_u7_exult_flx(library.game)
     try:
         ready = U7ReadyMetadata.from_dir(
             library.target.static,

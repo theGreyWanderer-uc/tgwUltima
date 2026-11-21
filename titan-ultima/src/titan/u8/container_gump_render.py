@@ -9,6 +9,7 @@ from PIL import Image
 
 from titan.u8.gumpage import U8GumpItemArea
 from titan.u8.container_records import U8InventoryId
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,7 @@ def compose_u8_container_gump(
     if layout not in {"random", "saved"}:
         raise ValueError("U8 gump layout must be random or saved")
     if area.width <= 0 or area.height <= 0:
-        raise ValueError(
+        raise InvalidDataError(
             f"GUMPAGE.DAT: gump shape {area.shape} has an empty or inverted storage rectangle"
         )
     # Sprite PNG top-left is (-xoff,-yoff) relative to the native gump origin.

@@ -32,6 +32,8 @@ from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.space_tree import U9VolumeLookupCache, U9VolumeLookupError
 from titan.u9.spaces import U9Spaces, U9SpacesError
 from titan._meta import meta
+from titan._config import export_output
+from titan.errors import exit_code
 
 
 def _load_highway(filepath: str) -> Optional[U9Highway]:
@@ -257,7 +259,7 @@ def cmd_spaces_csv(args: SimpleNamespace) -> int:
     if spaces is None:
         return 1
 
-    output = Path(args.output or "spaces_csv")
+    output = Path(export_output(args.output, "u9", "spaces-csv"))
     try:
         output.mkdir(parents=True, exist_ok=True)
         space_path = output / "u9_spaces.csv"
@@ -421,7 +423,7 @@ def cmd_spaces_csv(args: SimpleNamespace) -> int:
                         )
     except OSError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Wrote {len(spaces.spaces())} enclosed spaces -> {space_path}")
     print(
@@ -544,7 +546,7 @@ def cmd_treedat_csv(args: SimpleNamespace) -> int:
     rebuild = set(cache.maps_requiring_rebuild(spaces)) if spaces is not None else set()
     exported_map_ids = sorted(set(cache.used_map_ids) | set(expected_by_map))
 
-    output = Path(args.output or "treedat_csv")
+    output = Path(export_output(args.output, "u9", "treedat-csv"))
     try:
         output.mkdir(parents=True, exist_ok=True)
         map_path = output / "u9_treedat_maps.csv"
@@ -703,7 +705,7 @@ def cmd_treedat_csv(args: SimpleNamespace) -> int:
                         )
     except OSError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(
         f"Wrote {len(exported_map_ids)} map status row(s) "
@@ -835,7 +837,7 @@ def cmd_areas_csv(args: SimpleNamespace) -> int:
     if areas is None:
         return 1
 
-    output = Path(args.output or "areas_csv")
+    output = Path(export_output(args.output, "u9", "areas-csv"))
     try:
         output.mkdir(parents=True, exist_ok=True)
         area_path = output / "u9_areas.csv"
@@ -1006,7 +1008,7 @@ def cmd_areas_csv(args: SimpleNamespace) -> int:
                     )
     except OSError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Wrote {len(areas.records())} gameplay-zone rows -> {area_path}")
     print(

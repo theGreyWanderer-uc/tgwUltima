@@ -28,8 +28,11 @@ still works as the default directory.
 from __future__ import annotations
 
 __all__ = [
+    "NOT_CONFIGURED",
     "UOInstall",
+    "configured_install",
     "configured_installs",
+    "default_client",
     "detect_uo_install",
     "discover_installs",
     "install_candidates",
@@ -109,25 +112,12 @@ def resolve_install(
     """
     config = get_config() if config is None else config
     installs = configured_installs(config)
-    game = config.get("uo", {}).get("game", {})
 
     install: UOInstall | None = None
     if client is None:
-        default_name = game.get("install")
-        if default_name:
-            install = installs.get(str(default_name).lower())
-            if install is None:
-                raise InstallNotFoundError(
-                    f"[uo.game] install = {default_name!r} is not a configured "
-                    f"[uo.installs.*] entry"
-                )
-        elif game.get("base"):
-            client = str(game["base"])
-        else:
-            raise InstallNotFoundError(
-                "UO client directory not configured; pass CLIENT (a directory or "
-                "install name), or set [uo.game] install/base in titan.toml"
-            )
+        client = default_client(config)
+        if client is None:
+            raise InstallNotFoundError(NOT_CONFIGURED)
     elif client.lower() in installs:
         install = installs[client.lower()]
 
@@ -140,6 +130,34 @@ def resolve_install(
     if not path.is_dir():
         raise InstallNotFoundError(f"client directory not found: {path}")
     return path, install
+
+
+NOT_CONFIGURED = (
+    "UO client directory not configured; pass CLIENT (a directory or "
+    "install name), or set [uo.game] install/base in titan.toml"
+)
+
+
+def default_client(config: dict | None = None) -> str | None:
+    """The client folder an omitted CLIENT means: ``[uo.game] install``'s path, else base.
+
+    ``None`` when neither is set. A default install name with no
+    ``[uo.installs.*]`` entry is an :class:`~titan.errors.InstallNotFoundError`.
+    """
+    config = get_config() if config is None else config
+    game = config.get("uo", {}).get("game", {})
+    default_name = game.get("install")
+    if default_name:
+        install = configured_installs(config).get(str(default_name).lower())
+        if install is None:
+            raise InstallNotFoundError(
+                f"[uo.game] install = {default_name!r} is not a configured "
+                f"[uo.installs.*] entry"
+            )
+        return str(install.path)
+    if game.get("base"):
+        return str(Path(str(game["base"])).expanduser())
+    return None
 
 
 def _install_for_path(path: Path, installs: dict[str, UOInstall]) -> UOInstall | None:
@@ -218,6 +236,23 @@ def discover_installs(path: Path) -> list[Installation]:
         key: path / name for key, name in _CORE_FILES.items() if (path / name).is_file()
     }
     return [Installation("uo", path.absolute(), resources)]
+
+
+def configured_install(config: dict) -> Installation | None:
+    """Install protocol hook: the client an omitted CLIENT means (see :func:`default_client`).
+
+    ``settings["install"]`` names the ``[uo.installs.*]`` entry when the
+    default is a named install.
+    """
+    client = default_client(config)
+    if client is None:
+        return None
+    path = Path(client)
+    found = discover_installs(path) if path.is_dir() else []
+    resources = dict(found[0].resources) if found else {}
+    name = config.get("uo", {}).get("game", {}).get("install")
+    settings = {"install": str(name)} if name else {}
+    return Installation("uo", path, resources, {}, settings)
 
 
 def install_config(install: Installation) -> dict:

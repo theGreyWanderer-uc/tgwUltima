@@ -139,11 +139,7 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
         except ValueError:
             print(f"ERROR: --chunk expects 'X,Y', got {args.chunk!r}", file=sys.stderr)
             return 1
-        try:
-            chunk = region.chunk(cx, cy)
-        except U9NonfixedError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            return 1
+        chunk = region.chunk(cx, cy)
         if chunk is None:
             print(f"Chunk ({cx}, {cy}) holds no pages.")
             return 0
@@ -346,11 +342,7 @@ def cmd_fixed_objects(args: SimpleNamespace) -> int:
         except ValueError:
             print(f"ERROR: --chunk expects 'X,Y', got {args.chunk!r}", file=sys.stderr)
             return 1
-        try:
-            chunk = region.chunk(cx, cy)
-        except U9FixedError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            return 1
+        chunk = region.chunk(cx, cy)
         if chunk is None:
             print(f"Chunk ({cx}, {cy}) holds no pages.")
             return 0
@@ -480,22 +472,16 @@ def cmd_terrain_chunk(args: SimpleNamespace) -> int:
     region = _load_terrain(args.file)
     if region is None:
         return 1
-    try:
-        if args.tile is not None:
-            try:
-                tile_x, tile_y = (int(v) for v in args.tile.split(",", 1))
-            except ValueError:
-                print(
-                    f"ERROR: --tile expects 'X,Y', got {args.tile!r}", file=sys.stderr
-                )
-                return 1
-            index = region.tile(tile_x, tile_y)
-        else:
-            index = args.index or 0
-        chunk = region.chunk(index)
-    except U9TerrainError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    if args.tile is not None:
+        try:
+            tile_x, tile_y = (int(v) for v in args.tile.split(",", 1))
+        except ValueError:
+            print(f"ERROR: --tile expects 'X,Y', got {args.tile!r}", file=sys.stderr)
+            return 1
+        index = region.tile(tile_x, tile_y)
+    else:
+        index = args.index or 0
+    chunk = region.chunk(index)
 
     field = args.field
     pick = {

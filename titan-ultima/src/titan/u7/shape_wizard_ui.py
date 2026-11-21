@@ -40,6 +40,7 @@ from titan.u7.shape_wizard import (
     prepare_archive,
     save,
 )
+from titan.errors import exit_code
 
 
 def _open_preview(path: Path) -> bool:
@@ -180,7 +181,7 @@ def _conversion_steps(config: ShapeWizardConfig) -> ConvertedShape:
 
 
 def _select_target(config: ShapeWizardConfig) -> None:
-    static_value = core._static_path(config.game)
+    static_value = core._static_path(config)
     static = Path(static_value) if static_value else None
     targets = discover_targets(
         config.game,
@@ -191,10 +192,9 @@ def _select_target(config: ShapeWizardConfig) -> None:
     )
     base = base_target(
         config.game,
-        get_config(),
+        config.install or _install_for(config.game),
         static,
         core._exult_paths(config.game),
-        core.find_exult_cfg(),
     )
     target = select_target(base, targets)
     if target is not base:
@@ -264,7 +264,7 @@ def _archive_steps(
             not default_source
             or (not config.flat and Path(default_source).name.upper() != filename)
         ):
-            static = config.target_static or core._static_path(config.game)
+            static = config.target_static or core._static_path(config)
             found = find_archive(Path(static), filename) if static else None
             if found is None and config.target_patch:
                 found = find_archive(Path(config.target_patch), filename)
@@ -388,6 +388,7 @@ def run_wizard(
         preview_path=preview_path,
         in_place=in_place,
         animated=animated,
+        install=_install_for(game),
     )
     try:
         print("\nTitan U7 PNG → Shape → Archive Wizard")
@@ -403,6 +404,7 @@ def run_wizard(
             == "1"
             else "SI"
         )
+        config.install = _install_for(config.game)
         _select_target(config)
         while True:
             try:
@@ -519,7 +521,14 @@ def run_wizard(
         return ui.cancelled()
     except (OSError, ValueError, TypeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
+
+
+def _install_for(game: str):
+    """The configured install for ``"BG"``/``"SI"``."""
+    from titan._meta import configured_install
+
+    return configured_install("u7bg" if game.upper() == "BG" else "u7si")
 
 
 def run_from_config(
@@ -553,8 +562,10 @@ def run_from_config(
             data.get("archive", {}),
             data.get("output", {}),
         )
+        game = data.get("target", {}).get("game", "BG").upper()
         config = ShapeWizardConfig(
-            game=data.get("target", {}).get("game", "BG").upper(),
+            game=game,
+            install=_install_for(game),
             source=path(source.get("path")),
             palette_file=path(palette.get("file")),
             palette_index=palette.get("index", 0),
@@ -593,4 +604,4 @@ def run_from_config(
         return save(config, converted)
     except (OSError, ValueError, TypeError, AttributeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)

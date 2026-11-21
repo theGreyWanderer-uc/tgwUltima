@@ -5,12 +5,13 @@ import json
 import pytest
 from typer.testing import CliRunner
 
+from tests.test_u8_container_browser import inventory as inventory
+from tests.test_u8_container_browser import session
+from tests.test_u8_npc_animation_report import case as case
 from titan import _inventory_browser as flow
 from titan.u8 import container_browser_ui as menus
 from titan.u8.cli import u8_app
 from titan.u8.container_browser import export_u8_container_bundle
-from tests.test_u8_container_browser import inventory as inventory, session
-from tests.test_u8_npc_animation_report import case as case
 
 
 @pytest.fixture

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli import u7_app
 from titan.u7.places import (
     assemble_document,
@@ -212,5 +213,5 @@ def test_places_export_cli_reports_a_missing_static_dir(tmp_path):
     result = CliRunner().invoke(
         u7_app, ["places-export", str(tmp_path / "nope"), "-o", str(out)]
     )
-    assert result.exit_code == 1 and not out.exists()
+    assert result.exit_code == EXIT_CODES["file-not-found"] and not out.exists()
     assert "STATIC directory not found" in result.output

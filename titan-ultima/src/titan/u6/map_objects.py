@@ -19,6 +19,7 @@ from titan.u6.object import U6Object
 from titan.u6.palette import U6Palette
 from titan.u6.tile import TILE_DIM, U6AnimData, U6Tiles
 from titan.u6.tileflag import U6TileFlagEntry
+from titan.errors import InvalidDataError
 
 __all__ = ["overlay_map_objects"]
 
@@ -53,7 +54,9 @@ def overlay_map_objects(
         if not show_markers and tnum in profile.hidden_marker_tiles:
             return False
         if not 0 <= tnum < min(tiles.num_tiles, len(tileflags)):
-            raise ValueError(f"Invalid map object tile {tnum} at ({x}, {y}, {level})")
+            raise InvalidDataError(
+                f"Invalid map object tile {tnum} at ({x}, {y}, {level})"
+            )
         anchor_flags = tileflags[tnum]
         visible = False
         for dx, dy, cell_tile in anchor_flags.double_size_footprint(tnum):
@@ -66,7 +69,7 @@ def overlay_map_objects(
             ):
                 continue
             if not 0 <= cell_tile < len(tileflags):
-                raise ValueError(f"Invalid map object footprint tile {cell_tile}")
+                raise InvalidDataError(f"Invalid map object footprint tile {cell_tile}")
             if cell_filter is not None and not cell_filter(x + dx, y + dy):
                 continue
             flags = tileflags[cell_tile]
@@ -80,7 +83,7 @@ def overlay_map_objects(
                 layer = 1
             resolved = animdata.resolve_tile(cell_tile, tick)
             if not 0 <= resolved < tiles.num_tiles:
-                raise ValueError(f"Invalid map animation tile {resolved}")
+                raise InvalidDataError(f"Invalid map animation tile {resolved}")
             draws.append((layer, px, py, resolved, outline))
             visible = True
         return visible

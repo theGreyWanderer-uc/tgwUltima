@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from titan.u8.save import U8SaveArchive
+from titan.errors import InvalidDataError
 
 FLAG_BYTE_COUNT = 1024
 FLAG_BIT_COUNT = FLAG_BYTE_COUNT * 8
@@ -53,13 +54,15 @@ class U8FlagSymbols:
         while position < len(data):
             end = data.find(b"\x00", position)
             if end <= position or end + 5 > len(data):
-                raise ValueError("FLAGSYM.DAT: truncated or empty symbol record")
+                raise InvalidDataError("FLAGSYM.DAT: truncated or empty symbol record")
             try:
                 name = data[position:end].decode("ascii")
             except UnicodeDecodeError as error:
-                raise ValueError("FLAGSYM.DAT: symbol name must be ASCII") from error
+                raise InvalidDataError(
+                    "FLAGSYM.DAT: symbol name must be ASCII"
+                ) from error
             if name in names:
-                raise ValueError("FLAGSYM.DAT: duplicate symbol name")
+                raise InvalidDataError("FLAGSYM.DAT: duplicate symbol name")
             index, width = struct.unpack_from("<HH", data, end + 1)
             _validate_flag_field(index, width)
             names.add(name)
@@ -86,7 +89,7 @@ class U8GlobalFlags:
         if path.is_dir():
             candidates = [p for p in path.iterdir() if p.name.upper() == "FLAG.DAT"]
             if len(candidates) > 1:
-                raise ValueError("FLAG.DAT: duplicate directory entry")
+                raise InvalidDataError("FLAG.DAT: duplicate directory entry")
             return (
                 cls.from_bytes(candidates[0].read_bytes())
                 if candidates
@@ -102,7 +105,7 @@ class U8GlobalFlags:
     def from_bytes(cls, data: bytes) -> U8GlobalFlags:
         """Require the native writer's exact 1024-byte buffer; retain every bit."""
         if len(data) != FLAG_BYTE_COUNT:
-            raise ValueError(f"FLAG.DAT: expected 1024 bytes, found {len(data)}")
+            raise InvalidDataError(f"FLAG.DAT: expected 1024 bytes, found {len(data)}")
         return cls(bytes(data))
 
     @classmethod

@@ -26,6 +26,7 @@ from titan.u7.names import U7ShapeNames
 from titan.u7.usecode import U7UsecodeFile
 from titan.u7.combat_metadata import U7CombatMetadata
 from titan._files import rows_to_csv
+from titan.errors import InvalidDataError
 
 
 def _read_count(data: bytes, pos: int = 0) -> tuple[int, int]:
@@ -793,7 +794,7 @@ class U7Containers(U7GameplayMetadata):
         if strict and (
             table.declared_count is None or table.parsed_count != table.declared_count
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 f"Incomplete container table in {source or 'input'}: {'; '.join(table.warnings)}"
             )
         records = [

@@ -118,6 +118,24 @@ class AliasGroup(TyperGroup):
         install_cli_logging()
         return super().invoke(ctx)
 
+    def get_command(self, ctx, cmd_name):  # type: ignore[override]
+        # Omitted install inputs are filled from the configured install
+        # (titan._input_fill), whether this group runs under titan or alone.
+        command = super().get_command(ctx, cmd_name)
+        if command is not None and not hasattr(command, "commands") and self.name:
+            from titan._input_fill import wrap_command
+            from titan._meta import GAMES
+
+            groups = {game.cli_group for game in GAMES}
+            path = (self.name, cmd_name) if self.name in groups else (cmd_name,)
+            wrap_command(path, command)
+        if command is not None and not hasattr(command, "commands"):
+            # Tagged output parameters go to TITAN_RESULTS_FILE (titan._results).
+            from titan._results import wrap_outputs
+
+            wrap_outputs(command)
+        return command
+
     def parse_args(self, ctx, args):  # type: ignore[override]
         index = self._command_index(args)
         if index is not None:

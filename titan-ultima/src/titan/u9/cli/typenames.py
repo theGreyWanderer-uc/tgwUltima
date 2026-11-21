@@ -23,20 +23,16 @@ from titan.u9.typename import U9TypeNameError, U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan.u9.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_typename_dump(args: SimpleNamespace) -> int:
     """List named object types and their readable-text and icon references."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        names = U9TypeNames.from_file(filepath)
-    except (U9FlxArchiveError, U9TypeNameError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    names = U9TypeNames.from_file(filepath)
 
     named = [entry for entry in names if entry.display_name]
     print(f"{filepath} — {len(names)} entries, {len(named)} named")
@@ -54,14 +50,9 @@ def cmd_typename_csv(args: SimpleNamespace) -> int:
     """Export every ``TYPENAME.FLX`` object-metadata entry to CSV."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        names = U9TypeNames.from_file(filepath)
-    except (U9FlxArchiveError, U9TypeNameError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    names = U9TypeNames.from_file(filepath)
 
     output = args.output or f"{Path(filepath).stem}_metadata.csv"
     os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
@@ -104,13 +95,8 @@ def cmd_typename_import(args: SimpleNamespace) -> int:
     """Rebuild a type-name archive from an edited ``typename-csv`` CSV."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
-    try:
-        names = U9TypeNames.from_file(filepath)
-    except (U9FlxArchiveError, U9TypeNameError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
+    names = U9TypeNames.from_file(filepath)
     rows = _common._read_import_csv(args.csv, "type_id", "display_name")
     if rows is None:
         return 1
@@ -120,11 +106,7 @@ def cmd_typename_import(args: SimpleNamespace) -> int:
         if (value or None) != names.name_for(type_id)
         or names.entry_for(type_id) is None
     }
-    try:
-        data = names.rebuilt(changes)
-    except U9TypeNameError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    data = names.rebuilt(changes)
 
     rebuilt = U9TypeNames(U9FlxArchive(data))
     for type_id, value in changes.items():
@@ -153,8 +135,7 @@ def cmd_types_csv(args: SimpleNamespace) -> int:
     """Export active ``TYPES.DAT`` records, or every physical slot, to CSV."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     typenames_path = getattr(args, "typenames", None)
     try:
@@ -162,7 +143,7 @@ def cmd_types_csv(args: SimpleNamespace) -> int:
         names = U9TypeNames.from_file(typenames_path) if typenames_path else None
     except (OSError, U9TypesDatError, U9FlxArchiveError, U9TypeNameError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     rows = types.slots if getattr(args, "all_slots", False) else types.records
     output = args.output or f"{Path(filepath).stem}_records.csv"

@@ -17,6 +17,7 @@ from titan.md.game_profile import MD_PROFILE
 from titan.u6.converse import U6ConverseInstruction, U6ConverseTextRun, disassemble
 from titan.u6.lib import U6Library
 from titan.u6.look import U6ObjectNames
+from titan.errors import InvalidDataError
 
 __all__ = [
     "MartianDialogue",
@@ -62,7 +63,7 @@ def _open_martian_library(directory: str | Path, filename: str) -> U6Library:
     path = Path(directory) / filename
     data = path.read_bytes()
     if len(data) < 8 or int.from_bytes(data[:4], "little") != len(data):
-        raise ValueError(f"Invalid Martian Dreams library size header: {path}")
+        raise InvalidDataError(f"Invalid Martian Dreams library size header: {path}")
     return U6Library(data, has_size_header=True)
 
 
@@ -102,7 +103,7 @@ def read_martian_dialogue(
         ]
         if not identities:
             if item is not None:
-                raise ValueError(
+                raise InvalidDataError(
                     f"Martian Dreams TALK record {index} is not an NPC script"
                 )
             continue

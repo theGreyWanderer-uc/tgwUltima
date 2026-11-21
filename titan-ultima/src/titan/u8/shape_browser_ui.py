@@ -11,7 +11,6 @@ import typer
 
 from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan.u8.install import u8_cfg as cfg
 from titan._image_preview import open_preview
 from titan._terminal_image import checkerboard, play_terminal, terminal_image
 from titan.u8.palette import U8Palette
@@ -36,7 +35,8 @@ from titan.u8.shape_browser import (
     u8_contact_sheet_groups,
     u8_playback_provider,
 )
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 30
 
@@ -69,8 +69,10 @@ def _path(message: str, default: str = "") -> Path:
 
 def choose_u8_shape_target(directory: Path | None) -> U8ShapeTarget | None:
     """Choose a U8 STATIC owner, shared by shape and NPC browsers."""
+    install = configured_install("u8")
+    language = install.settings.get("language", "") if install else ""
     while True:
-        targets = discover_u8_shape_targets(directory)
+        targets = discover_u8_shape_targets(directory, install)
         labels = {
             str(index + 1): f"{target.name} — {target.static}"
             for index, target in enumerate(targets)
@@ -82,8 +84,7 @@ def choose_u8_shape_target(directory: Path | None) -> U8ShapeTarget | None:
             (
                 str(index + 1)
                 for index, target in enumerate(targets)
-                if target.name.casefold()
-                == str(cfg("language", "game") or "").casefold()
+                if target.name.casefold() == language.casefold()
             ),
             "1" if targets else "C",
         )
@@ -104,7 +105,7 @@ def _archive(target: U8ShapeTarget) -> Path | None:
     while True:
         paths = {
             str(index + 1): configured_u8_browser_file(
-                target.static, filename.split(".")[0].lower()
+                target.static, filename.split(".")[0].lower(), configured_install("u8")
             )
             or find_u8_browser_file(target.static, filename)
             for index, filename in enumerate(U8_SHAPE_ARCHIVES)
@@ -694,6 +695,7 @@ def run_u8_shape_browser(
                     typeflag=typeflag,
                     anim=anim,
                     wpnovlay=wpnovlay,
+                    install=configured_install("u8"),
                     shape_id=shape,
                 )
             except (ValueError, OSError) as error:
@@ -752,7 +754,7 @@ def run_u8_shape_browser(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 def browse_u8_npc_shape(

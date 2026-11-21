@@ -51,6 +51,7 @@ from titan.uo.placement import (
 )
 from titan.uo.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _try_load_cliloc(client: Path, language: str) -> UOCliloc | None:
@@ -158,7 +159,7 @@ def cmd_house_footprints(args: SimpleNamespace) -> int:
         entries, source = server.entries, server.entries_source
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "housing"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -459,7 +460,7 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
         cliloc = _try_load_cliloc(client, "enu")
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "housing" / "capacity" / f"map{args.facet}"
     outdir.mkdir(parents=True, exist_ok=True)

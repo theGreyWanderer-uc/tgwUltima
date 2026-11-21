@@ -7,6 +7,7 @@ from pathlib import Path
 import struct
 
 from .compression import decode_uw2_block
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -64,7 +65,7 @@ class ArkArchive:
         path = Path(path)
         data = path.read_bytes()
         if len(data) < 6:
-            raise ValueError(f"{path} is too small to be a UU2 ARK archive")
+            raise InvalidDataError(f"{path} is too small to be a UU2 ARK archive")
 
         prefix = data[:6]
         count16 = struct.unpack_from("<H", prefix, 0)[0]
@@ -75,7 +76,7 @@ class ArkArchive:
         table_bytes = count * 4
         required = table_base + table_bytes * 4
         if required > len(data):
-            raise ValueError(
+            raise InvalidDataError(
                 f"{path} header expects {required} bytes for {count} blocks, "
                 f"but file is only {len(data)} bytes"
             )
@@ -94,13 +95,29 @@ class ArkArchive:
     def is_available(self, index: int) -> bool:
         return 0 <= index < len(self.blocks) and self.blocks[index].available
 
+    @property
+    def entry_count(self) -> int:
+        """Number of slots, used or not (:class:`titan.protocols.IndexedArchive`)."""
+        return len(self.blocks)
+
+    def read(self, index: int) -> bytes | None:
+        """Slot *index*'s bytes, decompressed where stored compressed, or ``None``
+        for an empty slot (:class:`titan.protocols.IndexedArchive`)."""
+        if not 0 <= index < self.entry_count:
+            raise IndexError(
+                f"ARK block index {index} out of range (0..{self.entry_count - 1})"
+            )
+        if not self.blocks[index].available:
+            return None
+        return self.get_decoded_block(index) or None
+
     def get_raw_block(self, index: int) -> bytes:
         block = self.blocks[index]
         if not block.available:
             raise KeyError(f"ARK block {index} is unavailable")
         end = block.offset + block.data_size
         if end > len(self.data):
-            raise ValueError(
+            raise InvalidDataError(
                 f"ARK block {index} extends past EOF: {end} > {len(self.data)}"
             )
         return self.data[block.offset : end]

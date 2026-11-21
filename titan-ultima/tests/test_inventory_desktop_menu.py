@@ -6,7 +6,7 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 
 from titan import _wizard_ui as ui
-from titan._inventory_browser import inventory_menu, InventoryBrowser
+from titan._inventory_browser import InventoryBrowser, inventory_menu
 from titan.u7.container_browser import parse_u7_inventory_id
 
 

@@ -6,7 +6,8 @@ import sys
 from typing import Annotated, Literal, Optional
 
 import typer
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 
 @meta(results=("json",), params={"output": "output-file"})
@@ -35,6 +36,7 @@ def places_export_cmd(
     come from place data bundled with titan.
     """
     from titan.u7.places import (
+        GAME_IDS,
         PlaceDataError,
         available_games,
         build_places_document,
@@ -49,10 +51,12 @@ def places_export_cmd(
         )
         raise SystemExit(1)
     try:
-        document = build_places_document(static, game)
+        document = build_places_document(
+            static, game, install=configured_install(GAME_IDS[game])
+        )
     except (FileNotFoundError, PlaceDataError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        raise SystemExit(1) from exc
+        raise SystemExit(exit_code(exc)) from exc
     path = write_places_document(document, output, pretty=pretty)
     counts = document["counts"]
     print(

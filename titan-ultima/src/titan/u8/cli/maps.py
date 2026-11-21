@@ -17,13 +17,13 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan.u8.install import u8_cfg as _cfg
-from titan._config import get_config
 from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
-from titan.u8.install import resolve_u8_save, u8_working_archive
+from titan.u8.install import u8_working_archive
 from titan.u8.map import U8MapRenderer, U8MapSampler
-from titan._meta import meta
+from titan._meta import meta, resolve_save
+from titan._config import DEFAULT_OUTPUT, export_output
+from titan.errors import exit_code
 
 _NONFIXED_HELP = (
     "Save to overlay: slot number (3), file name (U8SAVE.003) or path; raw"
@@ -142,7 +142,7 @@ def _ensure_asset_dir(
             f"{ext} files: {dir_path}"
         )
     print(f"  Map rendering needs individual {ext} files extracted from {flx_hint}.")
-    archive = u8_working_archive(working_dir, get_config()) if working_dir else None
+    archive = u8_working_archive(working_dir) if working_dir else None
     if archive is not None and _in_data_folder(dir_path):
         # titan's own working data: extract once, without a prompt (front ends too).
         return _extract_asset_dir(dir_path, ext, str(archive))
@@ -237,17 +237,16 @@ def _apply_map_config(
     typeflag: Optional[str],
     nonfixed: Optional[str],
 ) -> tuple[str, str, str, str, Optional[str], Optional[str]]:
-    """Apply titan.toml defaults to map command paths."""
-    fixed = fixed or _cfg("fixed")
-    shapes = shapes or _cfg("shapes")
-    globs = globs or _cfg("globs")
-    palette = palette or _cfg("palette")
-    typeflag = typeflag or _cfg("typeflag")
+    """Check map command paths; omitted ones were filled from the configured install.
+
+    (See titan._input_fill: the CLI fills --fixed, --shapes, --globs,
+    --palette and --typeflag before the command runs.)
+    """
     try:
-        save = resolve_u8_save(nonfixed, get_config())
+        save = resolve_save("u8", nonfixed)
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
     nonfixed = str(save) if save else None
     missing = [
         k
@@ -333,15 +332,13 @@ def _merge_nonfixed_input(
 def cmd_map_sample(args: SimpleNamespace) -> int:
     """Render a colour-sampled top-down map (minimap-style) to PNG."""
     if not os.path.isfile(args.fixed):
-        print(f"ERROR: FIXED.DAT not found: {args.fixed}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"FIXED.DAT not found: {args.fixed}")
     if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
     if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(args.palette):
-        print(f"ERROR: Palette not found: {args.palette}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette not found: {args.palette}")
 
     scale = args.scale
     map_num = args.map
@@ -377,8 +374,7 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
             )
             return 1
         if not os.path.isfile(tf):
-            print(f"ERROR: typeflag.dat not found: {tf}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"typeflag.dat not found: {tf}")
         exclude_set = U8MapRenderer.build_exclude_set(tf, **_exclude_flags)
         before = len(objects)
         objects = [o for o in objects if o.type_num not in exclude_set]
@@ -410,15 +406,13 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
 def cmd_map_sample_all(args: SimpleNamespace) -> int:
     """Colour-sample all (or selected) maps at one or more scales."""
     if not os.path.isfile(args.fixed):
-        print(f"ERROR: FIXED.DAT not found: {args.fixed}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"FIXED.DAT not found: {args.fixed}")
     if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
     if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(args.palette):
-        print(f"ERROR: Palette not found: {args.palette}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette not found: {args.palette}")
 
     pal = U8Palette.from_file(args.palette)
     with open(args.fixed, "rb") as f:
@@ -458,8 +452,7 @@ def cmd_map_sample_all(args: SimpleNamespace) -> int:
             )
             return 1
         if not os.path.isfile(tf):
-            print(f"ERROR: typeflag.dat not found: {tf}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"typeflag.dat not found: {tf}")
         exclude_set = U8MapRenderer.build_exclude_set(tf, **_exclude_flags)
         active_filters = [k for k, v in _exclude_flags.items() if v]
         print(
@@ -507,15 +500,13 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     view = getattr(args, "view", U8MapRenderer.DEFAULT_VIEW)
 
     if not os.path.isfile(fixed_path):
-        print(f"ERROR: FIXED.DAT not found: {fixed_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"FIXED.DAT not found: {fixed_path}")
     if not _ensure_asset_dir(shapes_dir, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
     if not _ensure_asset_dir(glob_dir, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(palette_path):
-        print(f"ERROR: Palette file not found: {palette_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette file not found: {palette_path}")
     if view not in U8MapRenderer.PROJECTIONS:
         print(
             f"ERROR: Unknown view '{view}'. "
@@ -562,8 +553,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             )
             return 1
         if not os.path.isfile(tf):
-            print(f"ERROR: typeflag.dat not found: {tf}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"typeflag.dat not found: {tf}")
         exclude_set = U8MapRenderer.build_exclude_set(tf, **_exclude_flags)
         before = len(objects)
         objects = [o for o in objects if o.type_num not in exclude_set]
@@ -679,15 +669,13 @@ def _render_all_shared(
 def cmd_map_render_all(args: SimpleNamespace) -> int:
     """Render all non-empty maps in all requested projection views."""
     if not os.path.isfile(args.fixed):
-        print(f"ERROR: FIXED.DAT not found: {args.fixed}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"FIXED.DAT not found: {args.fixed}")
     if not _ensure_asset_dir(args.shapes, ".shp", "Shapes", "U8SHAPES.FLX", "shapes"):
         return 1
     if not _ensure_asset_dir(args.globs, ".dat", "Globs", "GLOB.FLX", "globs"):
         return 1
     if not os.path.isfile(args.palette):
-        print(f"ERROR: Palette not found: {args.palette}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette not found: {args.palette}")
 
     views = getattr(args, "views", None) or list(U8MapRenderer.PROJECTIONS)
     bad = [v for v in views if v not in U8MapRenderer.PROJECTIONS]
@@ -712,8 +700,7 @@ def cmd_map_render_all(args: SimpleNamespace) -> int:
             )
             return 1
         if not os.path.isfile(tf):
-            print(f"ERROR: typeflag.dat not found: {tf}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"typeflag.dat not found: {tf}")
         exclude_set = U8MapRenderer.build_exclude_set(tf, **_exclude_flags)
         active_filters = [k for k, v in _exclude_flags.items() if v]
         print(
@@ -725,8 +712,7 @@ def cmd_map_render_all(args: SimpleNamespace) -> int:
     nf_path = getattr(args, "nonfixed", None)
     if nf_path:
         if not os.path.isfile(nf_path):
-            print(f"ERROR: Nonfixed file not found: {nf_path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"Nonfixed file not found: {nf_path}")
         nonfixed_maps = _load_nonfixed_maps(nf_path)
         if nonfixed_maps is None:
             return 1
@@ -876,8 +862,9 @@ def map_render_all_cmd(
         Optional[str], typer.Option("--palette", "-p", help="Path to .pal palette file")
     ] = None,
     output: Annotated[
-        str, typer.Option("-o", "--output-dir", help="Output directory")
-    ] = "map_renders",
+        Optional[str],
+        typer.Option("-o", "--output-dir", help="Output directory" + DEFAULT_OUTPUT),
+    ] = None,
     views: Annotated[
         Optional[list[str]],
         typer.Option("--views", help="Views to render (default: all)"),
@@ -935,6 +922,7 @@ def map_render_all_cmd(
     ] = 2,
 ) -> None:
     """Render all non-empty maps in all (or selected) projection views."""
+    output = export_output(output, "u8", "map-render-all")
     args = _build_map_namespace(
         fixed=fixed,
         shapes=shapes,
@@ -1091,8 +1079,9 @@ def map_sample_all_cmd(
         Optional[str], typer.Option("--palette", "-p", help="Path to .pal palette file")
     ] = None,
     output: Annotated[
-        str, typer.Option("-o", "--output-dir", help="Output directory")
-    ] = "map_samples",
+        Optional[str],
+        typer.Option("-o", "--output-dir", help="Output directory" + DEFAULT_OUTPUT),
+    ] = None,
     scale: Annotated[
         int, typer.Option("--scale", "-s", help="Default scale when --scales not given")
     ] = 64,
@@ -1152,6 +1141,7 @@ def map_sample_all_cmd(
     ] = 2,
 ) -> None:
     """Colour-sample all (or selected) maps at one or more scales."""
+    output = export_output(output, "u8", "map-sample-all")
     args = _build_map_namespace(
         fixed=fixed,
         shapes=shapes,

@@ -199,6 +199,20 @@ class U6Library:
                     return self.is_compressed(later.index)
         return False
 
+    @property
+    def entry_count(self) -> int:
+        """Number of slots, used or not (:class:`titan.protocols.IndexedArchive`)."""
+        return len(self.items)
+
+    def read(self, index: int) -> bytes | None:
+        """Slot *index*'s bytes, LZW-decompressed where stored compressed, or ``None``
+        for an empty slot (:class:`titan.protocols.IndexedArchive`)."""
+        if not 0 <= index < self.entry_count:
+            raise IndexError(
+                f"U6 library item index {index} out of range (0..{self.entry_count - 1})"
+            )
+        return self.get_item(index) or None
+
     def get_item(self, item_number: int) -> bytes:
         """Return the bytes for one item, transparently LZW-decompressed if needed."""
         if item_number < 0 or item_number >= len(self.items):

@@ -15,6 +15,8 @@ from typing import Annotated, Literal, Optional
 
 import typer
 from titan._meta import meta
+from titan._config import export_output
+from titan.errors import exit_code
 
 
 def cmd_palette_export(args: SimpleNamespace) -> int:
@@ -23,10 +25,9 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    outdir = args.output or "palettes"
+    outdir = export_output(args.output, "u7", "palette-export")
     os.makedirs(outdir, exist_ok=True)
 
     slots = U7Palette.enumerate_slots(filepath)
@@ -71,7 +72,7 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
             pal = U7Palette.from_file(filepath, palette_index=idx, encoding=encoding)
         except ValueError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
-            return 1
+            return exit_code(exc)
 
         tag = f"{base}_pal{idx:02d}" if count > 1 else base
 
@@ -161,8 +162,7 @@ def cmd_palette_info(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     fmt = getattr(args, "format", None) or "summary"
     rows = _palette_inspection_rows(filepath)

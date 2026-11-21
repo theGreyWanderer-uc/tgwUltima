@@ -34,10 +34,9 @@ from titan.u9.asset_reports import (
     build_texture_frame_report,
     write_dynamic_report,
 )
-from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
-from titan.u9.flx_writer import U9FlxWriteError, repack
+from titan.u9.flx_archive import U9FlxArchive
+from titan.u9.flx_writer import repack
 from titan.u9.icon import icon_entry_indices
-from titan.u9.sdinfo import U9SdInfoError
 from titan.u9.texture import (
     U9TextureError,
     decode_frame,
@@ -50,7 +49,9 @@ from titan.u9.texture_export import (
 )
 from titan.u9.texture_writer import U9TextureWriteError, frame_encoding, replace_frames
 from titan.u9.cli import _common
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan._config import DEFAULT_OUTPUT, export_output
+from titan.errors import exit_code
 
 
 def print_texture_export_progress(
@@ -74,18 +75,12 @@ def print_texture_export_progress(
 def cmd_icon_list(args: SimpleNamespace) -> int:
     """List candidate 2D UI icon entries in a texture archive -- not referenced by any 3D model material."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
     if not os.path.isfile(args.textures):
-        print(f"ERROR: Texture file not found: {args.textures}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Texture file not found: {args.textures}")
 
-    try:
-        sappear = U9FlxArchive.from_file(args.file)
-        textures = U9FlxArchive.from_file(args.textures)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    sappear = U9FlxArchive.from_file(args.file)
+    textures = U9FlxArchive.from_file(args.textures)
 
     icon_ids = icon_entry_indices(sappear, textures)
     print(
@@ -110,13 +105,8 @@ def cmd_icon_list(args: SimpleNamespace) -> int:
 def cmd_texture_info(args: SimpleNamespace) -> int:
     """Inspect one texture-set entry without decoding its pixels."""
     if not os.path.isfile(args.textures):
-        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
-        return 1
-    try:
-        archive = U9FlxArchive.from_file(args.textures)
-    except U9FlxArchiveError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.textures}")
+    archive = U9FlxArchive.from_file(args.textures)
     if not (0 <= args.entry_id < archive.num_entries):
         print(
             f"ERROR: entry_id {args.entry_id} out of range (0..{archive.num_entries - 1})",
@@ -131,11 +121,7 @@ def cmd_texture_info(args: SimpleNamespace) -> int:
         )
         return 1
 
-    try:
-        texture_set = parse_texture_set(blob)
-    except U9TextureError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    texture_set = parse_texture_set(blob)
 
     compression = {0: "raw", 1: "BC1/DXT1"}.get(
         texture_set.compression, f"unknown ({texture_set.compression})"
@@ -202,7 +188,7 @@ def cmd_texture_frame_report(args: SimpleNamespace) -> int:
         )
     except (U9AssetReportError, OSError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     print(f"Wrote {len(rows)} texture frame row(s) to {output}")
@@ -212,16 +198,10 @@ def cmd_texture_frame_report(args: SimpleNamespace) -> int:
 def cmd_texture_export(args: SimpleNamespace) -> int:
     """Export any bitmap or terrain-panel texture surface to PNG."""
     if not os.path.isfile(args.textures):
-        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.textures}")
     if args.palette and not os.path.isfile(args.palette):
-        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
-        return 1
-    try:
-        archive = U9FlxArchive.from_file(args.textures)
-    except U9FlxArchiveError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette file not found: {args.palette}")
+    archive = U9FlxArchive.from_file(args.textures)
     if not (0 <= args.entry_id < archive.num_entries):
         print(
             f"ERROR: entry_id {args.entry_id} out of range (0..{archive.num_entries - 1})",
@@ -238,17 +218,13 @@ def cmd_texture_export(args: SimpleNamespace) -> int:
 
     palette = _common._load_palette(args.palette, args.textures)
     selectors = _common._load_selectors(args.textures)
-    try:
-        surface = decode_frame(
-            blob,
-            args.frame,
-            palette=palette,
-            selector=selectors.get(args.entry_id),
-            mip_level=args.mip_level,
-        )
-    except U9TextureError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    surface = decode_frame(
+        blob,
+        args.frame,
+        palette=palette,
+        selector=selectors.get(args.entry_id),
+        mip_level=args.mip_level,
+    )
 
     outdir = args.output or "."
     os.makedirs(outdir, exist_ok=True)
@@ -277,10 +253,11 @@ def cmd_texture_export_all(args: SimpleNamespace) -> int:
             entry_id=args.entry,
             all_tiers=args.all_tiers,
             progress=print_texture_export_progress,
+            install=configured_install("u9"),
         )
     except (OSError, U9TextureExportError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for failure in result.errors[:10]:
         details = ", ".join(
             f"{key} {failure[key]}"
@@ -300,17 +277,11 @@ def cmd_texture_export_all(args: SimpleNamespace) -> int:
 def cmd_icon_export(args: SimpleNamespace) -> int:
     """Export one texture archive entry to PNG, regardless of whether any 3D model references it."""
     if not os.path.isfile(args.textures):
-        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.textures}")
     if args.palette and not os.path.isfile(args.palette):
-        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette file not found: {args.palette}")
 
-    try:
-        archive = U9FlxArchive.from_file(args.textures)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(args.textures)
 
     if args.entry_id < 0 or args.entry_id >= archive.num_entries:
         print(
@@ -329,13 +300,9 @@ def cmd_icon_export(args: SimpleNamespace) -> int:
 
     palette = _common._load_palette(args.palette, args.textures)
     selectors = _common._load_selectors(args.textures)
-    try:
-        frame = decode_frame(
-            blob, args.frame, palette=palette, selector=selectors.get(args.entry_id)
-        )
-    except U9TextureError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    frame = decode_frame(
+        blob, args.frame, palette=palette, selector=selectors.get(args.entry_id)
+    )
 
     outdir = args.output or "."
     os.makedirs(outdir, exist_ok=True)
@@ -358,27 +325,20 @@ def cmd_icon_export(args: SimpleNamespace) -> int:
 def cmd_icon_export_all(args: SimpleNamespace) -> int:
     """Batch-export every candidate 2D UI icon (not referenced by any 3D model) to PNG."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
     if not os.path.isfile(args.textures):
-        print(f"ERROR: Texture file not found: {args.textures}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Texture file not found: {args.textures}")
     if args.palette and not os.path.isfile(args.palette):
-        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette file not found: {args.palette}")
 
-    try:
-        sappear = U9FlxArchive.from_file(args.file)
-        textures = U9FlxArchive.from_file(args.textures)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    sappear = U9FlxArchive.from_file(args.file)
+    textures = U9FlxArchive.from_file(args.textures)
 
     palette = _common._load_palette(args.palette, args.textures)
     selectors = _common._load_selectors(args.textures)
     icon_ids = icon_entry_indices(sappear, textures)
 
-    outdir = args.output or "icon_export"
+    outdir = export_output(args.output, "u9", "icon-export-all")
     os.makedirs(outdir, exist_ok=True)
 
     exported = 0
@@ -407,11 +367,7 @@ def cmd_sdinfo_list(args: SimpleNamespace) -> int:
     if info is None:
         return 1
 
-    try:
-        rows = info.records()
-    except U9SdInfoError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    rows = info.records()
 
     if args.animated:
         rows = [r for r in rows if r.is_animated]
@@ -441,11 +397,7 @@ def cmd_sdinfo_show(args: SimpleNamespace) -> int:
     info = _common._load_sdinfo(args.file)
     if info is None:
         return 1
-    try:
-        r = info.record(args.index)
-    except U9SdInfoError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    r = info.record(args.index)
     if r is None:
         print(f"Texture {args.index} is an unused slot.")
         return 0
@@ -471,13 +423,8 @@ def cmd_sdinfo_verify(args: SimpleNamespace) -> int:
     if info is None:
         return 1
     if not os.path.isfile(args.textures):
-        print(f"ERROR: File not found: {args.textures}", file=sys.stderr)
-        return 1
-    try:
-        counts = info.cross_check(U9FlxArchive.from_file(args.textures))
-    except (U9SdInfoError, U9FlxArchiveError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.textures}")
+    counts = info.cross_check(U9FlxArchive.from_file(args.textures))
 
     total = counts["compared"]
     print(f"{args.file}")
@@ -548,14 +495,11 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
         )
         return 1
     if not os.path.isfile(args.textures):
-        print(f"ERROR: Archive not found: {args.textures}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Archive not found: {args.textures}")
     if image_path and not os.path.isfile(image_path):
-        print(f"ERROR: Image not found: {image_path}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Image not found: {image_path}")
     if args.palette and not os.path.isfile(args.palette):
-        print(f"ERROR: Palette file not found: {args.palette}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Palette file not found: {args.palette}")
 
     try:
         if image_path:
@@ -566,13 +510,9 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
             frame_paths = _numbered_texture_frame_paths(frames_dir)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
-    try:
-        archive = U9FlxArchive.from_file(args.textures)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(args.textures)
 
     if not (0 <= args.entry_id < archive.num_entries):
         print(
@@ -610,14 +550,10 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
         )
     except (OSError, U9TextureWriteError, struct.error) as e:
         print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+        return exit_code(e)
 
     out_path = args.output or f"{Path(args.textures).stem}_patched.flx"
-    try:
-        data = repack(archive, {args.entry_id: patched})
-    except U9FlxWriteError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    data = repack(archive, {args.entry_id: patched})
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "wb") as f:
         f.write(data)
@@ -786,9 +722,11 @@ def texture_export_all_cmd(
     output: Annotated[
         str,
         typer.Option(
-            "-o", "--output-dir", help="Output root; each archive gets its own folder"
+            "-o",
+            "--output-dir",
+            help="Output root; each archive gets its own folder" + DEFAULT_OUTPUT,
         ),
-    ] = "u9_textures",
+    ] = None,
     palette: Annotated[
         Optional[str],
         typer.Option(
@@ -820,6 +758,7 @@ def texture_export_all_cmd(
     ] = None,
 ) -> None:
     """Export every texture frame; default to the best tier at full resolution."""
+    output = export_output(output, "u9", "texture-export-all")
     raise SystemExit(
         cmd_texture_export_all(
             SimpleNamespace(

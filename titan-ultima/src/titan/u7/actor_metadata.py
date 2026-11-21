@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Mapping, cast
+from titan.errors import InvalidDataError
 
 if TYPE_CHECKING:
     from titan.u7.avatar_metadata import U7AvatarMetadata
@@ -51,7 +52,9 @@ class U7ActorMetadata:
         has_usecode: bool | None = None,
     ) -> U7ActorMetadata:
         if len(raw) < 117:
-            raise ValueError("U7 actor metadata: fixed actor prefix is incomplete")
+            raise InvalidDataError(
+                "U7 actor metadata: fixed actor prefix is incomplete"
+            )
         iflag = struct.unpack_from("<H", raw, 4)[0]
         pos = 78
         name = b""
@@ -59,7 +62,7 @@ class U7ActorMetadata:
             size = raw[pos]
             pos += 1
             if pos + size + 39 > len(raw):
-                raise ValueError(
+                raise InvalidDataError(
                     "U7 actor metadata: named-function insertion is incomplete"
                 )
             name = raw[pos : pos + size]

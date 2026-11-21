@@ -40,7 +40,8 @@ from titan.u8.shape_browser import (
 )
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
 from titan.u8.state_report_ui import write_u8_state_report
-from titan._meta import meta
+from titan._meta import configured_install, meta, resolve_save
+from titan.errors import exit_code
 
 PAGE_SIZE = 25
 
@@ -100,10 +101,11 @@ def choose_u8_save_browser_source(
     """Choose this installation's native saves/GAMEDAT, or an explicit other source."""
     from titan.u8.shape_browser import discover_u8_shape_targets
 
-    targets = discover_u8_shape_targets(game_dir)
+    install = configured_install("u8")
+    targets = discover_u8_shape_targets(game_dir, install)
     choices: list[Path] = []
     for target in targets:
-        gamedats, saves = discover_u8_npc_sources(target.static)
+        gamedats, saves = discover_u8_npc_sources(target.static, install)
         choices.extend((*gamedats, *saves))
     choices = list(dict.fromkeys(choices))
     page = 0
@@ -176,7 +178,10 @@ def _graphics(session: U8SaveBrowserSession) -> U8ShapeLibrary:
         if path is None:
             raise ValueError("U8 save browser: U8SHAPES.FLX not found")
         session.library = load_u8_shape_library(
-            path, palette=session.palette, anim=session.anim
+            path,
+            palette=session.palette,
+            anim=session.anim,
+            install=configured_install("u8"),
         )
     return session.library
 
@@ -635,7 +640,7 @@ def run_u8_save_browser(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 @meta(
@@ -648,8 +653,10 @@ def run_u8_save_browser(
         "anim": "install-file",
         "symbols": "install-file",
         "names": "input-file",
+        "shapes": "install-file",
     },
     interactive=True,
+    resources={"shapes": "u8shapes"},
 )
 def save_browse_cmd(
     source: Annotated[
@@ -713,15 +720,13 @@ def save_browse_cmd(
     """Browse native save entries/state, NPCs, flags, maps, kernel and comparisons."""
     if output is None:
         output = export_dir("u8", U8_SAVE_BROWSER_OUTPUT)
-    from titan._config import get_config
-    from titan.u8.install import resolve_u8_save
 
     def save(value: Path | None) -> Path | None:
         # A slot number or bare U8SAVE name is looked up in [u8.paths] savegame.
         if value is None:
             return None
         try:
-            return resolve_u8_save(str(value), get_config())
+            return resolve_save("u8", str(value))
         except ValueError as error:
             raise typer.BadParameter(str(error)) from error
 

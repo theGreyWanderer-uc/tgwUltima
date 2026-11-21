@@ -1,6 +1,7 @@
 """UU2 block decompression."""
 
 from __future__ import annotations
+from titan.errors import InvalidDataError
 
 
 def decode_uw2_block(data: bytes) -> bytes:
@@ -42,7 +43,7 @@ def decode_uw2_block(data: bytes) -> bytes:
                 rel += 18
 
                 if rel > len(out):
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"UU2 back-reference points beyond output: rel={rel}, out={len(out)}"
                     )
 
@@ -51,7 +52,7 @@ def decode_uw2_block(data: bytes) -> bytes:
 
                 for _ in range(count):
                     if rel < 0 or rel >= len(out):
-                        raise ValueError(
+                        raise InvalidDataError(
                             f"UU2 back-reference index out of range: rel={rel}, out={len(out)}"
                         )
                     out.append(out[rel])

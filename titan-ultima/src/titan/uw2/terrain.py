@@ -8,6 +8,7 @@ import struct
 
 import numpy as np
 from PIL import Image
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -18,7 +19,7 @@ class TRTexture:
     height: int
     pixels: bytes
 
-    def to_image(self, palette_rgb: list[int]) -> Image.Image:
+    def to_image(self, palette_rgb: bytes | list[int]) -> Image.Image:
         array = np.frombuffer(self.pixels, dtype=np.uint8).reshape(
             (self.height, self.width)
         )
@@ -39,16 +40,18 @@ class TRArchive:
         path = Path(path)
         data = path.read_bytes()
         if len(data) < 4:
-            raise ValueError(f"{path} is too small to be a TR texture archive")
+            raise InvalidDataError(f"{path} is too small to be a TR texture archive")
 
         format_byte = data[0]
         resolution = data[1]
         entries = struct.unpack_from("<H", data, 2)[0]
         table_end = 4 + entries * 4
         if format_byte != 2:
-            raise ValueError(f"{path} has unexpected TR format byte {format_byte:#x}")
+            raise InvalidDataError(
+                f"{path} has unexpected TR format byte {format_byte:#x}"
+            )
         if table_end > len(data):
-            raise ValueError(f"{path} offset table extends past EOF")
+            raise InvalidDataError(f"{path} offset table extends past EOF")
 
         offsets = list(struct.unpack_from(f"<{entries}I", data, 4))
         size = resolution * resolution

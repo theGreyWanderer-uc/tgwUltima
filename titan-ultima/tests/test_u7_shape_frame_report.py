@@ -11,11 +11,23 @@ from types import SimpleNamespace
 
 import numpy as np
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli.shapes import cmd_shape_frame_report
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 from titan.u7.shape_frame_report import build_u7_shape_frame_report
 from titan.u7.wihh import U7WeaponInHandOffsets
+
+
+def _status(command, args) -> int:
+    """*command*'s exit status as the CLI reports it: a titan error or OSError it
+    raises becomes its category code (``titan.errors.exit_code``)."""
+    from titan.errors import TitanError, exit_code
+
+    try:
+        return command(args)
+    except (TitanError, OSError) as error:
+        return exit_code(error)
 
 
 def _rle_shape_record(origin_x: int = -2, origin_y: int = 0) -> bytes:
@@ -132,16 +144,17 @@ class U7ShapeFrameReportTests(unittest.TestCase):
             archive = U7FlexArchive()
             archive.save(str(archive_path))
 
-            result = cmd_shape_frame_report(
+            result = _status(
+                cmd_shape_frame_report,
                 SimpleNamespace(
                     file=str(archive_path),
                     output=str(temp_path / "report.csv"),
                     wihh=str(temp_path / "missing.dat"),
                     format="csv",
-                )
+                ),
             )
 
-            self.assertEqual(result, 1)
+            self.assertEqual(result, EXIT_CODES["file-not-found"])
             self.assertFalse((temp_path / "report.csv").exists())
 
 

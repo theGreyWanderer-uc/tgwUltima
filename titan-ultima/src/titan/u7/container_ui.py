@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 from titan import _wizard_ui as ui
+from titan.errors import exit_code
 
 
 # ---------------------------------------------------------------------------
@@ -56,10 +57,10 @@ def run_wizard(
     from titan.u7.container_browser import load_u7_container_session
     from titan.u7.container_browser_ui import browse_u7_container_session
 
-    if world.game != game:
-        from titan._config import exult_cfg
+    if world.game != game or exult_flx_path is None:
+        from titan.u7.install import resolve_u7_exult_flx
 
-        exult_flx_path = exult_cfg(f"{world.game}_flx")
+        exult_flx_path = resolve_u7_exult_flx(world.game)
     try:
         print("  Capturing containers and nested contents…")
         session = load_u7_container_session(
@@ -71,4 +72,4 @@ def run_wizard(
         return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  U7 container browser unavailable: {error}")
-        return 1
+        return exit_code(error)

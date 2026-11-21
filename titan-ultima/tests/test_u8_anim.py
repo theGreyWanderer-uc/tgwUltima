@@ -10,6 +10,7 @@ import struct
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u8 import U8AnimData, U8AnimError
 from titan.u8.anim import DIRECTION_NAMES
 from titan.u8.anim_report import format_u8_anim_report
@@ -281,7 +282,7 @@ def test_cli_existing_outputs_and_source_cannot_be_replaced(tmp_path):
     output = tmp_path / "existing.txt"
     output.write_text("keep")
     result = runner.invoke(u8_app, ["anim-dump", str(source), "-o", str(output)])
-    assert result.exit_code == 1
+    assert result.exit_code == EXIT_CODES["output-exists"]
     assert output.read_text() == "keep"
 
 
@@ -310,7 +311,9 @@ def test_cli_malformed_input_reports_error_without_output(tmp_path):
     source.write_bytes(b"broken")
     output = tmp_path / "report.json"
     result = CliRunner().invoke(u8_app, ["anim-dump", str(source), "-o", str(output)])
-    assert result.exit_code == 1 and "ANIM.DAT:" in result.output
+    assert (
+        result.exit_code == EXIT_CODES["invalid-data"] and "ANIM.DAT:" in result.output
+    )
     assert not output.exists()
 
 

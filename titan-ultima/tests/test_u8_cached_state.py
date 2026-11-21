@@ -10,6 +10,7 @@ import struct
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u8 import U8ItemCache, U8ItemCacheError, U8NpcData, U8NpcDataError
 from titan.u8.cli import u8_app
 from titan.u8.state_report import format_u8_itemcach_report, format_u8_npcdata_report
@@ -583,7 +584,9 @@ def test_cli_preserves_save_and_existing_output(tmp_path, command, target):
     output = source if target == "source" else existing
     before = output.read_bytes()
     result = CliRunner().invoke(u8_app, [command, str(source), "-o", str(output)])
-    assert result.exit_code == 1 and output.read_bytes() == before
+    # An existing output needs --force; writing over the save is refused outright.
+    status = EXIT_CODES["output-exists" if target == "existing" else "error"]
+    assert result.exit_code == status and output.read_bytes() == before
 
 
 def test_npc_command_protects_explicit_item_cache_source(tmp_path):
@@ -623,5 +626,5 @@ def test_cli_malformed_input_has_controlled_error_and_no_output(tmp_path, comman
     source.write_bytes(b"broken")
     output = tmp_path / "output.json"
     result = CliRunner().invoke(u8_app, [command, str(source), "-o", str(output)])
-    assert result.exit_code == 1 and "ERROR:" in result.output
+    assert result.exit_code == EXIT_CODES["invalid-data"] and "ERROR:" in result.output
     assert not output.exists()

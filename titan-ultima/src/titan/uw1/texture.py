@@ -40,7 +40,7 @@ class UW1Texture:
             (self.resolution, self.resolution)
         )
         image = Image.fromarray(array, mode="P")
-        image.putpalette(palette.flattened_rgb())
+        image.putpalette(palette.to_flat_rgb())
         return image.convert("RGBA")
 
 

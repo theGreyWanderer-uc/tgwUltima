@@ -10,8 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from PIL import Image
 import numpy as np
+from PIL import Image
 
 from titan.u7.cli.shapes import cmd_shape_import
 from titan.u7.palette import U7Palette
@@ -221,6 +221,7 @@ class ShapeImportCliTests(unittest.TestCase):
 
     def test_cli_flat_flags_encode_and_insert_into_slot_zero(self) -> None:
         from typer.testing import CliRunner
+
         from titan.cli import app
         from titan.u7.flex import U7FlexArchive
 
@@ -260,6 +261,7 @@ class ShapeImportCliTests(unittest.TestCase):
 
     def test_cli_allow_cycling_flag_selects_the_effect_colour(self) -> None:
         from typer.testing import CliRunner
+
         from titan.cli import app
 
         colors = bytearray(256 * 3)

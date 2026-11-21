@@ -1,25 +1,26 @@
 """Font rendering, interactive retries and safe archive output regressions."""
 
-import struct
 import io
 import re
-from functools import partial
+import struct
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
 import pytest
 from typer.testing import CliRunner
 
-from titan.fonts import wizard
-from titan.fonts import wizard_ui
+from titan._meta import configured_install
+from titan.errors import EXIT_CODES
+from titan.fonts import wizard, wizard_ui
 from titan.fonts.archive import read_font_archive
 from titan.fonts.encoder import glyphs_to_shape
-from titan.fonts.exult_cfg import ExultGamePaths, scan_font_archives, parse_exult_cfg
+from titan.fonts.exult_cfg import ExultGamePaths, parse_exult_cfg, scan_font_archives
 from titan.fonts.palette import (
     PaletteLUT,
-    resolve_gradient_to_indices,
     resolve_game_palette,
+    resolve_gradient_to_indices,
 )
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
@@ -198,8 +199,9 @@ def test_redirected_swatches_contain_no_escape_codes(capsys):
 
 
 def test_terminal_colours_use_formatted_output(monkeypatch):
-    from titan import _wizard_ui as ui
     from prompt_toolkit.output import ColorDepth
+
+    from titan import _wizard_ui as ui
 
     class Terminal(io.StringIO):
         def isatty(self):
@@ -220,8 +222,8 @@ def test_terminal_colours_use_formatted_output(monkeypatch):
 
 
 def test_colour_glyph_preview_keeps_black_ink_gradient_and_transparency(monkeypatch):
-    from titan.fonts.preview import glyph_image, preview_sheet
     from titan import _wizard_ui as ui
+    from titan.fonts.preview import glyph_image, preview_sheet
 
     palette = U7Palette()
     palette.colors[10] = (255, 52, 52)
@@ -248,6 +250,7 @@ def test_mapped_colour_preview_uses_final_palette_and_survives_viewer_failure(
     tmp_path, monkeypatch, capsys
 ):
     from PIL import Image
+
     from titan import _wizard_ui as ui
 
     colours = np.zeros((256, 3), dtype=np.uint8)
@@ -291,6 +294,7 @@ def test_custom_text_composes_repeated_glyphs_spacing_and_transparent_overlap():
 
 def test_custom_text_png_uses_mapped_glyph_pixels_in_word_order(tmp_path, monkeypatch):
     from PIL import Image
+
     from titan import _wizard_ui as ui
 
     colours = np.zeros((256, 3), dtype=np.uint8)
@@ -487,7 +491,7 @@ def test_recipe_existing_outputs_require_force(tmp_path):
     assert wizard_ui.run_from_config(str(path)) == 0
     output = tmp_path / "out/font.shp"
     before = output.read_bytes()
-    assert wizard_ui.run_from_config(str(path)) == 1
+    assert wizard_ui.run_from_config(str(path)) == EXIT_CODES["output-exists"]
     assert output.read_bytes() == before
     assert wizard_ui.run_from_config(str(path), force=True) == 0
 
@@ -503,7 +507,7 @@ def test_corrupt_archive_aborts_before_either_output(tmp_path):
         path,
         output='format="both"\npath="out/font.shp"\nflex_source="fonts.vga"\nforce=true',
     )
-    assert wizard_ui.run_from_config(str(path)) == 1
+    assert wizard_ui.run_from_config(str(path)) == EXIT_CODES["invalid-data"]
     assert destination.read_bytes() == broken
     assert not (tmp_path / "out/font.shp").exists()
 
@@ -547,7 +551,8 @@ def test_palette_path_relative_to_base_without_duplicate_static(tmp_path, monkey
             }
         },
     )
-    assert resolve_game_palette("BG").colors[0] == (80, 121, 161)
+    install = configured_install("u7bg")
+    assert resolve_game_palette("BG", install=install).colors[0] == (80, 121, 161)
 
 
 def test_gradient_matching_excludes_cycling_unless_enabled():
@@ -592,6 +597,7 @@ def test_library_creates_a_font_from_recipe_data_without_terminal_output(
     from titan import _results
 
     monkeypatch.setattr(_results, "_outputs", [])
+    monkeypatch.setenv(_results.RESULTS_ENV, str(tmp_path / "results.json"))
     # An earlier CLI test may have installed the terminal log handler; a
     # front end attaches its own instead.
     monkeypatch.setattr(logging.getLogger("titan"), "handlers", [])

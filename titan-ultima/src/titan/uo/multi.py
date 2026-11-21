@@ -10,6 +10,7 @@ import struct
 
 from titan.uo.indexed import UOIndexedFile
 from titan.uo.uop import UOPArchive, hash_uop_path
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -172,16 +173,16 @@ def detect_mul_stride(entries: list[bytes]) -> int:
             continue
         rates[stride] = _implausible_rate(entries, stride)
     if not rates:
-        raise ValueError("multi.mul entries fit neither 12- nor 16-byte records")
+        raise InvalidDataError("multi.mul entries fit neither 12- nor 16-byte records")
     best = min(rates, key=rates.get)
     if rates[best] > _ACCEPT_BAD_RATE:
-        raise ValueError(
+        raise InvalidDataError(
             f"multi.mul does not decode cleanly: {rates[best]:.1%} implausible "
             f"records at {best} bytes"
         )
     rivals = [rate for stride, rate in rates.items() if stride != best]
     if rivals and min(rivals) < _REJECT_BAD_RATE:
-        raise ValueError(
+        raise InvalidDataError(
             "multi.mul record size is ambiguous: both 12 and 16 bytes decode cleanly"
         )
     return best

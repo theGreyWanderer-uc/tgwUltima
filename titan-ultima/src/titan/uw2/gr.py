@@ -35,7 +35,7 @@ class UW2GRImage:
             self.palette_indices, dtype=np.uint8
         ).reshape((self.height, self.width))
         indexed = Image.fromarray(pixels, mode="P")
-        indexed.putpalette(palette.flattened_rgb())
+        indexed.putpalette(palette.to_flat_rgb())
         rgba = indexed.convert("RGBA")
         alpha = np.where(pixels == transparent_index, 0, 255).astype(np.uint8)
         rgba.putalpha(Image.fromarray(alpha, mode="L"))

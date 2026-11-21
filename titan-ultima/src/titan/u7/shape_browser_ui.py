@@ -12,7 +12,7 @@ from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan._terminal_image import play_terminal, terminal_image
 from titan.u7.archive_targets import ArchiveTarget
-from titan.u7.install import existing_path
+from titan.u7.install import existing_path, resolve_u7_exult_flx
 from titan.u7.shape import U7Shape
 from titan.u7.shape_animation import TICK_MS, save_gif
 from titan.u7.target_picker import game_targets, select_target
@@ -414,6 +414,7 @@ def run_browser(
                         target,
                         game,
                         path,
+                        exult_flx=resolve_u7_exult_flx(game),
                         palette_index=palette_index,
                         palette_file=existing_path(Path(palette).expanduser())
                         if palette

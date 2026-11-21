@@ -8,6 +8,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PIL import Image
 
@@ -24,7 +25,6 @@ from titan.u7.flex_shape_add import (
     add_shape_to_first_available_record,
 )
 from titan.u7.palette import PaletteRecordEmptyError, U7Palette
-from titan.u7.install import resolve_u7_path
 from titan.u7.shape import FIRST_OBJ_SHAPE, U7Shape
 from titan.u7.shape_archive import (
     RETAIL_SHAPE_ARCHIVES,
@@ -36,12 +36,16 @@ from titan.u7.shape_archive import (
 )
 from titan.u7.shape_import import create_u7_shape_from_pngs, sorted_png_frame_paths
 from titan.u7.shape_validation import validate_u7_shape_data
+
+if TYPE_CHECKING:
+    from titan._meta import Installation
 from titan.u7.shape_animation_flag import (
     prepare_u7_archive_animation,
     resolve_u7_shape_animation,
     u7_animation_sidecar,
     u7_shape_animation_payload,
 )
+from titan.errors import InvalidDataError
 
 
 log = logging.getLogger(__name__)
@@ -74,6 +78,10 @@ class ShapeWizardConfig:
     target_name: str | None = None
     standalone: bool = False
     animated: bool | None = None
+    install: Installation | None = None
+    """The configured install (``titan._meta.configured_install``); supplies
+    the game STATIC and palette the config doesn't name. The CLI/UI layer
+    fills it."""
 
 
 @dataclass
@@ -136,9 +144,11 @@ def _exult_paths(game: str) -> ExultGamePaths | None:
     return parse_exult_cfg(cfg, game) if cfg else None
 
 
-def _static_path(game: str) -> str | None:
-    path = resolve_u7_path(game, "static")
-    return str(path) if path else None
+def _static_path(config: ShapeWizardConfig) -> str | None:
+    """The install's STATIC folder (:attr:`ShapeWizardConfig.install`)."""
+    install = config.install
+    path = install.resources.get("static") if install is not None else None
+    return str(path) if path and path.is_dir() else None
 
 
 def _palette(config: ShapeWizardConfig) -> U7Palette:
@@ -157,15 +167,15 @@ def _palette(config: ShapeWizardConfig) -> U7Palette:
                 "No palette found in the selected Exult game; select its PALETTES.FLX explicitly"
             )
     palette = resolve_game_palette(
-        config.game, config.palette_file, config.palette_index
+        config.game, config.palette_file, config.palette_index, install=config.install
     )
     if palette is None:
-        static = _static_path(config.game)
+        static = _static_path(config)
         path = find_archive(Path(static), "palettes.flx") if static else None
         if path:
             palette = U7Palette.from_file(str(path), palette_index=config.palette_index)
     if palette is None:
-        raise ValueError(
+        raise InvalidDataError(
             "No game palette found; select PALETTES.FLX or set palette.file in the recipe"
         )
     return palette
@@ -274,7 +284,7 @@ def prepare_archive(config: ShapeWizardConfig, data: bytes) -> ArchivePlan:
     if not config.archive_output:
         raise ValueError("Archive destination is required")
     target = Path(config.archive_output).expanduser()
-    static = config.target_static or _static_path(config.game)
+    static = config.target_static or _static_path(config)
 
     def selected_base(path: Path) -> str | None:
         if config.base_archive:

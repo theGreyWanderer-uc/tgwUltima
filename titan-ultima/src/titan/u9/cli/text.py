@@ -42,6 +42,7 @@ from titan.u9.text_keys import (
 )
 from titan.u9.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _load_text(filepath: str) -> Optional[U9TextArchive]:
@@ -62,23 +63,19 @@ def cmd_text_list(args: SimpleNamespace) -> int:
     if text is None:
         return 1
 
-    try:
-        if args.block:
-            block = text.block_for(args.block)
-            if block is None:
-                print(f"No block named {args.block!r}. Try 'titan u9 text-blocks'.")
-                return 1
-            rows = list(block.lines)
-            print(f"{args.file} -- block {block.name!r}, {len(rows)} line(s)")
-        else:
-            rows = [e for e in text.entries() if args.markers or not e.is_file_marker]
-            print(
-                f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
-                f"of {len(text)} used"
-            )
-    except U9TextError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    if args.block:
+        block = text.block_for(args.block)
+        if block is None:
+            print(f"No block named {args.block!r}. Try 'titan u9 text-blocks'.")
+            return 1
+        rows = list(block.lines)
+        print(f"{args.file} -- block {block.name!r}, {len(rows)} line(s)")
+    else:
+        rows = [e for e in text.entries() if args.markers or not e.is_file_marker]
+        print(
+            f"{args.file} -- {len(rows)} entr{'y' if len(rows) == 1 else 'ies'} "
+            f"of {len(text)} used"
+        )
 
     shown = rows[: args.limit] if args.limit else rows
     for e in shown:
@@ -93,11 +90,7 @@ def cmd_text_blocks(args: SimpleNamespace) -> int:
     text = _load_text(args.file)
     if text is None:
         return 1
-    try:
-        blocks = text.blocks()
-    except U9TextError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    blocks = text.blocks()
 
     if not blocks:
         print(
@@ -124,15 +117,11 @@ def cmd_text_search(args: SimpleNamespace) -> int:
     text = _load_text(args.file)
     if text is None:
         return 1
-    try:
-        hits = text.search(args.needle, ignore_case=not args.case_sensitive)
-        owner = {}
-        for block in text.blocks():
-            for line in block.lines:
-                owner[line.index] = block.name
-    except U9TextError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    hits = text.search(args.needle, ignore_case=not args.case_sensitive)
+    owner = {}
+    for block in text.blocks():
+        for line in block.lines:
+            owner[line.index] = block.name
 
     shown = hits[: args.limit] if args.limit else hits
     print(f"{args.file} -- {len(hits)} match(es) for {args.needle!r}")
@@ -150,15 +139,11 @@ def cmd_text_export(args: SimpleNamespace) -> int:
     text = _load_text(args.file)
     if text is None:
         return 1
-    try:
-        entries = text.entries()
-        owner = {}
-        for block in text.blocks():
-            for line in block.lines:
-                owner[line.index] = block.name
-    except U9TextError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    entries = text.entries()
+    owner = {}
+    for block in text.blocks():
+        for line in block.lines:
+            owner[line.index] = block.name
 
     out_path = args.output or f"{Path(args.file).stem}_text.csv"
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
@@ -181,16 +166,12 @@ def cmd_text_import(args: SimpleNamespace) -> int:
     rows = _common._read_import_csv(args.csv, "index", "text")
     if rows is None:
         return 1
-    try:
-        changes = {
-            index: value
-            for index, value in rows.items()
-            if (entry := text.entry(index)) is None or entry.text != value
-        }
-        data = text.rebuilt(changes)
-    except U9TextError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    changes = {
+        index: value
+        for index, value in rows.items()
+        if (entry := text.entry(index)) is None or entry.text != value
+    }
+    data = text.rebuilt(changes)
 
     rebuilt = U9TextArchive(U9FlxArchive(data))
     for index, value in changes.items():
@@ -287,14 +268,10 @@ def cmd_text_keys_info(args: SimpleNamespace) -> int:
     )
     if text is None:
         return 0
-    try:
-        statuses = Counter(text_reference_status(item, text) for item in items)
-        targets = table.text_index_counts()
-        unkeyed = [index for index in text.used_indices() if index not in targets]
-        keys = reconstruct_keys(table, text, args.speakers or (), npc_names)
-    except U9TextError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    statuses = Counter(text_reference_status(item, text) for item in items)
+    targets = table.text_index_counts()
+    unkeyed = [index for index in text.used_indices() if index not in targets]
+    keys = reconstruct_keys(table, text, args.speakers or (), npc_names)
     print(f"  text references   : {_counts_line(statuses)}")
     print(f"  shared targets    : {sum(1 for count in targets.values() if count > 1)}")
     print(f"  lines without key : {len(unkeyed)}")
@@ -321,7 +298,7 @@ def cmd_text_key_lookup(args: SimpleNamespace) -> int:
         crc = key_crc(key)
     except (UnicodeEncodeError, ValueError) as error:
         print(f"ERROR: cannot use this key: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"{args.file} -- key {args.key!r}")
     print(f"  bucket {bucket}  crc 0x{crc:08x}")
@@ -369,15 +346,7 @@ def cmd_text_keys_export(args: SimpleNamespace) -> int:
     ok, npc_names = _load_optional_npc_names(args.npcs)
     if not ok:
         return 1
-    try:
-        keys = (
-            reconstruct_keys(table, text, args.speakers or (), npc_names)
-            if text
-            else {}
-        )
-    except U9TextError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    keys = reconstruct_keys(table, text, args.speakers or (), npc_names) if text else {}
 
     targets = table.text_index_counts()
     out_path = args.output or f"{Path(args.file).stem}_keys.csv"
@@ -436,11 +405,7 @@ def cmd_books_list(args: SimpleNamespace) -> int:
     books = _load_books(args.file)
     if books is None:
         return 1
-    try:
-        rows = books.books()
-    except U9BooksError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    rows = books.books()
 
     if args.by_size:
         rows.sort(key=lambda b: -len(b))
@@ -467,20 +432,16 @@ def cmd_books_show(args: SimpleNamespace) -> int:
     books = _load_books(args.file)
     if books is None:
         return 1
-    try:
-        if args.name:
-            book = books.by_name(args.name)
-            if book is None:
-                print(f"No book named {args.name!r}. Try 'titan u9 books-list'.")
-                return 1
-        else:
-            book = books.book(args.id - 1)
-            if book is None:
-                print(f"Book id {args.id} is an unused slot.")
-                return 1
-    except U9BooksError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    if args.name:
+        book = books.by_name(args.name)
+        if book is None:
+            print(f"No book named {args.name!r}. Try 'titan u9 books-list'.")
+            return 1
+    else:
+        book = books.book(args.id - 1)
+        if book is None:
+            print(f"Book id {args.id} is an unused slot.")
+            return 1
 
     print(f"{book.book_id}: {book.name}  ({len(book)} bytes)")
     if book.is_embedded_document:
@@ -501,11 +462,7 @@ def cmd_books_search(args: SimpleNamespace) -> int:
     books = _load_books(args.file)
     if books is None:
         return 1
-    try:
-        hits = books.search(args.needle, ignore_case=not args.case_sensitive)
-    except U9BooksError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    hits = books.search(args.needle, ignore_case=not args.case_sensitive)
 
     shown = hits[: args.limit] if args.limit else hits
     print(f"{args.file} -- {len(hits)} match(es) for {args.needle!r}")
@@ -532,11 +489,7 @@ def cmd_books_export(args: SimpleNamespace) -> int:
     books = _load_books(args.file)
     if books is None:
         return 1
-    try:
-        rows = books.books()
-    except U9BooksError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    rows = books.books()
 
     out_path = args.output or f"{Path(args.file).stem}_books.csv"
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)

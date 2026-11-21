@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from titan.u8.state_io import read_u8_state_bytes
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -44,20 +45,20 @@ class U8GumpState:
     def from_bytes(cls, data: bytes) -> U8GumpState:
         """Validate labels, sentinel and exact footer; preserve marker padding bytes."""
         if len(data) < 196:
-            raise ValueError("GUMPS.DAT: truncated container state")
+            raise InvalidDataError("GUMPS.DAT: truncated container state")
         if data[:32].split(b"\x00", 1)[0] != b"CONTAINER GUMPS START HERE":
-            raise ValueError("GUMPS.DAT: invalid container notice")
+            raise InvalidDataError("GUMPS.DAT: invalid container notice")
         position = 32
         containers: list[U8ContainerGump] = []
         while True:
             if position + 2 > len(data):
-                raise ValueError("GUMPS.DAT: missing container sentinel")
+                raise InvalidDataError("GUMPS.DAT: missing container sentinel")
             gump_type = struct.unpack_from("<H", data, position)[0]
             if gump_type == 0xFFFF:
                 position += 2
                 break
             if position + 66 > len(data):
-                raise ValueError("GUMPS.DAT: truncated container record")
+                raise InvalidDataError("GUMPS.DAT: truncated container record")
             raw = data[position : position + 66]
             if raw[2:18].split(b"\x00", 1)[0] != b"CONTAINER GUMP" or (
                 raw[18:22] != b"REF="
@@ -65,7 +66,7 @@ class U8GumpState:
                 or raw[50:56] != b"SHAPE="
                 or raw[58:64] != b"FRAME="
             ):
-                raise ValueError("GUMPS.DAT: invalid container record labels")
+                raise InvalidDataError("GUMPS.DAT: invalid container record labels")
             containers.append(
                 U8ContainerGump(
                     len(containers),
@@ -83,14 +84,16 @@ class U8GumpState:
             )
             position += 66
         if position + 162 != len(data):
-            raise ValueError("GUMPS.DAT: truncated footer or unexpected trailing bytes")
+            raise InvalidDataError(
+                "GUMPS.DAT: truncated footer or unexpected trailing bytes"
+            )
         if data[position : position + 16].split(b"\x00", 1)[
             0
         ] != b"CONTAINER RECTS" or (
             data[position + 144 : position + 160].split(b"\x00", 1)[0]
             != b"GUMP COUNTER"
         ):
-            raise ValueError("GUMPS.DAT: invalid footer labels")
+            raise InvalidDataError("GUMPS.DAT: invalid footer labels")
         rects = tuple(
             struct.unpack_from("<4h", data, position + 16 + index * 8)
             for index in range(16)

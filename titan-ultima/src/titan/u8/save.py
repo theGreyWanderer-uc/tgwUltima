@@ -6,7 +6,7 @@ Provides :class:`U8SaveArchive` for reading Ultima 8 save-game files
 
 Example::
 
-    from titan.save import U8SaveArchive
+    from titan.u8.save import U8SaveArchive
 
     save = U8SaveArchive.from_file("U8SAVE.000")
     for name, size in save.list_entries():
@@ -22,6 +22,7 @@ __all__ = ["U8SaveArchive"]
 import struct
 from pathlib import Path
 from typing import Optional
+from titan.errors import InvalidDataError
 
 
 class U8SaveArchive:
@@ -57,43 +58,47 @@ class U8SaveArchive:
     def from_bytes(cls, data: bytes) -> U8SaveArchive:
         """Parse a U8 save archive from raw bytes."""
         if len(data) < 0x1A:
-            raise ValueError("File too small for U8 save format")
+            raise InvalidDataError("File too small for U8 save format")
         if data[: len(cls.SIGNATURE)] != cls.SIGNATURE:
-            raise ValueError("Not a U8 save file (signature mismatch)")
+            raise InvalidDataError("Not a U8 save file (signature mismatch)")
         if data[23] != 0:
-            raise ValueError("U8 saved state: invalid save header terminator")
+            raise InvalidDataError("U8 saved state: invalid save header terminator")
         count = struct.unpack_from("<H", data, 0x18)[0]
         entries: dict[str, tuple[int, int]] = {}
         names: set[str] = set()
         pos = 0x1A
         for _ in range(count):
             if pos + 4 > len(data):
-                raise ValueError("U8 saved state: truncated entry name length")
+                raise InvalidDataError("U8 saved state: truncated entry name length")
             name_len = struct.unpack_from("<I", data, pos)[0]
             pos += 4
             if name_len < 2 or pos + name_len + 4 > len(data):
-                raise ValueError("U8 saved state: invalid entry name bounds")
+                raise InvalidDataError("U8 saved state: invalid entry name bounds")
             raw_name = data[pos : pos + name_len]
             if raw_name[-1] != 0 or b"\x00" in raw_name[:-1]:
-                raise ValueError("U8 saved state: invalid entry name terminator")
+                raise InvalidDataError("U8 saved state: invalid entry name terminator")
             try:
                 name = raw_name[:-1].decode("ascii")
             except UnicodeDecodeError as error:
-                raise ValueError("U8 saved state: entry name must be ASCII") from error
+                raise InvalidDataError(
+                    "U8 saved state: entry name must be ASCII"
+                ) from error
             if (
                 name in {".", ".."}
                 or any(c in name for c in "/\\:")
                 or any(ord(c) < 32 or ord(c) == 127 for c in name)
             ):
-                raise ValueError("U8 saved state: entry name must be a plain filename")
+                raise InvalidDataError(
+                    "U8 saved state: entry name must be a plain filename"
+                )
             if name.upper() in names:
-                raise ValueError("U8 saved state: duplicate entry name")
+                raise InvalidDataError("U8 saved state: duplicate entry name")
             names.add(name.upper())
             pos += name_len
             size = struct.unpack_from("<I", data, pos)[0]
             pos += 4
             if pos + size > len(data):
-                raise ValueError("U8 saved state: truncated entry payload")
+                raise InvalidDataError("U8 saved state: truncated entry payload")
             entries[name] = (pos, size)
             pos += size
         return cls(entries, data)

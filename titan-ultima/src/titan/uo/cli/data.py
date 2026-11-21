@@ -31,6 +31,7 @@ from titan.uo.localization import (
 from titan.uo.sound import UOSoundDecoder
 from titan.uo.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _load_sounds(
@@ -102,7 +103,7 @@ def cmd_tiledata_export(args: SimpleNamespace) -> int:
         tilehelp = _common._try_load_tilehelp(client, "enu")
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "tiledata"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -174,7 +175,7 @@ def cmd_animdata_export(args: SimpleNamespace) -> int:
         tiledata = _common._try_load_tiledata(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "animdata"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -213,7 +214,7 @@ def cmd_artdef_export(args: SimpleNamespace) -> int:
         artdef = _common._load_artdef(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "artdef"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -241,7 +242,7 @@ def cmd_def_export(args: SimpleNamespace) -> int:
         defs = _common._load_defs(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "defs"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -343,7 +344,7 @@ def cmd_localization_export(args: SimpleNamespace) -> int:
         client = _common._client_path(args.client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "localization"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -503,7 +504,7 @@ def cmd_sound_export(args: SimpleNamespace) -> int:
         defs = _common._try_load_defs(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     entries = _common._entry_iter(indexed, args.range_start, args.range_end)
     outdir = _common._out(args) / "sounds"

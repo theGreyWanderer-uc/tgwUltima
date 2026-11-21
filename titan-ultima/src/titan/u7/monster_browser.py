@@ -27,6 +27,7 @@ from titan.u7.gameplay_metadata import read_gameplay_table
 from titan.u7.shape_archive import find_archive
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.world import WorldQueryParams, load_query_metadata
+from titan.errors import InvalidDataError
 
 READ_ERRORS = npc_browser.READ_ERRORS
 clean = npc_browser.clean
@@ -98,7 +99,7 @@ def _definitions(
         data = path.read_bytes()
         parsed = U7MonsterDefinitions.from_bytes(data, str(path), game)
         if parsed.warnings:
-            raise ValueError(f"{path}: {'; '.join(parsed.warnings)}")
+            raise InvalidDataError(f"{path}: {'; '.join(parsed.warnings)}")
         merged = U7MonsterDefinitions.merge(merged, parsed)
     return merged
 
@@ -107,7 +108,7 @@ def _counted_records(data: bytes, stride: int, name: str) -> None:
     """The existing readers tolerate partial tables; report those explicitly."""
     table = read_gameplay_table(data, stride, name)
     if table.warnings:
-        raise ValueError("; ".join(table.warnings))
+        raise InvalidDataError("; ".join(table.warnings))
 
 
 def _metadata(session: Session) -> tuple[set[int] | None, int | None]:
@@ -121,6 +122,7 @@ def _metadata(session: Session) -> tuple[set[int] | None, int | None]:
                     base_static=str(target.static),
                     patch_dir=str(target.patch) if target.patch.is_dir() else None,
                     game=session.game,
+                    exult_flx_path=session.exult_flx,
                 )
             )
             if count:
@@ -209,19 +211,23 @@ def _equipment(session: Session) -> None:
 
 
 def load_session(
-    target: ArchiveTarget, source: npc_browser.Source, game: str
+    target: ArchiveTarget,
+    source: npc_browser.Source,
+    game: str,
+    *,
+    exult_flx: str | None = None,
 ) -> Session:
     path = existing_path(source.path.expanduser()).absolute()
     if not path.exists():
-        raise ValueError(f"Source not found: {path}")
+        raise InvalidDataError(f"Source not found: {path}")
     source = npc_browser.Source(path, source.kind)
-    session = Session(target, source, game=game)
+    session = Session(target, source, game=game, exult_flx=exult_flx)
     blob = None
     if source.kind != "definitions":
         if path.is_dir() or path.name.casefold() == "monsnpcs.dat":
             mon_path = find_archive(path, "MONSNPCS.DAT") if path.is_dir() else path
             if not path.exists():
-                raise ValueError(f"Source not found: {path}")
+                raise InvalidDataError(f"Source not found: {path}")
             session.format = "directory" if path.is_dir() else "loose monster file"
             blob = mon_path.read_bytes() if mon_path else None
             identity = find_archive(path if path.is_dir() else path.parent, "identity")
@@ -284,7 +290,7 @@ def load_session(
             ):
                 flag_patch = source.path.parent
             session.actor_flags = load_u7_actor_flags(
-                game=game, patch_dirs=[flag_patch]
+                game=game, exult_flx_path=session.exult_flx, patch_dirs=[flag_patch]
             )
             session.warnings.extend(session.actor_flags.warnings)
         except READ_ERRORS as error:

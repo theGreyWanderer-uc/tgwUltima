@@ -10,6 +10,7 @@ import numpy as np
 from titan.md.lighting import MartianLightField
 from titan.u6.object import U6Object
 from titan.u6.tileflag import U6TileFlagEntry
+from titan.errors import InvalidDataError
 
 __all__ = ["MartianViewport", "resolve_martian_view_tiles"]
 
@@ -114,7 +115,7 @@ class MartianViewport:
                 continue
             tile = obj.tile_num(basetile)
             if not 0 <= tile < len(self.tileflags):
-                raise ValueError(
+                raise InvalidDataError(
                     f"Invalid map object tile {tile} at ({obj.x}, {obj.y}, {level})"
                 )
             for dx, dy, cell in self.tileflags[tile].double_size_footprint(tile):

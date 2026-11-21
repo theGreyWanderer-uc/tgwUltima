@@ -143,10 +143,9 @@ U8_WORKING_DIR_ARCHIVES = {
 def u8_section(config: Optional[dict] = None) -> dict:
     """The ``[u8]`` section of a loaded config, as ``{"game": ..., "paths": ...}``.
 
-    *config* is a loaded config (by default the one titan loaded), a legacy
-    flat config (top-level ``[game]``/``[paths]``) or a U8 section itself.
-    U8 code reads its settings through this, not through the top-level copy
-    :func:`titan._config.load_config` keeps for older readers.
+    *config* is a loaded config (by default the one titan loaded), raw TOML
+    still in titan's old flat layout (top-level ``[game]``/``[paths]``) or a
+    U8 section itself.
     """
     if config is None:
         from titan._config import get_config
@@ -168,7 +167,9 @@ def _u8_paths(config: dict) -> dict:
     return u8_section(config).get("paths", {})
 
 
-def u8_working_archive(working_dir: str, config: dict) -> Optional[Path]:
+def u8_working_archive(
+    working_dir: str, config: Optional[dict] = None
+) -> Optional[Path]:
     """The configured install's archive for a working folder (``"shapes"``), or ``None``.
 
     ``shapes`` comes from ``U8SHAPES.FLX`` and ``globs`` from ``GLOB.FLX``. A
@@ -518,7 +519,7 @@ def u8_setup_lines(
 
 def install_candidates(config: dict) -> list[Path]:
     """Install protocol: ``[u8.game] base``, then :func:`u8_install_candidates`."""
-    base = (config.get("u8", {}).get("game") or config.get("game") or {}).get("base")
+    base = u8_section(config).get("game", {}).get("base")
     configured = [Path(str(base)).expanduser()] if base else []
     return list(dict.fromkeys([*configured, *u8_install_candidates()]))
 

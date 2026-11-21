@@ -52,7 +52,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 import numpy as np
 
@@ -90,6 +90,10 @@ from titan.fonts.renderer import (
     render_all_glyphs_mono,
 )
 from titan.u7.palette import U7Palette
+from titan.errors import InvalidDataError
+
+if TYPE_CHECKING:
+    from titan._meta import Installation
 
 log = logging.getLogger(__name__)
 
@@ -131,6 +135,9 @@ class WizardConfig:
 
     # Game palette file for validation/preview
     palette_file: Optional[str] = None
+    # The configured install (``titan._meta.configured_install``); supplies the
+    # game palette when ``palette_file`` is unset. The CLI/UI layer fills it.
+    install: Optional[Installation] = None
 
     # Glyph layout
     layout: str = "standard"  # "standard" or path to mapping TOML
@@ -238,6 +245,7 @@ def read_archive_slots(
     *,
     paths: ExultGamePaths | None = None,
     infer_base: bool = True,
+    install: Installation | None = None,
 ) -> dict[int, dict]:
     """Read a font Flex archive and extract live slot data.
 
@@ -253,6 +261,7 @@ def read_archive_slots(
         base_archive=base_archive,
         paths=paths,
         infer_base=infer_base,
+        install=install,
     )
     presets = {**FONT_SHAPES}  # for name/h_lead lookups
 
@@ -378,7 +387,9 @@ def resolve_lut(config: WizardConfig) -> PaletteLUT:
 def game_palette(config: WizardConfig) -> U7Palette | None:
     """The game palette for previews and gradient matching, if one is available."""
     if config.palette_file or not config.standalone:
-        return resolve_game_palette(config.game, config.palette_file)
+        return resolve_game_palette(
+            config.game, config.palette_file, install=config.install
+        )
     return None
 
 
@@ -391,7 +402,9 @@ def resolve_gradient(config: WizardConfig, steps: int = 6) -> GradientResolution
     """
     preset = get_gradient_preset(config.gradient_preset or "")
     pal = (
-        resolve_game_palette(config.game, palette_file=config.palette_file)
+        resolve_game_palette(
+            config.game, palette_file=config.palette_file, install=config.install
+        )
         if config.palette_file or not config.standalone
         else None
     )
@@ -597,7 +610,7 @@ def write_outputs(config: WizardConfig, data: bytes) -> WrittenFont:
                 f"Output exists: {path}; use --force or output.force = true to replace it"
             )
         if path.exists() and not path.is_file():
-            raise ValueError(f"Output is not a file: {path}")
+            raise InvalidDataError(f"Output is not a file: {path}")
     # Read/validate the archive BEFORE writing either output; keep patch holes.
     archive = None
     if config.output_format in ("flex", "both"):
@@ -649,6 +662,7 @@ def config_from_recipe(
     force: bool = False,
     allow_cycling: bool = False,
     base_archive: str | None = None,
+    install: Installation | None = None,
 ) -> WizardConfig:
     """Load a ``font-create`` recipe TOML; its paths are relative to the file."""
     recipe = Path(config_path).expanduser().resolve()
@@ -661,6 +675,7 @@ def config_from_recipe(
         force=force,
         allow_cycling=allow_cycling,
         base_archive=base_archive,
+        install=install,
     )
 
 
@@ -672,13 +687,16 @@ def config_from_recipe_data(
     force: bool = False,
     allow_cycling: bool = False,
     base_archive: str | None = None,
+    install: Installation | None = None,
 ) -> WizardConfig:
     """Build a validated :class:`WizardConfig` from recipe tables, without a file.
 
     *data* has the recipe's ``target``, ``source``, ``rendering``, ``palette``
     and ``output`` tables (see :func:`titan.fonts.recipe.font_recipe`);
     relative paths in it resolve against *base_dir*. Output destinations are
-    resolved too, so nothing is left to prompt for.
+    resolved too, so nothing is left to prompt for. *install* (see
+    :attr:`WizardConfig.install`) supplies the game palette when the recipe
+    names none.
     """
     base = Path(base_dir)
 
@@ -686,16 +704,16 @@ def config_from_recipe_data(
         if value is None:
             return None
         if not isinstance(value, str) or not value.strip():
-            raise ValueError("File paths must be non-empty strings")
+            raise InvalidDataError("File paths must be non-empty strings")
         path = Path(value).expanduser()
         return str(path if path.is_absolute() else base / path)
 
     target = data.get("target", {})
-    config = WizardConfig()
+    config = WizardConfig(install=install)
     config.game = target.get("game", "BG").upper()
     config.slot = target.get("slot", 0)
     if type(config.slot) is not int:
-        raise ValueError("Font slot must be an integer")
+        raise InvalidDataError("Font slot must be an integer")
     preset = presets_for_game(config.game).get(config.slot)
     if preset:
         for name in ("cell_height", "ink_height", "total_frames", "render_method"):
@@ -721,7 +739,10 @@ def config_from_recipe_data(
     config.base_archive = base_archive or recipe_path(source.get("base_archive"))
     if config.template_archive:
         slots = read_archive_slots(
-            Path(config.template_archive), config.game, config.base_archive
+            Path(config.template_archive),
+            config.game,
+            config.base_archive,
+            install=install,
         )
         if config.slot in slots:
             live = slots[config.slot]

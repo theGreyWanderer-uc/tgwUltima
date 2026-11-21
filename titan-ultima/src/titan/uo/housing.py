@@ -27,6 +27,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from titan.uo.multi import UOMulti
 from titan.uo.tiledata import UOTileData
+from titan.errors import InvalidDataError
 
 YARD_SIZE = 5  # RunUO HousePlacement.YardSize
 STAIR_ITEM = 0x63  # HouseFoundation.AddStairsTo
@@ -269,7 +270,7 @@ def parse_house_placement_tool(path: str | Path) -> list[HousePlacementEntry]:
             )
         )
     if not entries:
-        raise ValueError(f"no HousePlacementEntry rows found in {path}")
+        raise InvalidDataError(f"no HousePlacementEntry rows found in {path}")
     return entries
 
 

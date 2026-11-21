@@ -23,7 +23,7 @@ import sys
 import numpy as np
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from titan.u7.palette import U7Palette
@@ -670,16 +670,17 @@ def resolve_game_palette(
     game: str,
     palette_file: Optional[str] = None,
     palette_index: int = 0,
+    *,
+    install: Any = None,
 ) -> Optional["U7Palette"]:
     """Load the game palette for *game* (``"BG"`` or ``"SI"``).
 
     Resolution order:
 
     1. *palette_file* — explicit path to a ``PALETTES.FLX`` or ``.pal``.
-    2. ``titan.toml`` — look for ``[u7bg.paths].palette`` or
-       ``[u7si.paths].palette``.
-    3. Discovered game STATIC or the game's Exult configuration.
-    4. Bundled ``u7data/`` directory in the titan-ultima repo.
+    2. *install*'s ``palette`` (``titan._meta.configured_install``: the
+       configured one, discovered game STATIC or the game's Exult settings).
+    3. Bundled ``u7data/`` directory in the titan-ultima repo.
 
     Returns ``None`` if no palette can be found.
     """
@@ -694,11 +695,9 @@ def resolve_game_palette(
             raise FileNotFoundError(f"Palette file not found: {p}")
         return U7Palette.from_file(str(p), palette_index=palette_index)
 
-    # 2/3. Shared Titan + nested-install + Exult resolution.
-    from titan.u7.install import resolve_u7_path
-
-    palette = resolve_u7_path(game, "palette")
-    if palette is not None:
+    # 2. The install's palette.
+    palette = install.resources.get("palette") if install is not None else None
+    if palette is not None and Path(palette).is_file():
         return U7Palette.from_file(str(palette), palette_index=palette_index)
 
     # 3. Bundled u7data
