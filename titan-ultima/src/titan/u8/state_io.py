@@ -43,19 +43,11 @@ def parse_u8_state_flex(data: bytes, label: str, record_count: int) -> FlexArchi
         raise ValueError(f"{label}: {error}") from error
 
 
-def write_u8_state_report(
-    report: str,
-    output: Path | None,
-    sources: tuple[Path, ...],
-    label: str,
-) -> None:
-    """Write a new state report or stdout, preserving sources and existing outputs."""
-    if output is None:
-        print(report, end="")
-        return
+def save_u8_state_report(report: str, output: Path, sources: tuple[Path, ...]) -> Path:
+    """Write *report* to a new file *output*; never a source file or an existing file."""
     if output.resolve() in {source.resolve() for source in sources}:
         raise ValueError("U8 saved state report: output must differ from source files")
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("x", encoding="utf-8", newline="") as destination:
         destination.write(report)
-    print(f"{label} report written to: {output}")
+    return output

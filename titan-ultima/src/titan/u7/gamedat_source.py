@@ -8,7 +8,7 @@ read a GAMEDAT folder can read any save without the user extracting it.
 
 from __future__ import annotations
 
-__all__ = ["gamedat_cache_root", "gamedat_option", "u7_gamedat_folder"]
+__all__ = ["gamedat_cache_root", "u7_gamedat_folder"]
 
 import hashlib
 import shutil
@@ -67,13 +67,3 @@ def u7_gamedat_folder(
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return str(target)
-
-
-def gamedat_option(value: Optional[str]) -> Optional[str]:
-    """:func:`u7_gamedat_folder` for a ``--save`` option: bad files are usage errors."""
-    try:
-        return u7_gamedat_folder(value)
-    except (OSError, ValueError) as error:
-        import typer
-
-        raise typer.BadParameter(str(error), param_hint="--save") from error

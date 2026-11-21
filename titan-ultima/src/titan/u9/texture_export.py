@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -70,24 +69,6 @@ def _texture_sources(source: Path, all_tiers: bool) -> list[tuple[Path, str]]:
             f"No bitmap16.flx, bitmapC.flx or bitmapsh.flx found in {source}"
         )
     return sources if all_tiers else sources[:1]
-
-
-def print_texture_export_progress(
-    name: str, completed: int, total: int, images: int
-) -> None:
-    """Show per-archive progress using standard-library terminal output only."""
-    if completed not in (0, total) and completed % max(1, total // 100):
-        return
-    fraction = completed / total if total else 1.0
-    filled = int(24 * fraction)
-    line = (
-        f"{name}: [{'#' * filled}{'-' * (24 - filled)}] "
-        f"{fraction:4.0%} {completed}/{total} entries | {images} PNGs"
-    )
-    if sys.stdout.isatty():
-        print(f"\r{line}", end="\n" if completed == total else "", flush=True)
-    else:
-        print(line, flush=True)
 
 
 def export_texture_archives(

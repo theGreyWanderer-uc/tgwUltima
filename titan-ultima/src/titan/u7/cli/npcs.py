@@ -852,7 +852,7 @@ def monster_report_cmd(
     ] = None,
 ) -> None:
     """Export monster definitions, live actors, spawn eggs, and placements."""
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     raise SystemExit(

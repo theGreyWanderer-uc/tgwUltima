@@ -11,6 +11,7 @@ __all__ = [
     "_load_shape_count",
     "_load_u7_shape_archive",
     "_resolve_loose_data_file",
+    "gamedat_option",
 ]
 
 import sys
@@ -19,6 +20,21 @@ from types import SimpleNamespace
 
 from titan.u7.shape_archive import U7ShapeArchive
 from titan.u7 import install
+
+
+def gamedat_option(value: str | None) -> str | None:
+    """A ``--save`` value as a GAMEDAT folder; a bad save file is a usage error.
+
+    See :func:`titan.u7.gamedat_source.u7_gamedat_folder`.
+    """
+    import typer
+
+    from titan.u7.gamedat_source import u7_gamedat_folder
+
+    try:
+        return u7_gamedat_folder(value)
+    except (OSError, ValueError) as error:
+        raise typer.BadParameter(str(error), param_hint="--save") from error
 
 
 def _load_u7_shape_archive(

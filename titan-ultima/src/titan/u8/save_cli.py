@@ -20,7 +20,7 @@ from titan.u8.flags import U8FlagSymbols, U8GlobalFlags
 from titan.u8.flags_report import format_u8_flags_report
 from titan.u8.save_diff import format_u8_save_diff
 from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
-from titan.u8.state_io import write_u8_state_report
+from titan.u8.state_report_ui import write_u8_state_report
 from titan._meta import meta
 
 

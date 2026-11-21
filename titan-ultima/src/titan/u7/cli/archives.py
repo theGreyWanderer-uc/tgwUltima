@@ -52,8 +52,8 @@ def cmd_u7_flex_create(args: SimpleNamespace) -> int:
 
 def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     """Add a standalone U7 shape to the first permitted free Flex record."""
+    from titan.u7.shape_animation_ui import choose_u7_shape_animation
     from titan.u7.shape_animation_flag import (
-        choose_u7_shape_animation,
         read_u7_shape_animation,
         prepare_u7_archive_animation,
         write_u7_animation_payloads,

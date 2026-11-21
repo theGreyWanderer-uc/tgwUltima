@@ -297,6 +297,7 @@ def cmd_flex_create(args: SimpleNamespace) -> int:
             prepare_u7_flex_animation_import,
             write_u7_animation_payloads,
         )
+        from titan.u7.shape_animation_ui import ask_record_animation
 
         input_paths = {}
         for path in Path(source_dir).iterdir():
@@ -314,6 +315,7 @@ def cmd_flex_create(args: SimpleNamespace) -> int:
                 sources=(Path(source_dir),),
                 input_paths=input_paths,
                 animated=getattr(args, "animated", None),
+                choose=ask_record_animation,
             )
         except (ui.PromptCancelled, KeyboardInterrupt):
             return ui.cancelled()
@@ -459,6 +461,7 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
             prepare_u7_flex_animation_import,
             write_u7_animation_payloads,
         )
+        from titan.u7.shape_animation_ui import ask_record_animation
 
         try:
             metadata = prepare_u7_flex_animation_import(
@@ -467,6 +470,7 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
                 sources=(Path(flex_path),),
                 input_paths={index: Path(data_path)},
                 animated=getattr(args, "animated", None),
+                choose=ask_record_animation,
             )
         except (ui.PromptCancelled, KeyboardInterrupt):
             return ui.cancelled()

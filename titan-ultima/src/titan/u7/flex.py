@@ -37,11 +37,13 @@ __all__ = [
 
 import os
 import struct
-import sys
+import logging
 from pathlib import Path
 from typing import Optional
 
 from titan._version import TITAN_VERSION
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # U7/Exult Flex format constants  (from exult/files/Flex.h)
@@ -173,10 +175,7 @@ class U7FlexArchive:
         for i in range(count):
             table_pos = U7_FLEX_TABLE_OFFSET + i * U7_FLEX_RECORD_ENTRY_SIZE
             if table_pos + 8 > len(data):
-                print(
-                    f"  WARNING: Record table truncated at entry {i}",
-                    file=sys.stderr,
-                )
+                log.warning("Record table truncated at entry %d", i)
                 break
             offset, size = struct.unpack_from("<II", data, table_pos)
             if (
@@ -191,10 +190,11 @@ class U7FlexArchive:
             if size > 0 and offset > 0:
                 record_data = data[offset : offset + size]
                 if len(record_data) != size:
-                    print(
-                        f"  WARNING: Record {i} truncated "
-                        f"(expected {size}, got {len(record_data)})",
-                        file=sys.stderr,
+                    log.warning(
+                        "Record %d truncated (expected %d, got %d)",
+                        i,
+                        size,
+                        len(record_data),
                     )
                 archive.records.append(record_data)
             else:
@@ -311,10 +311,11 @@ class U7FlexArchive:
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "wb") as f:
             f.write(self.to_bytes())
-        print(
-            f"Wrote U7 Flex archive: {filepath} "
-            f"({len(self.records)} records, "
-            f"{os.path.getsize(filepath):,} bytes)"
+        log.info(
+            "Wrote U7 Flex archive: %s (%d records, %s bytes)",
+            filepath,
+            len(self.records),
+            f"{os.path.getsize(filepath):,}",
         )
 
     # ------------------------------------------------------------------
@@ -350,10 +351,7 @@ class U7FlexArchive:
                 continue
 
         if not indexed_files:
-            print(
-                f"WARNING: No numerically named files found in {dirpath_p}",
-                file=sys.stderr,
-            )
+            log.warning("No numerically named files found in %s", dirpath_p)
             return archive
 
         max_index = max(indexed_files.keys())

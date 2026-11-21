@@ -37,8 +37,8 @@ from titan.u7.shape_archive import (
 from titan.u7.shape_import import create_u7_shape_from_pngs, sorted_png_frame_paths
 from titan.u7.shape_validation import validate_u7_shape_data
 from titan.u7.shape_animation_flag import (
-    choose_u7_shape_animation,
     prepare_u7_archive_animation,
+    resolve_u7_shape_animation,
     u7_animation_sidecar,
     u7_shape_animation_payload,
 )
@@ -467,7 +467,7 @@ def save(config: ShapeWizardConfig, converted: ConvertedShape) -> int:
         _preview_sheet(converted).save(buffer, format="PNG")
         payloads.append((Path(config.preview_path).expanduser(), buffer.getvalue()))
     if config.animated is not None:
-        animated = choose_u7_shape_animation(converted.shape, animated=config.animated)
+        animated = resolve_u7_shape_animation(converted.shape, animated=config.animated)
         if animated is not None:
             if config.output_format in {"shp", "both"}:
                 payloads.append(

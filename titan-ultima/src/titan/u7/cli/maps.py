@@ -992,7 +992,7 @@ def map_render_cmd(
     ] = False,
 ) -> None:
     """Render a U7 map to PNG. With no render options, open the guided wizard."""
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     wizard_mode = interactive or not any(
@@ -1286,7 +1286,7 @@ def map_inventory_cmd(
       titan u7 map-inventory --game si --contents
       titan u7 map-inventory STATIC/ --save gamedat/ -o inventory/
     """
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.map_inventory import (

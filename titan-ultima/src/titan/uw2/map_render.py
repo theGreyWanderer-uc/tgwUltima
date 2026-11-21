@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from collections import deque
 import json
+import logging
 from dataclasses import dataclass
 import math
 from pathlib import Path
@@ -104,7 +105,13 @@ class ModelTrianglePrimitive:
     sort_key: tuple[float, float, int]
 
 
+log = logging.getLogger(__name__)
+
+
 def main() -> int:
+    from titan._log import install_cli_logging
+
+    install_cli_logging()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--levels-dir",
@@ -271,7 +278,7 @@ def main() -> int:
             slot, level, "u7_style_noceilings", args.name_files
         )
         image.save(out_path)
-        print(f"Wrote {out_path} ({image.width}x{image.height})")
+        log.info("Wrote %s (%dx%d)", out_path, image.width, image.height)
 
     return 0
 

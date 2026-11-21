@@ -431,7 +431,7 @@ def itemcach_dump_cmd(
 ) -> None:
     """Inspect cached item fields, allocation lists, regions and native cache metadata."""
     from titan.u8.itemcach import U8ItemCache
-    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report_ui import write_u8_state_report
     from titan.u8.state_report import format_u8_itemcach_report
 
     try:
@@ -494,7 +494,7 @@ def npcdata_dump_cmd(
     """Inspect NPC stats, animation, flags and equipment; optionally join cached items."""
     from titan.u8.itemcach import U8ItemCache
     from titan.u8.npcdata import U8NpcData
-    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report_ui import write_u8_state_report
     from titan.u8.state_report import format_u8_npcdata_report
 
     try:
@@ -588,7 +588,7 @@ def map_items_dump_cmd(
     """Inspect full 16-byte map items, container hierarchy and NPC registry records."""
     from titan.u8.map_item_report import format_u8_map_item_report
     from titan.u8.map_items import U8MapItems
-    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report_ui import write_u8_state_report
 
     kind = "nonfixed" if ctx.info_name == "nonfixed-dump" else "fixed"
     try:

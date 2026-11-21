@@ -22,8 +22,8 @@ from titan.u7.shape import FIRST_OBJ_SHAPE
 from titan.u7.shape_archive import (
     find_archive,
 )
+from titan.u7.shape_animation_ui import choose_u7_shape_animation
 from titan.u7.shape_animation_flag import (
-    choose_u7_shape_animation,
     prepare_u7_archive_animation,
     u7_animation_sidecar,
 )

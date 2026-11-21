@@ -47,11 +47,28 @@ from titan.u9.texture import (
 from titan.u9.texture_export import (
     U9TextureExportError,
     export_texture_archives,
-    print_texture_export_progress,
 )
 from titan.u9.texture_writer import U9TextureWriteError, frame_encoding, replace_frames
 from titan.u9.cli import _common
 from titan._meta import meta
+
+
+def print_texture_export_progress(
+    name: str, completed: int, total: int, images: int
+) -> None:
+    """Show per-archive progress using standard-library terminal output only."""
+    if completed not in (0, total) and completed % max(1, total // 100):
+        return
+    fraction = completed / total if total else 1.0
+    filled = int(24 * fraction)
+    line = (
+        f"{name}: [{'#' * filled}{'-' * (24 - filled)}] "
+        f"{fraction:4.0%} {completed}/{total} entries | {images} PNGs"
+    )
+    if sys.stdout.isatty():
+        print(f"\r{line}", end="\n" if completed == total else "", flush=True)
+    else:
+        print(line, flush=True)
 
 
 def cmd_icon_list(args: SimpleNamespace) -> int:

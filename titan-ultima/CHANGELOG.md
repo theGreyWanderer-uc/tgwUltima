@@ -41,6 +41,13 @@ work for the next release.
 
 ### Changed
 
+- **Library code no longer prints:** saving a Flex archive, reading a
+  damaged one, importing an oversized U7 frame and writing animation
+  metadata now report through logging, so code using titan as a library
+  gets no stray output. The commands print the same lines as before, except
+  that these warnings now start `Warning:` (was `WARNING:`), like titan's
+  other warnings. Flex imports still ask whether multi-frame U7 shapes
+  animate; library callers pass a `choose` callback or an explicit choice.
 - **Font creation without the wizard:** the `u7 font-create` wizard now
   lives in `titan.fonts.wizard_ui`, and `titan.fonts.wizard` holds the work
   itself with no prompts or printing. Front ends and scripts can build a

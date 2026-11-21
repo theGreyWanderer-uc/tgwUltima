@@ -34,8 +34,8 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
     """Create a standalone U7 SHP from PNG frames in Windows A-Z name order."""
     from titan.u7.palette import U7Palette
     from titan.u7.shape_import import create_u7_shape_from_pngs, sorted_png_frame_paths
+    from titan.u7.shape_animation_ui import choose_u7_shape_animation
     from titan.u7.shape_animation_flag import (
-        choose_u7_shape_animation,
         u7_animation_sidecar,
         u7_shape_animation_payload,
         write_u7_animation_payloads,

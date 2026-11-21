@@ -232,7 +232,7 @@ def world_query_cmd(
       titan u7 world-query STATIC/ --name "locked chest" --ireg --save gamedat/ -f csv -o out.csv
       titan u7 world-query STATIC/ --shape 522 --ireg --save gamedat/ -f full_text
     """
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.world import (
@@ -497,7 +497,7 @@ def container_browse_cmd(
       titan u7 container-browse STATIC/ --save gamedat/ --contains-name sword -f csv -o containers.csv
       titan u7 container-browse STATIC/ --save gamedat/ --tile-rect 512,512,2048,2048 -f tree
     """
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.container import (
@@ -714,7 +714,7 @@ def egg_query_cmd(
       titan u7 egg-query STATIC/ --save gamedat/ --type monster --tile-rect 512,512,2048,2048
       titan u7 egg-query STATIC/ --save gamedat/ --type usecode -f csv -o eggs.csv
     """
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.eggs import (

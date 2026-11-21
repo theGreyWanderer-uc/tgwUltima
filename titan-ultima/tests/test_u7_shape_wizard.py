@@ -162,11 +162,12 @@ def test_hard_cap_applies_before_output(artwork, size):
     assert not Path(artwork.output_path).exists()
 
 
-def test_warning_threshold_preserves_size(artwork, capsys):
+def test_warning_threshold_preserves_size(artwork, caplog):
     Image.new("RGB", (73, 72), "red").save(artwork.source)
-    converted = wizard.convert(artwork)
+    with caplog.at_level("WARNING", logger="titan"):
+        converted = wizard.convert(artwork)
     assert converted.shape.frames[0].width == 73
-    assert "72x72 warning" in capsys.readouterr().err
+    assert "72x72 warning" in caplog.text
 
 
 @pytest.mark.parametrize("size,alpha", [((9, 8), 255), ((8, 8), 127)])

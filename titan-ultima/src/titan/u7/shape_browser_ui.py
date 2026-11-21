@@ -98,7 +98,7 @@ def choose_shape(library: ShapeLibrary, current: int | None = None) -> int | Non
         if selected == "Q":
             return None
         if selected == "O":
-            from titan.u7.shape_properties import choose_filter
+            from titan.u7.shape_properties_ui import choose_filter
 
             choose_filter(library)
             page = 0
@@ -504,11 +504,11 @@ def run_browser(
                             elif action == "G":
                                 _animation(library, decoded, current, frame, previews)
                             elif action == "T":
-                                from titan.u7.shape_properties import show_properties
+                                from titan.u7.shape_properties_ui import show_properties
 
                                 show_properties(library, decoded, current, frame)
                             elif action == "O":
-                                from titan.u7.shape_properties import choose_filter
+                                from titan.u7.shape_properties_ui import choose_filter
 
                                 choose_filter(library)
                                 if current not in matching_shapes(library, ""):

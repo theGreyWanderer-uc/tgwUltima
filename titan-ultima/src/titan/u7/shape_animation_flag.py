@@ -2,19 +2,28 @@
 
 Standalone SHP files have no object flags. Their hash-bound animation sidecar
 keeps the choice until insertion into a world shape archive assigns a shape ID.
+
+Nothing here prompts: the CLI asks through :mod:`titan.u7.shape_animation_ui`
+and passes the answer (or a ``choose`` callback) in.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
+from typing import Callable
 
-from titan import _wizard_ui as ui
 from titan.u7.shape import U7Shape
 from titan.u7.shape_archive import find_archive
+
+log = logging.getLogger(__name__)
+
+AnimationChooser = Callable[[int, U7Shape, "bool | None"], "bool | None"]
+"""``choose(record_number, shape, default)`` -> animate?, for records with no explicit choice."""
 
 ANIMATED_OBJECT_FLAG = 0x04
 ANIMATION_SIDECAR_SUFFIX = ".animation.json"
@@ -58,40 +67,29 @@ def read_u7_shape_animation(path: Path, data: bytes) -> bool | None:
     return report["animated"]
 
 
-def choose_u7_shape_animation(
+def can_animate(shape: U7Shape) -> bool:
+    """Only multi-frame RLE artwork animates; flats and single frames never do."""
+    return len(shape.frames) > 1 and not any(frame.is_tile for frame in shape.frames)
+
+
+def resolve_u7_shape_animation(
     shape: U7Shape,
     *,
     animated: bool | None = None,
     default: bool | None = None,
 ) -> bool | None:
-    """Prompt for multi-frame RLE artwork; flats and single-frame shapes do not auto-animate."""
-    if len(shape.frames) <= 1 or any(frame.is_tile for frame in shape.frames):
+    """The animation choice without asking: *animated* if given, else *default*.
+
+    ``None`` means "no animation metadata" (always so for shapes that can't
+    animate). Asking ``animated=True`` of such a shape is a ``ValueError``.
+    """
+    if not can_animate(shape):
         if animated:
             raise ValueError(
                 "U7 frame animation requires more than one RLE object frame"
             )
         return None
-    if animated is not None:
-        return animated
-    try:
-        return (
-            ui.choice(
-                f"  Should these {len(shape.frames)} frames animate? [y/N] ",
-                ["Y", "N"],
-                "Y" if default else "N",
-                message=f"Should these {len(shape.frames)} frames animate?",
-            )
-            == "Y"
-        )
-    except EOFError:
-        # Existing noninteractive pipelines retain their imported/default choice.
-        # Scripts can use --animate/--no-animate for an explicit result.
-        return default
-    except OSError:
-        # pytest's captured stdin and similarly unavailable input are not a TTY.
-        if ui.menus_enabled():
-            raise
-        return default
+    return animated if animated is not None else default
 
 
 def prepare_u7_archive_animation(
@@ -185,7 +183,7 @@ def write_u7_animation_payloads(payloads: list[tuple[Path, bytes]]) -> None:
         except BaseException:
             Path(temporary).unlink(missing_ok=True)
             raise
-        print(f"  Animation metadata written: {path}")
+        log.info("  Animation metadata written: %s", path)
 
 
 def prepare_u7_flex_animation_import(
@@ -195,8 +193,14 @@ def prepare_u7_flex_animation_import(
     sources: tuple[Path, ...] = (),
     input_paths: dict[int, Path] | None = None,
     animated: bool | None = None,
+    choose: AnimationChooser | None = None,
 ) -> list[tuple[Path, bytes]]:
-    """Recognize validated U7 RLE data in generic Flex imports; leave unrelated records alone."""
+    """Recognize validated U7 RLE data in generic Flex imports; leave unrelated records alone.
+
+    Each multi-frame record takes *animated* when given. Otherwise *choose*
+    decides (the CLI passes a prompt), with the record's sidecar choice as its
+    default; without *choose*, the sidecar choice is kept.
+    """
     from titan.u7.shape_validation import validate_u7_shape_data
 
     updates = {}
@@ -210,8 +214,13 @@ def prepare_u7_flex_animation_import(
             continue
         path = (input_paths or {}).get(number)
         default = read_u7_shape_animation(path, raw) if path else None
-        print(f"  U7 shape record {number}: {len(shape.frames)} frames")
-        choice = choose_u7_shape_animation(shape, animated=animated, default=default)
+        log.info("  U7 shape record %d: %d frames", number, len(shape.frames))
+        if animated is None and choose is not None and can_animate(shape):
+            choice = choose(number, shape, default)
+        else:
+            choice = resolve_u7_shape_animation(
+                shape, animated=animated, default=default
+            )
         if choice is not None:
             updates[number] = (raw, choice)
     nonworld_names = {

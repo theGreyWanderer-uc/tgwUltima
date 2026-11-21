@@ -291,26 +291,29 @@ class ShapeImportCliTests(unittest.TestCase):
                 Image.new("RGBA", size, (255, 0, 0, 255)).save(
                     self.frames_dir / "frame.png"
                 )
-                stderr = StringIO()
-                with redirect_stderr(stderr):
-                    self.assertEqual(self._run_import(), 0)
+                # The warning is a log record; the CLI prints it as "Warning: ...".
+                logger = "titan.u7.shape_import"
+                if max(size) > 72:
+                    with self.assertLogs(logger, "WARNING") as logs:
+                        self.assertEqual(self._run_import(), 0)
+                    message = " ".join(logs.output)
+                    self.assertIn(f"{size[0]}x{size[1]}", message)
+                    self.assertIn("72x72", message)
+                else:
+                    with self.assertNoLogs(logger, "WARNING"):
+                        self.assertEqual(self._run_import(), 0)
                 frame = U7Shape.from_file(str(self.output_path)).frames[0]
                 self.assertEqual((frame.width, frame.height), size)
-                self.assertEqual("WARNING:" in stderr.getvalue(), max(size) > 72)
-                if max(size) > 72:
-                    self.assertIn(f"{size[0]}x{size[1]}", stderr.getvalue())
-                    self.assertIn("72x72", stderr.getvalue())
 
     def test_accepts_full_screen_size_with_warning_without_resizing(self) -> None:
         Image.new("RGBA", (320, 200), (255, 0, 0, 255)).save(
             self.frames_dir / "frame.png"
         )
-        stderr = StringIO()
-        with redirect_stderr(stderr):
+        with self.assertLogs("titan.u7.shape_import", "WARNING") as logs:
             self.assertEqual(self._run_import(), 0)
         frame = U7Shape.from_file(str(self.output_path)).frames[0]
         self.assertEqual((frame.width, frame.height), (320, 200))
-        self.assertIn("72x72", stderr.getvalue())
+        self.assertIn("72x72", " ".join(logs.output))
 
     def test_rejects_oversized_png_before_conversion_and_preserves_output(self) -> None:
         for size in ((321, 1), (1, 201), (256, 256), (321, 201)):

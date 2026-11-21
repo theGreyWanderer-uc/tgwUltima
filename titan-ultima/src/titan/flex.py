@@ -47,11 +47,13 @@ __all__ = [
 import os
 import re
 import struct
-import sys
+import logging
 from pathlib import Path
 from typing import Literal, Optional
 
 from titan._version import TITAN_VERSION
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Flex file format constants (little-endian throughout)
@@ -266,10 +268,11 @@ class FlexArchive:
             if size > 0 and offset > 0:
                 record_data = data[offset : offset + size]
                 if len(record_data) != size:
-                    print(
-                        f"  WARNING: Record {i} truncated "
-                        f"(expected {size}, got {len(record_data)})",
-                        file=sys.stderr,
+                    log.warning(
+                        "Record %d truncated (expected %d, got %d)",
+                        i,
+                        size,
+                        len(record_data),
                     )
                 archive.records.append(record_data)
             else:
@@ -586,10 +589,11 @@ class FlexArchive:
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "wb") as f:
             f.write(self.to_bytes())
-        print(
-            f"Wrote Flex archive: {filepath} "
-            f"({len(self.records)} records, "
-            f"{os.path.getsize(filepath):,} bytes)"
+        log.info(
+            "Wrote Flex archive: %s (%d records, %s bytes)",
+            filepath,
+            len(self.records),
+            f"{os.path.getsize(filepath):,}",
         )
 
     @classmethod
@@ -627,10 +631,7 @@ class FlexArchive:
                 continue
 
         if not indexed_files:
-            print(
-                f"WARNING: No numerically named files found in {dirpath_p}",
-                file=sys.stderr,
-            )
+            log.warning("No numerically named files found in %s", dirpath_p)
             return archive
 
         max_index = max(indexed_files.keys())

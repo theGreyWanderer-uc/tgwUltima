@@ -47,15 +47,6 @@ ALLOWED: dict[str, int] = {
     "dialogue/pipeline/extract_books.py": 7,
     "dialogue/pipeline/extract_library.py": 5,
     "dialogue/websrc/build_data.py": 5,
-    "u7/shape_properties.py": 5,
-    "u7/flex.py": 4,
-    "flex.py": 3,
-    "u7/shape_animation_flag.py": 3,  # choose_u7_shape_animation prompts
-    "u8/state_io.py": 2,
-    "u9/texture_export.py": 2,
-    "u7/gamedat_source.py": 1,  # raises typer.BadParameter for --save
-    "u7/shape_import.py": 1,
-    "uw2/map_render.py": 1,
 }
 
 

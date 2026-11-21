@@ -31,7 +31,7 @@ from titan.u8.shape_browser import (
     load_u8_shape_library,
 )
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
-from titan.u8.state_io import write_u8_state_report
+from titan.u8.state_report_ui import write_u8_state_report
 from titan._meta import meta
 
 PAGE_SIZE = 30

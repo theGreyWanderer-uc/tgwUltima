@@ -17,8 +17,8 @@ from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.errors import EXIT_CODES
+from titan.u7.shape_animation_ui import choose_u7_shape_animation
 from titan.u7.shape_animation_flag import (
-    choose_u7_shape_animation,
     prepare_u7_archive_animation,
     read_u7_shape_animation,
     u7_animation_sidecar,
@@ -327,3 +327,31 @@ def test_u7_help_animation_options(command):
     result = CliRunner().invoke(u7_app, [command, "--help"])
     assert result.exit_code == 0
     assert "--animate" in result.output and "--no-animate" in result.output
+
+
+def test_flex_import_animation_asks_only_through_the_callback(tmp_path, monkeypatch):
+    from titan.u7.shape_animation_flag import prepare_u7_flex_animation_import
+
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("library prompted"))
+    records = {150: shape_bytes(3), 151: shape_bytes(1), 152: b"not a shape"}
+    output = tmp_path / "SHAPES.VGA"
+    # No explicit choice and no callback: nothing is chosen, nothing asked.
+    assert prepare_u7_flex_animation_import(records, output) == []
+    asked = []
+
+    def choose(number, shape, default):
+        asked.append((number, len(shape.frames), default))
+        return True
+
+    payloads = prepare_u7_flex_animation_import(records, output, choose=choose)
+    assert asked == [(150, 3, None)]  # single-frame and non-shape records skipped
+    shapes = json.loads(payloads[0][1])["shapes"]
+    assert shapes["150"]["animated"] is True
+    # An explicit --animate/--no-animate wins without asking.
+    asked.clear()
+    payloads = prepare_u7_flex_animation_import(
+        records, output, animated=False, choose=choose
+    )
+    assert (
+        asked == [] and json.loads(payloads[0][1])["shapes"]["150"]["animated"] is False
+    )
