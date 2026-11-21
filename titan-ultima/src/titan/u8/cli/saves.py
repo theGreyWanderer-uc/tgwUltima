@@ -14,20 +14,20 @@ import typer
 
 from titan.u8.save import U8SaveArchive
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_save_list(args: SimpleNamespace) -> int:
     """List contents of a U8 save file."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     try:
         save = U8SaveArchive.from_file(filepath)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     entries = save.list_entries()
 
     print(f"U8 Save Archive: {filepath}")
@@ -47,14 +47,13 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
     """Extract files from a U8 save archive."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     try:
         save = U8SaveArchive.from_file(filepath)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     entries = save.list_entries()
 
     outdir = args.output or Path(filepath).stem
@@ -83,6 +82,7 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",), params={"file": "save"})
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8 save file")],
 ) -> None:
@@ -90,12 +90,12 @@ def save_list_cmd(
     raise SystemExit(cmd_save_list(SimpleNamespace(file=file)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "save"})
 def save_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8 save file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
     entry: Annotated[
         Optional[str],

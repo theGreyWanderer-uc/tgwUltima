@@ -52,12 +52,13 @@ import struct
 from dataclasses import dataclass
 
 from titan.u6.lzw import U6Lzw
+from titan.errors import InvalidDataError
 
 _PLURAL_SUFFIX_RE = re.compile(r"\\[A-Za-z]*")
 _SINGULAR_SUFFIX_RE = re.compile(r"/[A-Za-z]*")
 
 
-class U6LookError(Exception):
+class U6LookError(InvalidDataError):
     """Raised on malformed LOOK.LZD data."""
 
 

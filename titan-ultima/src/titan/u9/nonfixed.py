@@ -67,6 +67,7 @@ __all__ = [
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 WIDTH_OFFSET = 0x14
 HEIGHT_OFFSET = 0x18
@@ -96,7 +97,7 @@ QUATERNION_SCALE = 32767.0
 MAX_GRID_DIM = 256
 
 
-class U9NonfixedError(Exception):
+class U9NonfixedError(InvalidDataError):
     """Raised on malformed ``runtime/nonfixed.%d`` data."""
 
 

@@ -15,6 +15,7 @@ from titan.u7.ireg_specials import read_ireg_special
 from titan.u7.ireg_tree import ireg_context_sha256
 from titan.u7.save_repack import U7SaveReplacement, check_u7_save_hash, repack_u7_save
 from titan.u7.save_container import read_u7_save_container
+from titan.errors import InvalidDataError
 
 ActorFileKind = Literal["npc", "monsters"]
 ActorSourceFlavor = Literal["runtime", "original-new-game"]
@@ -104,7 +105,7 @@ def _inventory_end(
     data: bytes, start: int, context: U7IregContext, depth: int = 0
 ) -> int:
     if depth > 128:
-        raise ValueError("Actor rewrite: inventory nesting exceeds 128")
+        raise InvalidDataError("Actor rewrite: inventory nesting exceeds 128")
     pos = start
     while pos < len(data):
         marker = data[pos]
@@ -116,7 +117,7 @@ def _inventory_end(
         elif marker == 255:
             special, pos = read_ireg_special(data, pos - 1)
             if not special.complete or special.type_id == 2:
-                raise ValueError(
+                raise InvalidDataError(
                     "Actor rewrite: incomplete special or actor endmark inside inventory"
                 )
         else:
@@ -124,14 +125,14 @@ def _inventory_end(
             extended_lift = marker in (253, 254)
             if extended_lift:
                 if pos == len(data):
-                    raise ValueError(
+                    raise InvalidDataError(
                         "Actor rewrite: truncated extended inventory record"
                     )
                 marker = data[pos]
                 pos += 1
             end = pos + marker
             if end > len(data):
-                raise ValueError("Actor rewrite: truncated inventory payload")
+                raise InvalidDataError("Actor rewrite: truncated inventory payload")
             length = marker - int(extended)
             if length in (6, 10, 12, 13, 14, 18):
                 decoded = decode_ireg_payload(
@@ -142,7 +143,7 @@ def _inventory_end(
                     context=context,
                 )
                 if decoded is None or decoded.context_warnings or decoded.kind == "egg":
-                    raise ValueError(
+                    raise InvalidDataError(
                         "Actor rewrite: unresolved or unsupported inventory class"
                     )
                 pos = (
@@ -152,16 +153,18 @@ def _inventory_end(
                 )
             else:
                 if extended_lift and marker < 4 + int(extended):
-                    raise ValueError("Actor rewrite: invalid extended inventory length")
+                    raise InvalidDataError(
+                        "Actor rewrite: invalid extended inventory length"
+                    )
                 pos = end
         if pos > len(data):
-            raise ValueError("Actor rewrite: truncated inventory index")
-    raise ValueError("Actor rewrite: missing inventory terminator")
+            raise InvalidDataError("Actor rewrite: truncated inventory index")
+    raise InvalidDataError("Actor rewrite: missing inventory terminator")
 
 
 def _header_end(data: bytes, start: int, flavor: ActorSourceFlavor) -> int:
     if len(data) - start < 117:
-        raise ValueError("Actor rewrite: truncated actor header")
+        raise InvalidDataError("Actor rewrite: truncated actor header")
     delta = (
         1 + data[start + 78]
         if flavor == "runtime" and struct.unpack_from("<H", data, start + 4)[0] & 8
@@ -169,7 +172,7 @@ def _header_end(data: bytes, start: int, flavor: ActorSourceFlavor) -> int:
     )
     end = start + 117 + delta
     if end > len(data):
-        raise ValueError("Actor rewrite: truncated named function insertion")
+        raise InvalidDataError("Actor rewrite: truncated named function insertion")
     return end
 
 
@@ -186,12 +189,14 @@ def read_actor_wire_file(
         or kind not in ("npc", "monsters")
         or flavor not in ("runtime", "original-new-game")
     ):
-        raise ValueError("Actor rewrite: invalid game, file kind or source flavor")
+        raise InvalidDataError(
+            "Actor rewrite: invalid game, file kind or source flavor"
+        )
     if kind == "monsters" and flavor != "runtime":
-        raise ValueError("Actor rewrite: monster streams require runtime flavor")
+        raise InvalidDataError("Actor rewrite: monster streams require runtime flavor")
     size = 4 if kind == "npc" else 2
     if len(data) < size:
-        raise ValueError("Actor rewrite: truncated actor count wrapper")
+        raise InvalidDataError("Actor rewrite: truncated actor count wrapper")
     count = (
         sum(struct.unpack_from("<HH", data))
         if kind == "npc"
@@ -220,7 +225,7 @@ def read_actor_wire_file(
             while pos < len(data) and data[pos] == 255:
                 special, pos = read_ireg_special(data, pos)
                 if not special.complete:
-                    raise ValueError("Actor rewrite: truncated actor special")
+                    raise InvalidDataError("Actor rewrite: truncated actor special")
                 if special.type_id == 2:
                     break
         actors.append(
@@ -230,7 +235,7 @@ def read_actor_wire_file(
         )
     result = U7ActorWireFile(data[:size], tuple(actors), data[pos:])
     if result.to_bytes() != data:
-        raise ValueError("Actor rewrite: lossless reconstruction mismatch")
+        raise InvalidDataError("Actor rewrite: lossless reconstruction mismatch")
     return result
 
 
@@ -308,7 +313,7 @@ def rewrite_actor_header(
         for index in range(width):
             bits = mask >> (index * 8) & 255
             if touched.get(offset + index, 0) & bits:
-                raise ValueError("Actor rewrite: overlapping header field edits")
+                raise InvalidDataError("Actor rewrite: overlapping header field edits")
             touched[offset + index] = touched.get(offset + index, 0) | bits
         current = int.from_bytes(raw[offset : offset + width], "little")
         raw[offset : offset + width] = ((current & ~mask) | (value & mask)).to_bytes(
@@ -319,7 +324,7 @@ def rewrite_actor_header(
         if name in ("usecode_name_hex", "name_hex", "name"):
             continue
         if flavor != "runtime" and name in _RUNTIME_FIELDS | {"extended_skin"}:
-            raise ValueError(
+            raise InvalidDataError(
                 "Actor rewrite: runtime extension edit requested for original-new-game flavor"
             )
         if name in _HEADER_FIELDS:
@@ -364,9 +369,9 @@ def rewrite_actor_header(
             )
             write(offset, 1, number & 255)
         else:
-            raise ValueError(f"Actor rewrite: unsupported header field {name}")
+            raise InvalidDataError(f"Actor rewrite: unsupported header field {name}")
     if "name" in fields and "name_hex" in fields:
-        raise ValueError("Actor rewrite: name and name_hex conflict")
+        raise InvalidDataError("Actor rewrite: name and name_hex conflict")
     if "name" in fields or "name_hex" in fields:
         value = fields["name"] if "name" in fields else fields["name_hex"]
         if not isinstance(value, str):
@@ -376,26 +381,30 @@ def rewrite_actor_header(
                 value.encode("latin-1") if "name" in fields else bytes.fromhex(value)
             )
         except (ValueError, UnicodeError) as error:
-            raise ValueError("Actor rewrite: name encoding is invalid") from error
+            raise InvalidDataError("Actor rewrite: name encoding is invalid") from error
         if len(actor_name) > 16 or "name_hex" in fields and len(actor_name) != 16:
-            raise ValueError(
+            raise InvalidDataError(
                 "Actor rewrite: name needs at most 16 bytes; name_hex needs exactly 16"
             )
         raw[101 + delta : 117 + delta] = actor_name.ljust(16, b"\0")
     if "usecode_name_hex" in fields:
         value = fields["usecode_name_hex"]
         if flavor != "runtime" or not isinstance(value, str):
-            raise ValueError("Actor rewrite: named functions require runtime hex text")
+            raise InvalidDataError(
+                "Actor rewrite: named functions require runtime hex text"
+            )
         try:
             function_name = bytes.fromhex(value)
         except ValueError as error:
-            raise ValueError("Actor rewrite: invalid named function hex") from error
+            raise InvalidDataError(
+                "Actor rewrite: invalid named function hex"
+            ) from error
         if len(function_name) > 255 or b"\0" in function_name:
             raise ValueError(
                 "Actor rewrite: function name must be 0..255 non-NUL bytes"
             )
         if "iflag1" in fields:
-            raise ValueError(
+            raise InvalidDataError(
                 "Actor rewrite: named function and raw iflag1 edit conflict"
             )
         raw[78 : 78 + delta] = (
@@ -413,7 +422,7 @@ def rewrite_actor_header(
         or flavor != "runtime"
         and bool(new_iflag) != bool(original_iflag)
     ):
-        raise ValueError(
+        raise InvalidDataError(
             "Actor rewrite: header edits cannot change inventory/special framing"
         )
     if (
@@ -421,11 +430,13 @@ def rewrite_actor_header(
         and bool(new_iflag & 8) != bool(original_iflag & 8)
         and "usecode_name_hex" not in fields
     ):
-        raise ValueError(
+        raise InvalidDataError(
             "Actor rewrite: named-function flag changes require usecode_name_hex"
         )
     if _header_end(result, 0, flavor) != len(result):
-        raise ValueError("Actor rewrite: header size does not match insertion flags")
+        raise InvalidDataError(
+            "Actor rewrite: header size does not match insertion flags"
+        )
     U7ActorMetadata.from_bytes(
         result,
         game=context.game,
@@ -454,7 +465,7 @@ def rewrite_actor_file(
         not isinstance(expected_context_sha256, str)
         or expected_context_sha256.lower() != digest
     ):
-        raise ValueError("Actor rewrite: dispatch context SHA-256 does not match")
+        raise InvalidDataError("Actor rewrite: dispatch context SHA-256 does not match")
     parsed = read_actor_wire_file(data, context=context, kind=kind, flavor=flavor)
     replacements: dict[int, bytes] = {}
     changes: list[dict[str, object]] = []
@@ -464,7 +475,7 @@ def rewrite_actor_file(
             index in replacements
             or bool(edit.fields) + (edit.replacement_header is not None) != 1
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "Actor rewrite: duplicate actor or expected exactly one header operation"
             )
         actor = parsed.actors[index]
@@ -488,7 +499,7 @@ def rewrite_actor_file(
             or flavor != "runtime"
             and bool(old_flag) != bool(new_flag)
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "Actor rewrite: replacement header changes actor-tail framing"
             )
         replacements[index] = header
@@ -516,14 +527,14 @@ def rewrite_actor_file(
         or reread.trailing != parsed.trailing
         or len(reread.actors) != len(parsed.actors)
     ):
-        raise ValueError("Actor rewrite: output actor wrapper changed")
+        raise InvalidDataError("Actor rewrite: output actor wrapper changed")
     for before, after in zip(parsed.actors, reread.actors, strict=True):
         if (
             after.header != replacements.get(before.index, before.header)
             or after.inventory != before.inventory
             or after.specials != before.specials
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "Actor rewrite: output header/inventory/special validation failed"
             )
     for change in changes:
@@ -538,18 +549,20 @@ def read_actor_save_member(
 ) -> bytes:
     """Select a named NPC.DAT/MONSNPCS.DAT occurrence without collapsing duplicate names."""
     if not isinstance(path, tuple) or not 1 <= len(path) <= 16:
-        raise ValueError("Actor rewrite: member path must contain 1..16 indices")
+        raise InvalidDataError("Actor rewrite: member path must contain 1..16 indices")
     for index in path:
         archive = read_u7_save_container(data, strict=True)
         _number(index, "member index", 0, len(archive.members) - 1)
         member = archive.members[index]
         if member.is_directory:
-            raise ValueError("Actor rewrite: directory is not an actor member")
+            raise InvalidDataError("Actor rewrite: directory is not an actor member")
         data = member.data
     if member.name.replace("\\", "/").split("/")[-1].casefold() != (
         "npc.dat" if kind == "npc" else "monsnpcs.dat"
     ):
-        raise ValueError("Actor rewrite: save leaf name does not match actor file kind")
+        raise InvalidDataError(
+            "Actor rewrite: save leaf name does not match actor file kind"
+        )
     return data
 
 

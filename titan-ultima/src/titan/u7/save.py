@@ -88,6 +88,7 @@ from titan.u7.save_container import (
     U7SaveContainer,
     read_u7_save_container,
 )
+from titan.errors import InvalidDataError
 
 
 # ============================================================================
@@ -246,7 +247,7 @@ class U7GlobalFlags:
         """Extract ``flaginit`` from an open :class:`U7Save`."""
         data = save.get_data("flaginit")
         if data is None:
-            raise ValueError("Save does not contain 'flaginit'")
+            raise InvalidDataError("Save does not contain 'flaginit'")
         return cls(raw=data)
 
     # ------------------------------------------------------------------
@@ -405,7 +406,7 @@ class U7Identity:
     def from_save(cls, save: U7Save) -> "U7Identity":
         data = save.get_data("identity")
         if data is None:
-            raise ValueError("Save does not contain 'identity'")
+            raise InvalidDataError("Save does not contain 'identity'")
         return cls.from_bytes(data)
 
 
@@ -477,7 +478,9 @@ class U7SaveInfo:
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7SaveInfo":
         if len(data) < 64:
-            raise ValueError(f"saveinfo.dat too short: {len(data)} bytes (need >= 64)")
+            raise InvalidDataError(
+                f"saveinfo.dat too short: {len(data)} bytes (need >= 64)"
+            )
         # SaveGame_Details — 64 bytes
         # 0:real_minute 1:real_hour 2:real_day 3:real_month
         # 4-5:real_year(LE) 6:game_minute 7:game_hour
@@ -535,7 +538,7 @@ class U7SaveInfo:
     def from_save(cls, save: U7Save) -> "U7SaveInfo":
         data = save.get_data("saveinfo.dat")
         if data is None:
-            raise ValueError("Save does not contain 'saveinfo.dat'")
+            raise InvalidDataError("Save does not contain 'saveinfo.dat'")
         return cls.from_bytes(data)
 
     def dump(self) -> str:
@@ -633,9 +636,13 @@ class U7GameState:
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7GameState":
         if len(data) < 10:
-            raise ValueError(f"gamewin.dat too short: {len(data)} bytes (need >= 10)")
+            raise InvalidDataError(
+                f"gamewin.dat too short: {len(data)} bytes (need >= 10)"
+            )
         if 10 < len(data) < 14 or 14 < len(data) < 22:
-            raise ValueError("gamewin.dat has an incomplete light or music extension")
+            raise InvalidDataError(
+                "gamewin.dat has an incomplete light or music extension"
+            )
         stx, sty, day, hour, minute = struct.unpack_from("<HHHHH", data, 0)
         sp_light = struct.unpack_from("<I", data, 10)[0] if len(data) >= 14 else 0
         music_trk = struct.unpack_from("<i", data, 14)[0] if len(data) >= 22 else -1
@@ -666,7 +673,7 @@ class U7GameState:
     def from_save(cls, save: U7Save) -> "U7GameState":
         data = save.get_data("gamewin.dat")
         if data is None:
-            raise ValueError("Save does not contain 'gamewin.dat'")
+            raise InvalidDataError("Save does not contain 'gamewin.dat'")
         return cls.from_bytes(data)
 
     def dump(self) -> str:
@@ -733,7 +740,7 @@ class U7UsecodeData:
         def read_word(size: int) -> int:
             nonlocal pos
             if pos + size > len(data):
-                raise ValueError(
+                raise InvalidDataError(
                     f"usecode.dat truncated at offset {pos}: need {size} bytes"
                 )
             value = int.from_bytes(data[pos : pos + size], "little")
@@ -742,7 +749,7 @@ class U7UsecodeData:
 
         party_count = read_word(2)
         if party_count > 8:
-            raise ValueError(
+            raise InvalidDataError(
                 f"usecode.dat party count {party_count} exceeds eight slots"
             )
         party_slots = [read_word(2) for _ in range(8)]
@@ -775,7 +782,9 @@ class U7UsecodeData:
         remaining = len(data) - pos
         if remaining:
             if remaining < 6 or remaining == 7:
-                raise ValueError("usecode.dat has an incomplete saved position or map")
+                raise InvalidDataError(
+                    "usecode.dat has an incomplete saved position or map"
+                )
             raw_position = struct.unpack_from("<hhh", data, pos)
             pos += 6
             if 0 <= raw_position[2] <= 13:
@@ -959,7 +968,9 @@ class U7FrameFlags:
     @classmethod
     def from_bytes(cls, data: bytes) -> "U7FrameFlags":
         if len(data) % 4 != 0:
-            raise ValueError(f"frames.flg size must be divisible by 4, got {len(data)}")
+            raise InvalidDataError(
+                f"frames.flg size must be divisible by 4, got {len(data)}"
+            )
         values = [
             struct.unpack_from("<i", data, pos)[0] for pos in range(0, len(data), 4)
         ]
@@ -1042,7 +1053,7 @@ class U7Schedules:
         from titan.u7.schedule_metadata import U7ScheduleLayout
 
         if len(data) < 4:
-            raise ValueError("schedule.dat too short")
+            raise InvalidDataError("schedule.dat too short")
         layout = U7ScheduleLayout.from_bytes(data, strict=strict)
         sched = cls(num_npcs=layout.num_npcs, format=layout.format)
         sched.raw = data
@@ -1083,7 +1094,7 @@ class U7Schedules:
     def from_save(cls, save: U7Save, *, strict: bool = False) -> "U7Schedules":
         data = save.get_data("schedule.dat")
         if data is None:
-            raise ValueError("Save does not contain 'schedule.dat'")
+            raise InvalidDataError("Save does not contain 'schedule.dat'")
         return cls.from_bytes(data, strict=strict)
 
     def dump_summary(self, npc_names: dict[int, str] | None = None) -> str:
@@ -1718,7 +1729,7 @@ class U7NPCData:
         flavor does not identify the game. The default preserves BG behavior.
         """
         if len(data) < 4:
-            raise ValueError("npc.dat too short")
+            raise InvalidDataError("npc.dat too short")
 
         if npc_flavor:
             flavor = npc_flavor.lower().replace("_", "-")
@@ -1740,7 +1751,7 @@ class U7NPCData:
                     ireg_context=ireg_context,
                 )
             else:
-                raise ValueError(f"Unknown npc.dat flavor: {npc_flavor}")
+                raise InvalidDataError(f"Unknown npc.dat flavor: {npc_flavor}")
 
         return cls._from_bytes_core(
             data,
@@ -1906,7 +1917,7 @@ class U7NPCData:
     ) -> "U7NPCData":
         data = save.get_data("npc.dat")
         if data is None:
-            raise ValueError("Save does not contain 'npc.dat'")
+            raise InvalidDataError("Save does not contain 'npc.dat'")
         result = cls.from_bytes(
             data,
             container_shapes,
@@ -1983,7 +1994,7 @@ class U7NPCData:
                     game=game,
                     ireg_context=ireg_context,
                 )
-        raise ValueError(f"INITGAME.DAT does not contain npc.dat: {filepath}")
+        raise InvalidDataError(f"INITGAME.DAT does not contain npc.dat: {filepath}")
 
     @classmethod
     def from_monsnpcs_bytes(
@@ -2003,7 +2014,7 @@ class U7NPCData:
         non-NPC actor identity (-1), retaining ordinals only for reporting.
         """
         if len(data) < 2:
-            raise ValueError("monsnpcs.dat too short")
+            raise InvalidDataError("monsnpcs.dat too short")
         count = struct.unpack_from("<H", data, 0)[0]
         npc_like = struct.pack("<HH", count, 0) + data[2:]
         return cls._from_bytes_core(

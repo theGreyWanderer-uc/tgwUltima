@@ -22,6 +22,7 @@ from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
 from titan.u7.palette_semantics import CYCLE_RANGES
+from titan.errors import EXIT_CODES
 
 
 def palette_bytes(value=10):
@@ -385,8 +386,8 @@ def test_palette_browser_cancel_is_clean(monkeypatch, capsys):
         raise ui.PromptCancelled
 
     monkeypatch.setattr(ui, "choice", cancel)
-    assert browser_ui.run_browser() == 0
-    assert "Cancelled" in capsys.readouterr().out
+    assert browser_ui.run_browser() == EXIT_CODES["cancelled"]
+    assert "Cancelled" in capsys.readouterr().err
 
 
 def test_run_browser_source_recovery_and_quit(owner, monkeypatch, capsys):

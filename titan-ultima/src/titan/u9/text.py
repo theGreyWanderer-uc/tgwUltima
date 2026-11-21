@@ -51,13 +51,14 @@ __all__ = ["U9TextArchive", "U9TextBlock", "U9TextEntry", "U9TextError"]
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from titan.errors import InvalidDataError
 
 ENCODING = "utf-16-le"
 MARKER_SUFFIX = " : BEGIN FILE"
 _SEPARATOR = "\\"
 
 
-class U9TextError(Exception):
+class U9TextError(InvalidDataError):
     """Raised on malformed ``text.flx`` / ``misctext.flx`` data."""
 
 

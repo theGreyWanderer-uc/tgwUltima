@@ -6,11 +6,14 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
+from titan.u7 import install as u7_install
+from titan.u7 import world_workflow as workflow
+from titan.u7 import world_workflow_ui as workflow_ui
 from titan.u7.cli import u7_app
+from titan.u7.cli import world as world_cli
 from titan.u7.flex import U7FlexArchive
 from titan.u7.world import WorldQueryParams, parse_numbers, parse_rectangle, run_query
-from titan.u7 import world_workflow as workflow
-from titan.u7 import install as u7_install
 
 
 def write_ifix(directory, sc, objects):
@@ -55,6 +58,7 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(u7_install, "resolve_u7_gamedat", lambda game: None)
     monkeypatch.setattr(u7_install, "resolve_u7_text_flx", lambda game, static: None)
     monkeypatch.setattr(u7_install, "resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr(u7_install, "default_u7_exult_flx", lambda game: None)
     return WorldQueryParams(static_dir=str(static), superchunks=[0, 1])
 
 
@@ -292,12 +296,37 @@ def test_cli_map_number_passed_to_wizard(world, monkeypatch):
         return 0
 
     monkeypatch.setattr(engine, "run_wizard", wizard)
+    monkeypatch.setattr(world_cli, "menus_enabled", lambda: True)
     result = CliRunner().invoke(
         u7_app, ["world-query", world.static_dir, "--map-num", "3", "--game", "si"]
     )
     assert result.exit_code == 0, result.output
     assert context["map_num"] == 3
     assert context["game"] == "si"
+
+
+@pytest.mark.parametrize("command", ["world-query", "egg-query", "container-browse"])
+def test_cli_without_terminal_runs_unfiltered_instead_of_wizard(
+    world, monkeypatch, tmp_path, command
+):
+    import titan.u7.container_ui as container_ui
+    import titan.u7.eggs_ui as eggs_ui
+    import titan.u7.world as engine
+
+    def wizard(**kwargs):
+        raise AssertionError("the wizard needs a terminal")
+
+    for module in (engine, eggs_ui, container_ui):
+        monkeypatch.setattr(module, "run_wizard", wizard)
+    monkeypatch.setattr(world_cli, "menus_enabled", lambda: False)
+    args = [command, world.static_dir]
+    if command != "world-query":  # these read IREG, so they need a GAMEDAT
+        gamedat = tmp_path / "gamedat"
+        gamedat.mkdir()
+        args += ["--save", str(gamedat)]
+    result = CliRunner().invoke(u7_app, args)
+    assert result.exit_code == 0, result.output
+    assert "found" in result.output or "matched" in result.output
 
 
 @pytest.mark.parametrize(
@@ -365,7 +394,7 @@ def test_wizard_reprompts_invalid_input_and_refines_without_losing_choices(
         "Finish",
     ]
     prompts = scripted_questions(monkeypatch, answers)
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     output = capsys.readouterr().out
     assert "Invalid Shape number" in output
     assert "Tile coordinate must" in output
@@ -402,7 +431,7 @@ def test_wizard_change_area_does_not_reask_filters_and_can_save_recipe(
         "Finish",
     ]
     prompts = scripted_questions(monkeypatch, answers)
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     assert sum(message.startswith("Shape numbers") for message, _ in prompts) == 1
     assert workflow.load_recipe(str(recipe)).superchunks == [1]
     assert workflow.load_recipe(str(recipe)).shape_nums == [151]
@@ -412,7 +441,7 @@ def test_wizard_change_area_does_not_reask_filters_and_can_save_recipe(
 def test_cancel_at_each_initial_stage_is_clean(world, monkeypatch, stage):
     answers = [[], False, "", "", "", [], "Entire world", True, "Finish"]
     scripted_questions(monkeypatch, answers[:stage] + [None])
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == EXIT_CODES["cancelled"]
 
 
 def test_explicit_custom_static_inside_mods_does_not_inherit_outer_world(
@@ -441,13 +470,13 @@ def test_world_query_can_change_world_and_map_between_searches(
     target = ArchiveTarget("Custom world", own, tmp_path / "new/patch", True)
     monkeypatch.setattr(picker, "game_targets", lambda game: (base, [target]))
     seen = []
-    original = workflow.run_query
+    original = workflow_ui.run_query
 
     def query(params):
         seen.append(replace(params))
         return original(params)
 
-    monkeypatch.setattr(workflow, "run_query", query)
+    monkeypatch.setattr(workflow_ui, "run_query", query)
     scripted_questions(
         monkeypatch,
         [
@@ -474,7 +503,7 @@ def test_world_query_can_change_world_and_map_between_searches(
             "Finish",
         ],
     )
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     assert len(seen) == 2
     assert seen[-1].game == "si" and seen[-1].map_num == 1
     assert seen[-1].static_dir == seen[-1].base_static == str(own)
@@ -581,7 +610,7 @@ def test_wizard_shows_placements_exports_and_clears_new_search_filters(
         "Finish",
     ]
     prompts = scripted_questions(monkeypatch, answers)
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     assert "frame=  1" in capsys.readouterr().out
     assert output.read_text().count("\n") == 2
     shape_prompts = [
@@ -606,7 +635,7 @@ def test_cli_existing_output_requires_force(world, tmp_path):
     path.write_text("preserve me")
     args = ["world-query", world.static_dir, "--shape", "150", "-o", str(path)]
     failed = CliRunner().invoke(u7_app, args)
-    assert failed.exit_code == 1
+    assert failed.exit_code == EXIT_CODES["output-exists"]
     assert path.read_text() == "preserve me"
     assert CliRunner().invoke(u7_app, [*args, "--force"]).exit_code == 0
     assert "matched 2" in path.read_text()

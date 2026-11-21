@@ -45,6 +45,7 @@ from titan.u9.region_scene import TERRAIN_POINT_WORLD_XY, U9RegionScene
 from titan.u9.transform import mat4_trs
 from titan.u9.types_dat import U9TypesDat
 from titan.u9.model import material_alpha
+from titan.errors import TitanError
 
 DEFAULT_U9_GLB_SCALE = 1.0 / 40.0
 """GLB units per native U9 unit, matching Titan's standalone model exports."""
@@ -53,7 +54,7 @@ U9_WATER_SURFACE_EPSILON = 0.5
 """Native world-Z offset that makes water win against sea-level terrain."""
 
 
-class U9GlbExportError(Exception):
+class U9GlbExportError(TitanError):
     """Raised when a U9 region cannot be represented as the requested GLB."""
 
 

@@ -30,6 +30,7 @@ from pathlib import Path
 
 from titan.u7.flex import U7FlexArchive
 from titan.music import XMIDIConverter
+from titan.errors import InvalidDataError
 
 # Signature bytes
 _MIDI_MAGIC = b"MThd"
@@ -57,7 +58,7 @@ def _read_varlen(data: bytes, pos: int) -> tuple[int, int]:
     value = 0
     for _ in range(4):
         if pos >= len(data):
-            raise ValueError("Unexpected end of MIDI varlen")
+            raise InvalidDataError("Unexpected end of MIDI varlen")
         b = data[pos]
         pos += 1
         value = (value << 7) | (b & 0x7F)
@@ -190,7 +191,7 @@ def _read_event_status(
         return status, pos, running_status
 
     if running_status is None:
-        raise ValueError("Invalid running status in MIDI track")
+        raise InvalidDataError("Invalid running status in MIDI track")
     return running_status, pos, running_status
 
 

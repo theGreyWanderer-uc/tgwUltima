@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.test_u9_process_data import _temporary_camera_record
+from tests.test_u9_process_sections import _sections
 from titan.u9.integrity import (
     RECOMMENDATIONS,
     IntegrityReport,
@@ -15,9 +17,6 @@ from titan.u9.integrity import (
     render_integrity_report,
 )
 from titan.u9.process_data import OBJECT_REFERENCE_DATA_OFFSET
-
-from tests.test_u9_process_data import _temporary_camera_record
-from tests.test_u9_process_sections import _sections
 
 
 def _nonfixed() -> bytes:

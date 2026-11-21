@@ -28,6 +28,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from titan.errors import InvalidDataError
 
 
 # -- Font filename dispatch (mirrors exult/game.cc) -----------------------
@@ -62,6 +63,12 @@ class ExultGamePaths:
     mods_path: Optional[str] = None
     font_config: str = DEFAULT_FONT_CONFIG  # "disabled" / "original" / "serif"
     data_path: Optional[str] = None
+    savegame_path: Optional[str] = (
+        None  # as written; Exult's default is <profile>/<game>
+    )
+    gamedat_path: Optional[str] = (
+        None  # as written; Exult's default is <savegame>/gamedat
+    )
 
     @property
     def font_filename(self) -> str:
@@ -143,7 +150,9 @@ def parse_exult_cfg(
     try:
         tree = ET.parse(str(cfg_path))
     except ET.ParseError as error:
-        raise ValueError(f"Invalid Exult configuration {cfg_path}: {error}") from error
+        raise InvalidDataError(
+            f"Invalid Exult configuration {cfg_path}: {error}"
+        ) from error
     root = tree.getroot()  # <config>
 
     cfg_name = _GAME_CFG_NAMES.get(game.upper(), "serpentisle")
@@ -177,6 +186,10 @@ def parse_exult_cfg(
         result.mods_path = mods_path
     elif game_path:
         result.mods_path = str(Path(game_path) / "mods")
+
+    # Runtime folders, as written (relative ones are relative to the game path)
+    result.savegame_path = _xml_text(root, f"{prefix}.savegame_path")
+    result.gamedat_path = _xml_text(root, f"{prefix}.gamedat_path")
 
     # Font config: <config><gameplay><fonts>  (global, not per-game)
     font_cfg = _xml_text(root, "gameplay.fonts")

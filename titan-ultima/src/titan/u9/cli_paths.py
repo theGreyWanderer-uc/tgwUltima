@@ -14,8 +14,9 @@ from typing import Any
 import typer
 from typer.core import TyperArgument, TyperCommand, TyperOption
 
-from titan import _config
-from titan.u9.install import U9_FILE_PATHS, configured_u9_path, existing_u9_path
+from titan.u9 import inputs as _inputs
+from titan.u9.inputs import NO_DEFAULT as _NO_DEFAULT, U9InputError
+from titan.u9.install import U9_FILE_PATHS
 
 # Typer 0.29 vendors its own Click and converts values through a runtime
 # coercer instead of `parameter.type`; its failures may be a plain UsageError
@@ -247,134 +248,46 @@ U9_COMMAND_INPUTS = {
     )
     for command in commands
 }
-_NUMBERED_RESOURCES = {"terrain": "static", "fixed": "static", "nonfixed": "runtime"}
-_NO_DEFAULT = {"archive", "save_source", *_NUMBERED_RESOURCES}
-_TIER_PARTNERS = {
-    "bitmap16.flx": "sdinfo16",
-    "bitmapc.flx": "sdinfoc",
-    "bitmapsh.flx": "sdinfo",
-    "sdinfo16.flx": "bitmap16",
-    "sdinfoc.flx": "bitmapc",
-    "sdinfo.flx": "bitmapsh",
-}
+_UNSET: Any = object()
 
 
-def _configured_owner(owner: Path) -> bool:
-    directories = [
-        configured_u9_path(key)
-        for key in ("base", "static", "runtime", "sound", "savegame")
-    ]
-    if any(
-        directory is not None and (owner == directory or owner.parent == directory)
-        for directory in directories
-    ):
-        return True
-    return any(
-        owner == configured_u9_path(key)
-        for key in _config.get_config().get("u9", {}).get("paths", {})
-    )
+def _configured_install() -> Any:
+    from titan._meta import configured_install
+
+    return configured_install("u9")
 
 
-def paired_u9_texture_key(owner: str) -> str | None:
-    """Choose the companion tier from its filename or a configured renamed file."""
-    path = existing_u9_path(Path(owner).expanduser().absolute())
-    paired = _TIER_PARTNERS.get(path.name.casefold())
-    if paired:
-        return paired
-    for key, (_, filename) in U9_FILE_PATHS.items():
-        if filename.casefold() not in _TIER_PARTNERS:
-            continue
-        configured = configured_u9_path(key)
-        if configured is not None and existing_u9_path(configured.absolute()) == path:
-            return _TIER_PARTNERS[filename.casefold()]
-    return None
+def paired_u9_texture_key(owner: str, install: Any = _UNSET) -> str | None:
+    """:func:`titan.u9.inputs.paired_u9_texture_key`, using the configured install by default."""
+    if install is _UNSET:
+        install = _configured_install()
+    return _inputs.paired_u9_texture_key(owner, install)
 
 
 def resolve_u9_input(
-    value: str | None, key: str, *, owner: str | None = None
+    value: str | None, key: str, *, owner: str | None = None, install: Any = _UNSET
 ) -> str | None:
-    """Prefer explicit U9 inputs, then config; keep external companions together."""
-    original_key = key
-    if key == "textures":
-        key = "bitmap16"
-    owner_path = Path(owner).expanduser() if owner else None
-    partner_key = paired_u9_texture_key(owner) if owner else None
-    if owner_path is not None and original_key in {"textures", "sdinfo16"}:
-        key = partner_key or key
-    folder_key = (
-        U9_FILE_PATHS[key][0] if key in U9_FILE_PATHS else _NUMBERED_RESOURCES.get(key)
-    )
-    if key == "save_source":
-        folder_key = "savegame"
-    if value is not None:
-        path = Path(value).expanduser()
-        if path.is_absolute() or path.exists():
-            return str(path)
-        if len(path.parts) == 1:
-            declared = _config.get_config().get("u9", {}).get("paths", {})
-            for resource_key, (_, filename) in U9_FILE_PATHS.items():
-                if (
-                    resource_key in declared
-                    and path.name.casefold() == filename.casefold()
-                ):
-                    override = configured_u9_path(resource_key)
-                    if override is not None:
-                        return str(override)
-        if key in _NUMBERED_RESOURCES and value.isdecimal():
-            path = Path(f"{key}.{int(value)}")
-        candidates = []
-        base = configured_u9_path("base")
-        if base is not None and (len(path.parts) > 1 or path.name == folder_key):
-            candidates.append(base / path)
-        if owner_path is not None:
-            candidates.append(
-                (owner_path if owner_path.is_dir() else owner_path.parent) / path
-            )
-        for directory_key in (
-            (folder_key,)
-            if folder_key
-            else ("static", "sound", "runtime", "savegame", "base")
-        ):
-            directory = configured_u9_path(directory_key)
-            if directory is not None:
-                candidates.append(directory / path)
-        matches = list(
-            dict.fromkeys(
-                existing_u9_path(candidate)
-                for candidate in candidates
-                if existing_u9_path(candidate).exists()
-            )
-        )
-        if len(matches) > 1 and key == "archive":
-            raise typer.BadParameter(
-                f"Ambiguous U9 archive {value!r}; supply its full path."
-            )
-        return str(matches[0]) if matches else value
+    """:func:`titan.u9.inputs.resolve_u9_input`, using the configured install by default.
 
-    external = owner_path is not None and not _configured_owner(owner_path)
-    explicit_paths = _config.get_config().get("u9", {}).get("paths", {})
-    configured = configured_u9_path(key)
-    if original_key == "textures" and not partner_key:
-        configured = configured_u9_path("textures") or configured
-    if not external and configured is not None:
-        # A configured override is authoritative; do not silently replace a typo.
-        if (
-            original_key in explicit_paths
-            or key in explicit_paths
-            or configured.exists()
-        ):
-            return str(configured)
-    if owner_path is not None and key in U9_FILE_PATHS:
-        resource_folder, filename = U9_FILE_PATHS[key]
-        parent = owner_path if owner_path.is_dir() else owner_path.parent
-        adjacent = existing_u9_path(parent / filename)
-        if adjacent.is_file():
-            return str(adjacent)
-        if parent.name.casefold() in {"static", "runtime", "sound", "savegame"}:
-            sibling = existing_u9_path(parent.parent / resource_folder / filename)
-            if sibling.is_file():
-                return str(sibling)
-    return None
+    An ambiguous name is a usage error, as Click reports bad values.
+    """
+    if install is _UNSET:
+        install = _configured_install()
+    try:
+        return _inputs.resolve_u9_input(value, key, owner=owner, install=install)
+    except U9InputError as error:
+        raise typer.BadParameter(str(error)) from error
+
+
+def _report_missing(key: str, install: Any) -> None:
+    """A ``[u9.paths]`` entry for *key* that points at nothing is a setup error."""
+    if install is None:
+        return
+    for name in dict.fromkeys([key, "bitmap16" if key == "textures" else key]):
+        if install.problems.get(name) == "NOT FOUND":
+            from titan._input_fill import configured_path
+
+            configured_path("u9", name)  # raises ConfigFileError naming the path
 
 
 class _U9InputParser:
@@ -476,6 +389,7 @@ class ConfiguredU9Command(TyperCommand):
             return values  # Preserve Click's existing missing/invalid argument errors.
         _, _, assigned = min(candidates, key=lambda candidate: candidate[:2])
         values.update(assigned)
+        install = _configured_install()
         owner = None
         for parameter in arguments:
             name = parameter.name or ""
@@ -484,7 +398,11 @@ class ConfiguredU9Command(TyperCommand):
             key = self.inputs[name]
             if key == "npcs" and values.get("save"):
                 key = "processes"
-            resolved = resolve_u9_input(values.get(name), key, owner=owner)
+            if values.get(name) is None:
+                _report_missing(key, install)
+            resolved = resolve_u9_input(
+                values.get(name), key, owner=owner, install=install
+            )
             if resolved is None:
                 if (
                     not parameter.required
@@ -506,8 +424,13 @@ class ConfiguredU9Command(TyperCommand):
             companion_owner = owner
             if self.inputs[name] in {"palette", "sdinfo16"}:
                 companion_owner = values.get("textures") or owner
+            if values.get(name) is None:
+                _report_missing(self.inputs[name], install)
             resolved = resolve_u9_input(
-                values.get(name), self.inputs[name], owner=companion_owner
+                values.get(name),
+                self.inputs[name],
+                owner=companion_owner,
+                install=install,
             )
             if resolved is not None:
                 values[name] = resolved

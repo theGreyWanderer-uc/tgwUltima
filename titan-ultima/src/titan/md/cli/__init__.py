@@ -7,9 +7,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan._config import get_config
 from titan.md.map_render import MartianMapRenderer
-from titan.md.inspect_cli import register_martian_inspection_commands
+from titan.md.cli.inspect import register_martian_inspection_commands
 from titan.u6.lib import U6LibraryError
 from titan.u6.actor import U6ActorError
 from titan.u6.lzw import U6LzwError
@@ -19,10 +18,13 @@ from titan.u6.palette import U6PaletteError
 from titan.u6.tile import U6TilesError
 from titan.u6.tileflag import U6TileFlagsError
 from titan._meta import meta
+from titan.errors import InstallNotFoundError, exit_code
+from titan._cli_aliases import alias_group
 
 __all__ = ["md_app"]
 
 md_app = typer.Typer(
+    cls=alias_group({"--gamedir": "--game-dir", "--savegame": "--save"}),
     name="md",
     help="Martian Dreams — maps, actors, saved state, dialogue and text.",
     no_args_is_help=True,
@@ -44,7 +46,7 @@ def map_render_cmd(
     gamedir: Annotated[
         Optional[str],
         typer.Option(
-            "-g", "--gamedir", help="MARTIAN directory or its installation parent"
+            "-g", "--game-dir", help="MARTIAN directory or its installation parent"
         ),
     ] = None,
     palette: Annotated[
@@ -111,7 +113,7 @@ def map_render_cmd(
     savegame: Annotated[
         Optional[str],
         typer.Option(
-            "--savegame",
+            "--save",
             help="Read clock and world flags from DOS SAVEGAME/OBJLIST, plus selected overlays",
         ),
     ] = None,
@@ -134,9 +136,11 @@ def map_render_cmd(
     ] = None,
 ) -> None:
     """Render MD surface or underground terrain, optionally with world objects."""
-    directory = gamedir or get_config().get("md", {}).get("game", {}).get("base")
+    directory = gamedir  # when omitted, the CLI fills it from the configured install (titan._input_fill)
     if not directory:
-        raise typer.BadParameter("Pass --gamedir or set [md.game] base in titan.toml")
+        raise InstallNotFoundError(
+            "Pass --game-dir or set [md.game] base in titan.toml"
+        )
     if region is not None and full:
         raise typer.BadParameter("Choose --region or --full")
     if region is None and dungeon is None and not full:
@@ -194,7 +198,7 @@ def map_render_cmd(
         U6TileFlagsError,
     ) as exc:
         typer.echo(f"ERROR: Martian Dreams map render: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        raise typer.Exit(exit_code(exc)) from exc
     typer.echo(f"Saved: {destination} ({image.width}x{image.height})")
 
 

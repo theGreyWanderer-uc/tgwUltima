@@ -35,6 +35,7 @@ from titan.uw2.render_common import (
 )
 from titan.uw2.strings import GameStrings
 from titan.uw2.terrain import TRArchive, make_contact_sheet
+from titan.errors import InvalidDataError
 
 ARK_BLOCK_COUNT = 320
 """LEV.ARK stores 80 slots across four block ranges."""
@@ -83,7 +84,7 @@ def load_levels(source: str | Path, slots: Iterable[int]) -> list[dict]:
     levels: list[dict] = []
     for slot in sorted(set(slots)):
         if slot < 0 or slot >= 80:
-            raise ValueError(f"UU2 map slot must be in 0..79: {slot}")
+            raise InvalidDataError(f"UU2 map slot must be in 0..79: {slot}")
         if not archive.is_available(slot):
             continue
         level_block = archive.get_decoded_block(slot)
@@ -111,7 +112,7 @@ def load_terrain_images(source: str | Path) -> dict[int, Image.Image]:
     data_dir = data_directory(source)
     palette = UW2Palette.from_file(data_dir / "PALS.DAT")
     archive = TRArchive.from_file(data_dir / "T64.TR")
-    palette_rgb = palette.flattened_rgb()
+    palette_rgb = palette.to_flat_rgb()
     return {
         texture.index: texture.to_image(palette_rgb) for texture in archive.textures
     }
@@ -360,7 +361,7 @@ def export_terrain_textures(
     output_path = Path(output)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    palette_rgb = palette.flattened_rgb()
+    palette_rgb = palette.to_flat_rgb()
     images: list[Image.Image] = []
     for texture in archive.textures:
         image = texture.to_image(palette_rgb)
@@ -393,7 +394,7 @@ def export_render_assets(source: str | Path, output: str | Path) -> dict[str, in
     terrain_archive = TRArchive.from_file(data_dir / "T64.TR")
     terrain_dir = output_path / "textures"
     terrain_dir.mkdir(parents=True, exist_ok=True)
-    palette_rgb = palette.flattened_rgb()
+    palette_rgb = palette.to_flat_rgb()
     for texture in terrain_archive.textures:
         texture.to_image(palette_rgb).save(terrain_dir / f"t64_{texture.index:03d}.png")
     _write_json(terrain_dir / "t64_summary.json", terrain_archive.summary())

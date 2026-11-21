@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u8.cli import u8_app
 from titan.u8.flags import U8FlagSymbols, U8GlobalFlags
 from titan.u8.flags_report import format_u8_flags_report
@@ -235,9 +236,10 @@ def test_strict_archive_checks_are_shared_by_existing_commands(
     path.write_bytes(raw)
     with pytest.raises(ValueError):
         U8SaveArchive.from_bytes(bytes(raw))
+    status = EXIT_CODES["invalid-data"]
     for command in ("save-list", "save-extract", "save-info", "flags-dump"):
         result = CliRunner().invoke(u8_app, [command, str(path)])
-        assert result.exit_code == 1 and "ERROR:" in result.output
+        assert result.exit_code == status and "ERROR:" in result.output
     assert not (tmp_path / "bad").exists()
 
 
@@ -498,7 +500,10 @@ def test_save_state_cli_json_and_output_preservation(tmp_path: Path, command: st
     assert result.exit_code == 0
     assert json.loads(output.read_text())
     old_output = output.read_bytes()
-    assert CliRunner().invoke(u8_app, args + ["-o", str(output)]).exit_code == 1
+    assert (
+        CliRunner().invoke(u8_app, args + ["-o", str(output)]).exit_code
+        == EXIT_CODES["output-exists"]
+    )
     assert output.read_bytes() == old_output
     source_raw = after.source.read_bytes()
     result = CliRunner().invoke(u8_app, args + ["-o", str(after.source)])

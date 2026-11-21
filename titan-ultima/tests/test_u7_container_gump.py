@@ -296,7 +296,7 @@ def test_container_command_help_retains_game_owner_and_exult_options():
     result = CliRunner().invoke(u7_app, ["container-browse", "--help"])
     assert result.exit_code == 0
     for flag in (
-        "--gamedat",
+        "--save",
         "--game",
         "--exult-flx",
         "--mod-data",

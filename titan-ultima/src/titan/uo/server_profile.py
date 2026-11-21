@@ -45,6 +45,7 @@ from titan.uo.housing import (
     parse_house_placement_tool,
 )
 from titan.uo.placement import _parse_region_rects, no_housing_region_types
+from titan.errors import InvalidDataError
 
 PROFILE_FORMAT = "titan-uo-server-profile"
 PROFILE_VERSION = 1
@@ -93,9 +94,9 @@ class ServerProfile:
         path = Path(path)
         data = json.loads(path.read_text(encoding="utf-8"))
         if data.get("format") != PROFILE_FORMAT:
-            raise ValueError(f"{path} is not a {PROFILE_FORMAT} file")
+            raise InvalidDataError(f"{path} is not a {PROFILE_FORMAT} file")
         if data.get("version") != PROFILE_VERSION:
-            raise ValueError(
+            raise InvalidDataError(
                 f"{path}: unsupported profile version {data.get('version')}"
             )
         houses = [

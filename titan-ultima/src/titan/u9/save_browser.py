@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from titan._config import export_dir
 from titan.u9.integrity import (
     IntegrityReport,
     check_save,
@@ -30,7 +31,8 @@ from titan.u9.save_wording import (
     render_u9_plain_integrity,
 )
 
-U9_SAVE_BROWSER_OUTPUT = Path("titan-out/u9_save_browse_export")
+U9_SAVE_BROWSER_OUTPUT = "save-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u9")."""
 U9_SAVE_BROWSER_VIEWS = {
     "members": "Archive members",
     "maps": "Saved maps",
@@ -117,9 +119,11 @@ def open_u9_save_browser_session(
     slot: int | None = None,
     static_directory: Path | None = None,
     fixed_reference_directory: Path | None = None,
-    output: Path = U9_SAVE_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> U9SaveBrowserSession:
     """A file means archive-only; a folder means the selected working save."""
+    if output is None:
+        output = export_dir("u9", U9_SAVE_BROWSER_OUTPUT)
     archive_source = source.suffix.casefold() == ".sav" and not source.is_dir()
     directory, default_static = resolve_u9_save_directories(
         source.parent if archive_source else source

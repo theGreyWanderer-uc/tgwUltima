@@ -99,6 +99,7 @@ from PIL import Image
 
 from titan.u6.lzw import U6Lzw
 from titan.u6.game_profile import U6GameProfile, U6_PROFILE
+from titan.errors import InvalidDataError
 
 MASKTYPE_PLAIN = 0x00
 MASKTYPE_TRANSPARENT = 0x05
@@ -120,7 +121,7 @@ DISPLACEMENT_WRAP_CORRECTION = 160
 ANIMDATA_MAX_ENTRIES = 0x20
 
 
-class U6TilesError(Exception):
+class U6TilesError(InvalidDataError):
     """Raised on malformed tile or masktype data."""
 
 

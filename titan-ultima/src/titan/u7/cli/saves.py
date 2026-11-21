@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 __all__ = [
+    "save_repack_cmd",
     "save_browse_cmd",
     "gamedat_info_cmd",
+    "mods_cmd",
     "save_list_cmd",
     "save_extract_cmd",
     "gflag_dump_cmd",
@@ -26,7 +28,11 @@ import typer
 
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan._cli_aliases import TextOrJson
 from titan._meta import meta
+from titan.u7.save_repack import repack_u7_save
+from titan.u7.edit_plans import read_u7_repack_plan
+from titan.errors import exit_code
 
 
 def cmd_gamedat_info(args: SimpleNamespace) -> int:
@@ -50,10 +56,18 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
 
     source = getattr(args, "directory", None)
     mod = getattr(args, "mod", None)
-    if not source:
-        source = install.resolve_u7_mod_gamedat(getattr(args, "game", "bg"), mod)
-    if not source:
-        source = install.resolve_u7_mod_archive(getattr(args, "game", "bg"), mod)
+    if not source and mod:
+        source = install.resolve_u7_mod_gamedat(
+            getattr(args, "game", "bg"), mod
+        ) or install.resolve_u7_mod_archive(getattr(args, "game", "bg"), mod)
+        if not source:
+            print(
+                _common.mod_gamedat_error(
+                    getattr(args, "game", "bg"), mod, archive=True
+                ),
+                file=sys.stderr,
+            )
+            return 1
     if not source:
         source = install.resolve_u7_gamedat(getattr(args, "game", "bg"))
     if not source:
@@ -93,10 +107,9 @@ def cmd_gamedat_info(args: SimpleNamespace) -> int:
                     f"ERROR: GAMEDAT source is not a directory or Exult archive: {exc}",
                     file=sys.stderr,
                 )
-                return 1
+                return exit_code(exc)
     elif not root.is_dir():
-        print(f"ERROR: GAMEDAT source not found: {root}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"GAMEDAT source not found: {root}")
 
     def data_for(name: str) -> Optional[bytes]:
         if initgame_flex_source:
@@ -380,14 +393,13 @@ def cmd_save_list(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     try:
         save = U7Save.from_file(filepath, strict=getattr(args, "strict", False))
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in save.warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     if getattr(args, "json_output", False):
@@ -440,8 +452,7 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or Path(filepath).stem
     entry_filter = getattr(args, "entry", None)
@@ -454,7 +465,7 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
         )
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for member, path in plan:
         print(
             f"  [{member.index}] {member.name:<24} {len(member.data):>10,} bytes -> {path}"
@@ -473,8 +484,7 @@ def cmd_gflag_dump(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     # Determine whether this is a .sav archive or a loose flaginit file
     ext = os.path.splitext(filepath)[1].lower()
@@ -533,8 +543,7 @@ def cmd_save_info(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     save = U7Save.from_file(filepath)
     lines: list[str] = []
@@ -597,8 +606,7 @@ def cmd_save_npcs(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     save = U7Save.from_file(filepath)
     print(f"Source: {filepath} ({save.container_format.upper()} save)")
@@ -641,8 +649,7 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     save = U7Save.from_file(filepath)
     print(f"Source: {filepath} ({save.container_format.upper()} save)")
@@ -652,7 +659,7 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
         sched = U7Schedules.from_save(save, strict=True)
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in sched.warnings:
         print(f"Warning: {warning}", file=sys.stderr)
     npc_names: dict[int, str] | None = None
@@ -703,7 +710,15 @@ def save_browse_cmd(
     raise SystemExit(run_browser(game=game, source=source, saves=True))
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={
+        "format": "format",
+        "output": "output-file",
+        "directory": "save",
+        "mod": "mod",
+    },
+)
 def gamedat_info_cmd(
     directory: Annotated[
         Optional[str],
@@ -724,7 +739,9 @@ def gamedat_info_cmd(
     mod: Annotated[
         Optional[str],
         typer.Option(
-            "--mod", help="Resolve user-profile Exult runtime GAMEDAT for this mod"
+            "--mod",
+            help="Use this mod's or Exult game's GAMEDAT (see `titan u7 mods`)",
+            autocompletion=_common.complete_mod,
         ),
     ] = None,
     output: Annotated[
@@ -753,7 +770,66 @@ def gamedat_info_cmd(
     )
 
 
-@meta(params={"json_output": "format"}, results=("json", "text"))
+def cmd_mods(args: SimpleNamespace) -> int:
+    """List the game's mods and Exult custom games."""
+    from titan._config import get_config
+    from titan.u7.mods import configured_u7_mods
+
+    game = getattr(args, "game", "bg")
+    game_id = "u7si" if game == "si" else "u7bg"
+    mods = configured_u7_mods(get_config() or {}, game_id)
+    if getattr(args, "json_output", False):
+        fields = ("install_dir", "profile_dir", "patch", "static", "gamedat")
+        rows = [
+            {
+                "key": mod.key,
+                "title": mod.title,
+                "kind": mod.kind,
+                "played": mod.played,
+                **{
+                    name: str(getattr(mod, name)) if getattr(mod, name) else None
+                    for name in (*fields, "saves", "archive")
+                },
+                "problems": dict(mod.problems),
+            }
+            for mod in mods
+        ]
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not mods:
+        print(f"No {game.upper()} mods or Exult games found.")
+        return 0
+    print(f"{game.upper()} mods and Exult games (pass the key to --mod):")
+    width = max(len(mod.key) for mod in mods)
+    for mod in mods:
+        kind = "Exult game" if mod.kind == "exult-game" else "mod"
+        state = "played" if mod.played else "not played"
+        print(f"  {mod.key:<{width}}  {kind:<10}  {state:<10}  {mod.title}")
+        for key, problem in mod.problems.items():
+            print(f"  {'':<{width}}  [u7{game}.mods.{mod.key}.paths] {key}: {problem}")
+    return 0
+
+
+@meta(params={"output_format": "format"}, results=("text", "json"))
+def mods_cmd(
+    game: Annotated[
+        Literal["bg", "si"],
+        typer.Option("--game", help="Black Gate (bg) or Serpent Isle (si)"),
+    ] = "bg",
+    output_format: Annotated[
+        TextOrJson,
+        typer.Option("--format", help="Output format: text (default) or json"),
+    ] = TextOrJson.text,
+) -> None:
+    """List mods and Exult custom games: the keys --mod takes, and their paths."""
+    raise SystemExit(
+        cmd_mods(
+            SimpleNamespace(game=game, json_output=output_format is TextOrJson.json)
+        )
+    )
+
+
+@meta(params={"output_format": "format", "file": "save"}, results=("json", "text"))
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     strict: Annotated[
@@ -762,14 +838,16 @@ def save_list_cmd(
             "--strict/--permissive", help="Reject structural container errors"
         ),
     ] = False,
-    json_output: Annotated[
-        bool,
+    output_format: Annotated[
+        TextOrJson,
         typer.Option(
-            "--json", help="JSON occurrence paths and member hashes for repack plans"
+            "--format",
+            help="Output format: text (default) or json (occurrence paths and member hashes for repack plans)",
         ),
-    ] = False,
+    ] = TextOrJson.text,
 ) -> None:
     """List contents of an Exult U7 savegame file (ZIP or FLEX)."""
+    json_output = output_format is TextOrJson.json
     raise SystemExit(
         cmd_save_list(
             SimpleNamespace(file=file, strict=strict, json_output=json_output)
@@ -777,13 +855,13 @@ def save_list_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "save"})
 def save_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: save filename stem)"
+            "-o", "--output-dir", help="Output directory (default: save filename stem)"
         ),
     ] = None,
     entry: Annotated[
@@ -811,7 +889,10 @@ def save_extract_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "input-file"},
+)
 def gflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Exult .sav file or loose flaginit file")],
     output: Annotated[
@@ -837,7 +918,7 @@ def gflag_dump_cmd(
     )
 
 
-@meta(results=("text",), params={"output": "output-file"})
+@meta(results=("text",), params={"output": "output-file", "file": "save"})
 def save_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
@@ -856,7 +937,10 @@ def save_info_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "save"},
+)
 def save_npcs_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     static: Annotated[
@@ -895,7 +979,10 @@ def save_npcs_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "save"},
+)
 def save_schedules_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     static: Annotated[
@@ -931,3 +1018,73 @@ def save_schedules_cmd(
             )
         )
     )
+
+
+@meta(
+    results=("file",),
+    params={"output": "output-file", "file": "input-file", "plan": "input-file"},
+)
+def save_repack_cmd(
+    file: Annotated[
+        str, typer.Argument(help="Source U7 named Flex or ZIP save/INITGAME")
+    ],
+    plan: Annotated[
+        str,
+        typer.Option(
+            "--plan", help="JSON plan with source/member hashes and replacement files"
+        ),
+    ],
+    output: Annotated[
+        Optional[str],
+        typer.Option(
+            "-o", "--output", help="New output archive; existing paths are rejected"
+        ),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option(
+            "--dry-run", help="Validate and report without writing an archive"
+        ),
+    ] = False,
+) -> None:
+    """Repack selected save occurrences, retaining unedited members and container metadata."""
+    try:
+        source = Path(file)
+        destination = Path(output) if output is not None else None
+        if destination is None and not dry_run:
+            raise ValueError(
+                "U7 save repack: --output is required unless --dry-run is selected"
+            )
+        if destination is not None:
+            if destination.resolve() == source.resolve():
+                raise ValueError(
+                    "U7 save repack: output must differ from the source file"
+                )
+            if destination.exists():
+                raise FileExistsError(
+                    f"U7 save repack: output already exists: {destination}"
+                )
+        raw = source.read_bytes()
+        replacements = read_u7_repack_plan(Path(plan), raw)
+        result = repack_u7_save(raw, replacements)
+        report = result.as_row() | {
+            "source": str(source),
+            "output": str(destination) if destination else None,
+            "dry_run": dry_run,
+        }
+        content = json.dumps(report, indent=2) + "\n"
+        if destination is not None and not dry_run:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            created = False
+            try:
+                with destination.open("xb") as target:
+                    created = True
+                    target.write(result.data)
+            except BaseException:
+                if created:
+                    destination.unlink(missing_ok=True)
+                raise
+        print(content, end="")
+    except (OSError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(exit_code(error)) from error

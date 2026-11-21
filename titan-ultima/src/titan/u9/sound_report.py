@@ -27,6 +27,7 @@ from titan.u9.sound_control import (
 from titan.u9.typename import U9TypeNameError, U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan._files import case_insensitive_child
+from titan.errors import TitanError
 
 KNOWN_AUDIO_ARCHIVES = ("speech.flx", "sfx.flx", "music.flx")
 
@@ -76,7 +77,7 @@ SOUND_REPORT_COLUMNS = [
 ]
 
 
-class U9SoundReportError(Exception):
+class U9SoundReportError(TitanError):
     """Raised when audio report inputs cannot be discovered or read."""
 
 

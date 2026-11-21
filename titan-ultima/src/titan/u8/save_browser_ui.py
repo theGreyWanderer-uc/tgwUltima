@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
 from titan.u8.flags import U8FlagSymbols
 from titan.u8.npc_browser import U8NpcSession, discover_u8_npc_sources
@@ -38,8 +39,9 @@ from titan.u8.shape_browser import (
     load_u8_shape_library,
 )
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
-from titan.u8.state_io import write_u8_state_report
-from titan._meta import meta
+from titan.u8.state_report_ui import write_u8_state_report
+from titan._meta import configured_install, meta, resolve_save
+from titan.errors import exit_code
 
 PAGE_SIZE = 25
 
@@ -99,10 +101,11 @@ def choose_u8_save_browser_source(
     """Choose this installation's native saves/GAMEDAT, or an explicit other source."""
     from titan.u8.shape_browser import discover_u8_shape_targets
 
-    targets = discover_u8_shape_targets(game_dir)
+    install = configured_install("u8")
+    targets = discover_u8_shape_targets(game_dir, install)
     choices: list[Path] = []
     for target in targets:
-        gamedats, saves = discover_u8_npc_sources(target.static)
+        gamedats, saves = discover_u8_npc_sources(target.static, install)
         choices.extend((*gamedats, *saves))
     choices = list(dict.fromkeys(choices))
     page = 0
@@ -175,7 +178,10 @@ def _graphics(session: U8SaveBrowserSession) -> U8ShapeLibrary:
         if path is None:
             raise ValueError("U8 save browser: U8SHAPES.FLX not found")
         session.library = load_u8_shape_library(
-            path, palette=session.palette, anim=session.anim
+            path,
+            palette=session.palette,
+            anim=session.anim,
+            install=configured_install("u8"),
         )
     return session.library
 
@@ -583,9 +589,11 @@ def run_u8_save_browser(
     anim: Path | None = None,
     symbols: Path | None = None,
     names: Path | None = None,
-    output: Path = U8_SAVE_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> int:
     """Browse native saves/GAMEDAT; redirected input uses shared line-menu fallback."""
+    if output is None:
+        output = export_dir("u8", U8_SAVE_BROWSER_OUTPUT)
     print("\nTitan U8 Save Browser")
     try:
         flag_symbols = U8FlagSymbols.from_file(symbols) if symbols else None
@@ -629,11 +637,10 @@ def run_u8_save_browser(
             # A new primary snapshot never silently inherits the previous comparison.
             comparison = None
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 @meta(
@@ -643,8 +650,13 @@ def run_u8_save_browser(
         "output": "output-dir",
         "palette": "palette",
         "source": "save",
+        "anim": "install-file",
+        "symbols": "install-file",
+        "names": "input-file",
+        "shapes": "install-file",
     },
     interactive=True,
+    resources={"shapes": "u8shapes"},
 )
 def save_browse_cmd(
     source: Annotated[
@@ -701,20 +713,20 @@ def save_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Export folder; existing files are preserved"
+            "-o", "--output-dir", help="Export folder; existing files are preserved"
         ),
-    ] = U8_SAVE_BROWSER_OUTPUT,
+    ] = None,
 ) -> None:
     """Browse native save entries/state, NPCs, flags, maps, kernel and comparisons."""
-    from titan._config import get_config
-    from titan.u8.install import resolve_u8_save
+    if output is None:
+        output = export_dir("u8", U8_SAVE_BROWSER_OUTPUT)
 
     def save(value: Path | None) -> Path | None:
         # A slot number or bare U8SAVE name is looked up in [u8.paths] savegame.
         if value is None:
             return None
         try:
-            return resolve_u8_save(str(value), get_config())
+            return resolve_save("u8", str(value))
         except ValueError as error:
             raise typer.BadParameter(str(error)) from error
 

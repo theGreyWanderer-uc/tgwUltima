@@ -46,18 +46,18 @@ from titan.u9.color_cube import (
     metric_for_filename,
 )
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_palette_info(args: SimpleNamespace) -> int:
     """Inspect the layout and colour statistics of a U9 ankh.pal file."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
     try:
         palette = U9Palette.from_file(args.file)
     except (OSError, U9PaletteError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     file_size = os.path.getsize(args.file)
     distinct = len(set(palette.colors))
@@ -95,8 +95,7 @@ def cmd_palette_info(args: SimpleNamespace) -> int:
 def cmd_palette_export(args: SimpleNamespace) -> int:
     """Export a U9 palette as a PNG swatch and lossless text table."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
     if args.swatch_size <= 0:
         print("ERROR: --swatch-size must be greater than zero", file=sys.stderr)
         return 1
@@ -104,7 +103,7 @@ def cmd_palette_export(args: SimpleNamespace) -> int:
         palette = U9Palette.from_file(args.file)
     except (OSError, U9PaletteError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     outdir = args.output or "."
     os.makedirs(outdir, exist_ok=True)
@@ -341,7 +340,7 @@ def cmd_color_cube_lookup(args: SimpleNamespace) -> int:
         index = cube.closest_index(color, metric)
     except ValueError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     print(f"{args.file} -- colour {color}, metric {metric}")
     print(
         f"  leaf at 0x{leaf.offset:x}, depth {leaf.depth}, cube "
@@ -397,6 +396,7 @@ def cmd_color_cube_csv(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def palette_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/ankh.pal")],
     duplicates: Annotated[
@@ -418,7 +418,7 @@ def palette_export_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: current directory)"
+            "-o", "--output-dir", help="Output directory (default: current directory)"
         ),
     ] = None,
     swatch_size: Annotated[
@@ -492,6 +492,7 @@ def color_cube_info_cmd(
     raise SystemExit(cmd_color_cube_info(SimpleNamespace(file=file, palette=palette)))
 
 
+@meta(results=("text",))
 def color_cube_lookup_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")

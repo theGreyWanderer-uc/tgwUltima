@@ -6,7 +6,7 @@ Used for translucent rendering effects (ghosts, invisibility, etc.).
 
 Example::
 
-    from titan.xformpal import U8_XFORM_PALETTE
+    from titan.u8.xformpal import U8_XFORM_PALETTE
 
     for i, (r, g, b, a) in enumerate(U8_XFORM_PALETTE):
         if a > 0:

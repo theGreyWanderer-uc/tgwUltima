@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import struct
 import zlib
+from titan.errors import InvalidDataError
 
 _U32_MASK = 0xFFFFFFFF
 _UOP_MAGIC = 0x0050594D
@@ -221,22 +222,22 @@ class UOPArchive:
             data = stream.read(entry.compressed_length)
 
         if len(data) != entry.compressed_length:
-            raise ValueError("short UOP payload read")
+            raise InvalidDataError("short UOP payload read")
 
         if entry.compression == 0:
             if len(data) != entry.decompressed_length:
-                raise ValueError("uncompressed UOP length mismatch")
+                raise InvalidDataError("uncompressed UOP length mismatch")
             return data
 
         if entry.compression in (1, 3):
             out = zlib.decompress(data)
             if len(out) != entry.decompressed_length:
-                raise ValueError("decompressed UOP length mismatch")
+                raise InvalidDataError("decompressed UOP length mismatch")
             if entry.compression == 3:
                 return _bwt_decompress(out)
             return out
 
-        raise ValueError(f"unsupported UOP compression flag: {entry.compression}")
+        raise InvalidDataError(f"unsupported UOP compression flag: {entry.compression}")
 
     def read_hashed_path(self, path: str) -> bytes | None:
         """Read an entry by generated virtual UOP path."""
@@ -250,42 +251,42 @@ class UOPArchive:
         with self.path.open("rb") as stream:
             header = stream.read(28)
             if len(header) != 28:
-                raise ValueError("short UOP header")
+                raise InvalidDataError("short UOP header")
             magic, _version, _signature, next_block, _capacity, _count = struct.unpack(
                 "<IIIQII", header
             )
             if magic != _UOP_MAGIC:
-                raise ValueError(f"not a UOP archive: {self.path}")
+                raise InvalidDataError(f"not a UOP archive: {self.path}")
 
             seen_blocks: set[int] = set()
             while next_block:
                 if next_block in seen_blocks:
-                    raise ValueError("loop detected in UOP block chain")
+                    raise InvalidDataError("loop detected in UOP block chain")
                 if next_block < 0 or next_block + 12 > size:
-                    raise ValueError("UOP block offset outside archive")
+                    raise InvalidDataError("UOP block offset outside archive")
                 seen_blocks.add(next_block)
 
                 stream.seek(next_block)
                 block_header = stream.read(12)
                 if len(block_header) != 12:
-                    raise ValueError("short UOP block header")
+                    raise InvalidDataError("short UOP block header")
                 files_in_block, next_block = struct.unpack("<IQ", block_header)
 
                 for _ in range(files_in_block):
                     raw = stream.read(34)
                     if len(raw) != 34:
-                        raise ValueError("short UOP file record")
+                        raise InvalidDataError("short UOP file record")
                     values = struct.unpack("<QIIIQIh", raw)
                     entry = UOPEntry(*values)
                     if entry.offset == 0:
                         continue
                     if entry.payload_offset < 0 or entry.payload_offset > size:
-                        raise ValueError("UOP payload offset outside archive")
+                        raise InvalidDataError("UOP payload offset outside archive")
                     if (
                         entry.compressed_length < 0
                         or entry.payload_offset + entry.compressed_length > size
                     ):
-                        raise ValueError("UOP payload extent outside archive")
+                        raise InvalidDataError("UOP payload extent outside archive")
                     entries.append(entry)
 
         return entries

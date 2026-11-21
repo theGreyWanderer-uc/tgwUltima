@@ -5,14 +5,17 @@ from __future__ import annotations
 import csv
 import io
 import json
-import struct
 import shutil
+import struct
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from tests.test_u8_cached_state import save_bytes
+from tests.test_u8_npc_animation_report import case as case
 from titan import _wizard_ui as ui
+from titan.errors import EXIT_CODES
 from titan.u8.cli import u8_app
 from titan.u8.npc_browser import (
     describe_u8_npc_equipment,
@@ -21,12 +24,10 @@ from titan.u8.npc_browser import (
     format_u8_npc_browser_summary,
     load_u8_npc_session,
 )
-from titan.u8.npc_browser_ui import run_u8_npc_browser, preview_u8_npc_sprite
+from titan.u8.npc_browser_ui import preview_u8_npc_sprite, run_u8_npc_browser
 from titan.u8.npc_names import describe_u8_npc_identity
 from titan.u8.npc_source import load_u8_npc_source
 from titan.u8.shape_browser import U8ShapeTarget, load_u8_shape_library
-from tests.test_u8_cached_state import save_bytes
-from tests.test_u8_npc_animation_report import case as case
 
 
 def session_for_case(case: tuple[Path, Path]):
@@ -244,8 +245,10 @@ def test_discovery_keeps_snapshot_sources_with_selected_installation(
     (saves / "unrelated.dat").write_bytes(b"unused")
     other = tmp_path.parent / f"{tmp_path.name}_other" / "GAMEDAT"
     other.mkdir(parents=True)
-    monkeypatch.setattr("titan.u8.npc_browser.cfg", lambda *args: str(other))
-    dirs, files = discover_u8_npc_sources(static)
+    from titan._meta import Installation
+
+    install = Installation("u8", tmp_path, {"gamedat": other, "savegame": other})
+    dirs, files = discover_u8_npc_sources(static, install)
     assert dirs == [gamedat] and files == [saves / "U8SAVE.001"]
 
 
@@ -312,7 +315,7 @@ def test_browser_cancellation_and_help_contract(case, monkeypatch):
         "choice",
         lambda *args, **kwargs: (_ for _ in ()).throw(ui.PromptCancelled()),
     )
-    assert run_u8_npc_browser(shapes=static / "U8SHAPES.FLX") == 0
+    assert run_u8_npc_browser(shapes=static / "U8SHAPES.FLX") == EXIT_CODES["cancelled"]
     result = CliRunner().invoke(u8_app, ["npc-browse", "--help"])
     assert result.exit_code == 0
     for option in (

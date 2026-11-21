@@ -16,6 +16,7 @@ import pytest
 from typer.testing import CliRunner
 
 from titan import _wizard_ui as ui
+from titan.errors import EXIT_CODES
 from titan.u7 import monster_browser as browser
 from titan.u7 import monster_browser_ui as browser_ui
 from titan.u7.archive_targets import ArchiveTarget
@@ -179,7 +180,7 @@ def definitions(owner):
 def test_actor_abilities_are_resolved_from_patch_separately_from_binary(
     owner, monkeypatch
 ):
-    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.default_u7_exult_flx", lambda game: None)
     raw = bytearray(definition(150))
     raw[15] = 0
     (owner.patch / "monsters.dat").write_bytes(b"\1" + raw)
@@ -199,7 +200,7 @@ def test_actor_abilities_are_resolved_from_patch_separately_from_binary(
 def test_foreign_definition_does_not_inherit_owner_actor_flags(
     owner, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.default_u7_exult_flx", lambda game: None)
     (owner.patch / "shape_info.txt").write_text(
         "%%section actor_flags\n:190/0/0/1\n%%endsection\n"
     )
@@ -692,4 +693,4 @@ def test_eof_cancel_is_clean(owner, monkeypatch):
         raise EOFError
 
     monkeypatch.setattr("builtins.input", cancel)
-    assert browser_ui.run_browser() == 0
+    assert browser_ui.run_browser() == EXIT_CODES["cancelled"]

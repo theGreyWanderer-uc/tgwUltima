@@ -19,6 +19,7 @@ from titan.u7.text import (
     U7TextMessages,
     decode_text_source,
 )
+from titan.errors import InvalidDataError
 
 __all__ = [
     "U7ShapeNames",
@@ -97,7 +98,7 @@ class U7ShapeNames:
     ) -> U7ShapeNames:
         """Apply an explicit sparse inspection overlay, or select a replacement shape bank."""
         if mode not in ("overlay", "replace"):
-            raise ValueError(f"Unknown shape-name loading mode: {mode}")
+            raise InvalidDataError(f"Unknown shape-name loading mode: {mode}")
         text = U7TextMessages.from_file(textmsg_path, encoding=encoding)
         previous = base.raw_names if base is not None and mode == "overlay" else ()
         return cls(text.strings("shapes", previous), warnings=text.warnings)
@@ -247,13 +248,13 @@ class U7FrameNames:
                 try:
                     return int(parts[index], 10)
                 except ValueError as error:
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"Invalid framenames numeric field: {value!r}"
                     ) from error
 
             shape = number(0, -1)
             if not 0 <= shape <= 0xFFFF:
-                raise ValueError(f"Invalid framenames shape: {shape}")
+                raise InvalidDataError(f"Invalid framenames shape: {shape}")
             frame, quality, kind = number(1), number(2), number(3)
             rules.append(
                 U7FrameNameRule(
@@ -414,7 +415,7 @@ class U7FrameNames:
             cls._FLX_RECORD_BG if game.lower() == "bg" else cls._FLX_RECORD_SI
         )
         if not data:
-            raise ValueError(f"Empty shape_info resource in {exult_flx_path}")
+            raise InvalidDataError(f"Empty shape_info resource in {exult_flx_path}")
         return cls.from_text(
             data.decode("latin-1"),
             cls._load_misc_names(text_flx_path, game=game, si_variant=si_variant),

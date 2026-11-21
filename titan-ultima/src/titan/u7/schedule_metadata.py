@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass, field
+from titan.errors import InvalidDataError
 
 
 @dataclass
@@ -28,7 +29,7 @@ class U7ScheduleLayout:
 
         def incomplete(message: str) -> U7ScheduleLayout:
             if strict:
-                raise ValueError(f"schedule.dat {message}")
+                raise InvalidDataError(f"schedule.dat {message}")
             result.complete = False
             result.warnings.append(f"schedule.dat {message}")
             return result
@@ -37,7 +38,7 @@ class U7ScheduleLayout:
             return incomplete("header is incomplete")
         marker = struct.unpack_from("<i", data)[0]
         if marker < -2:
-            raise ValueError(f"Unsupported schedule.dat marker {marker}")
+            raise InvalidDataError(f"Unsupported schedule.dat marker {marker}")
         result.format = "exult2" if marker == -2 else "exult" if marker == -1 else "u7"
         pos = 10 if marker == -2 else 8 if marker == -1 else 4
         result.entry_width = 8 if marker < 0 else 4
@@ -54,9 +55,9 @@ class U7ScheduleLayout:
         )
         result.offsets = offsets
         if offsets and offsets[0] != 0:
-            raise ValueError("Avatar schedule sentinel must be zero")
+            raise InvalidDataError("Avatar schedule sentinel must be zero")
         if any(a > b for a, b in zip(offsets, offsets[1:])):
-            raise ValueError("schedule.dat offsets are not cumulative")
+            raise InvalidDataError("schedule.dat offsets are not cumulative")
         pos += result.num_npcs * 2
         if num_scripts:
             if pos + 2 > len(data):

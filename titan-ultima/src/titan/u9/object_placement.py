@@ -36,6 +36,7 @@ from titan.u9.nonfixed import U9ExtraData
 from titan.u9.region_scene import U9RegionScene, U9WorldPosition
 from titan.u9.transform import mat4_trs, transform_point
 from titan.u9.types_dat import U9TypesDat
+from titan.errors import TitanError
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
@@ -51,7 +52,7 @@ _SCALE_Z = 0x4B
 _CONTAINED_OBJECT_FLAG = 0x200
 
 
-class U9ObjectPlacementError(Exception):
+class U9ObjectPlacementError(TitanError):
     """Raised when placements cannot be joined to their model metadata."""
 
 

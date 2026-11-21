@@ -9,8 +9,8 @@ from typing import Annotated
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan._config import cfg
 from titan._image_preview import open_preview
 from titan._terminal_image import checkerboard, play_terminal, terminal_image
 from titan.u8.palette import U8Palette
@@ -35,7 +35,8 @@ from titan.u8.shape_browser import (
     u8_contact_sheet_groups,
     u8_playback_provider,
 )
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 30
 
@@ -68,8 +69,10 @@ def _path(message: str, default: str = "") -> Path:
 
 def choose_u8_shape_target(directory: Path | None) -> U8ShapeTarget | None:
     """Choose a U8 STATIC owner, shared by shape and NPC browsers."""
+    install = configured_install("u8")
+    language = install.settings.get("language", "") if install else ""
     while True:
-        targets = discover_u8_shape_targets(directory)
+        targets = discover_u8_shape_targets(directory, install)
         labels = {
             str(index + 1): f"{target.name} — {target.static}"
             for index, target in enumerate(targets)
@@ -81,8 +84,7 @@ def choose_u8_shape_target(directory: Path | None) -> U8ShapeTarget | None:
             (
                 str(index + 1)
                 for index, target in enumerate(targets)
-                if target.name.casefold()
-                == str(cfg("language", "game") or "").casefold()
+                if target.name.casefold() == language.casefold()
             ),
             "1" if targets else "C",
         )
@@ -103,7 +105,7 @@ def _archive(target: U8ShapeTarget) -> Path | None:
     while True:
         paths = {
             str(index + 1): configured_u8_browser_file(
-                target.static, filename.split(".")[0].lower()
+                target.static, filename.split(".")[0].lower(), configured_install("u8")
             )
             or find_u8_browser_file(target.static, filename)
             for index, filename in enumerate(U8_SHAPE_ARCHIVES)
@@ -121,7 +123,7 @@ def _archive(target: U8ShapeTarget) -> Path | None:
         )
         selected = _menu("Shape library:", labels, "1")
         if selected == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if selected == "W":
             return None
         path = _path("Archive or .shp file") if selected == "C" else paths[selected]
@@ -666,9 +668,11 @@ def run_u8_shape_browser(
     action: int | None = None,
     direction: int = 0,
     overlay: int | None = None,
-    output: Path = U8_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> int:
     """Browse U8 graphics with shared prompts; redirected input keeps line menus."""
+    if output is None:
+        output = export_dir("u8", U8_BROWSER_OUTPUT)
     print("\nTitan U8 Shape / Animation Browser")
     previews = Path(tempfile.mkdtemp(prefix="titan-u8-shape-browser-"))
     try:
@@ -691,6 +695,7 @@ def run_u8_shape_browser(
                     typeflag=typeflag,
                     anim=anim,
                     wpnovlay=wpnovlay,
+                    install=configured_install("u8"),
                     shape_id=shape,
                 )
             except (ValueError, OSError) as error:
@@ -743,12 +748,13 @@ def run_u8_shape_browser(
             if selected == "W":
                 target = choose_u8_shape_target(game_dir)
         return 0
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 def browse_u8_npc_shape(
@@ -758,9 +764,11 @@ def browse_u8_npc_shape(
     frame: int = 0,
     action: int | None = None,
     direction: int = 0,
-    output: Path = U8_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> None:
     """Inspect this NPC's shape/actions using the existing browser; Q returns to the NPC."""
+    if output is None:
+        output = export_dir("u8", U8_BROWSER_OUTPUT)
     with tempfile.TemporaryDirectory(prefix="titan-u8-npc-shape-") as temporary:
         _browse_library(
             library,
@@ -777,7 +785,13 @@ def browse_u8_npc_shape(
 
 @meta(
     results=("files",),
-    params={"output": "output-dir", "palette": "palette"},
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "archive": "install-file",
+        "anim": "install-file",
+        "wpnovlay": "install-file",
+    },
     interactive=True,
 )
 def shape_browse_cmd(
@@ -835,11 +849,15 @@ def shape_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Default export folder; existing files are preserved"
+            "-o",
+            "--output-dir",
+            help="Default export folder; existing files are preserved",
         ),
-    ] = U8_BROWSER_OUTPUT,
+    ] = None,
 ) -> None:
     """Browse U8 shapes/actions and export frames, contact sheets, GIFs and reports."""
+    if output is None:
+        output = export_dir("u8", U8_BROWSER_OUTPUT)
     raise SystemExit(
         run_u8_shape_browser(
             game_dir=game_dir,

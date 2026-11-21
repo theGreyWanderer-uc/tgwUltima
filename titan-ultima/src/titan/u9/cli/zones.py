@@ -32,6 +32,8 @@ from titan.u9.highway import U9Highway, U9HighwayError
 from titan.u9.space_tree import U9VolumeLookupCache, U9VolumeLookupError
 from titan.u9.spaces import U9Spaces, U9SpacesError
 from titan._meta import meta
+from titan._config import export_output
+from titan.errors import exit_code
 
 
 def _load_highway(filepath: str) -> Optional[U9Highway]:
@@ -257,7 +259,7 @@ def cmd_spaces_csv(args: SimpleNamespace) -> int:
     if spaces is None:
         return 1
 
-    output = Path(args.output or "spaces_csv")
+    output = Path(export_output(args.output, "u9", "spaces-csv"))
     try:
         output.mkdir(parents=True, exist_ok=True)
         space_path = output / "u9_spaces.csv"
@@ -421,7 +423,7 @@ def cmd_spaces_csv(args: SimpleNamespace) -> int:
                         )
     except OSError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Wrote {len(spaces.spaces())} enclosed spaces -> {space_path}")
     print(
@@ -544,7 +546,7 @@ def cmd_treedat_csv(args: SimpleNamespace) -> int:
     rebuild = set(cache.maps_requiring_rebuild(spaces)) if spaces is not None else set()
     exported_map_ids = sorted(set(cache.used_map_ids) | set(expected_by_map))
 
-    output = Path(args.output or "treedat_csv")
+    output = Path(export_output(args.output, "u9", "treedat-csv"))
     try:
         output.mkdir(parents=True, exist_ok=True)
         map_path = output / "u9_treedat_maps.csv"
@@ -703,7 +705,7 @@ def cmd_treedat_csv(args: SimpleNamespace) -> int:
                         )
     except OSError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(
         f"Wrote {len(exported_map_ids)} map status row(s) "
@@ -835,7 +837,7 @@ def cmd_areas_csv(args: SimpleNamespace) -> int:
     if areas is None:
         return 1
 
-    output = Path(args.output or "areas_csv")
+    output = Path(export_output(args.output, "u9", "areas-csv"))
     try:
         output.mkdir(parents=True, exist_ok=True)
         area_path = output / "u9_areas.csv"
@@ -1006,7 +1008,7 @@ def cmd_areas_csv(args: SimpleNamespace) -> int:
                     )
     except OSError as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Wrote {len(areas.records())} gameplay-zone rows -> {area_path}")
     print(
@@ -1020,6 +1022,7 @@ def cmd_areas_csv(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def highway_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
 ) -> None:
@@ -1027,6 +1030,7 @@ def highway_info_cmd(
     raise SystemExit(cmd_highway_info(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def highway_points_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
@@ -1042,6 +1046,7 @@ def highway_points_cmd(
     raise SystemExit(cmd_highway_points(SimpleNamespace(file=file, id=id, limit=limit)))
 
 
+@meta(results=("text",))
 def highway_routes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
@@ -1063,6 +1068,7 @@ def highway_routes_cmd(
     )
 
 
+@meta(results=("text",))
 def spaces_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
 ) -> None:
@@ -1070,6 +1076,7 @@ def spaces_info_cmd(
     raise SystemExit(cmd_spaces_info(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def spaces_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
     id: Annotated[int, typer.Argument(help="Space ID (the FLX entry index)")],
@@ -1085,7 +1092,7 @@ def spaces_csv_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output directory for space, plane, and portal CSV files",
         ),
     ] = None,
@@ -1094,6 +1101,7 @@ def spaces_csv_cmd(
     raise SystemExit(cmd_spaces_csv(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("text",))
 def treedat_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
     spaces: Annotated[
@@ -1105,6 +1113,7 @@ def treedat_info_cmd(
     raise SystemExit(cmd_treedat_info(SimpleNamespace(file=file, spaces=spaces)))
 
 
+@meta(results=("text",))
 def treedat_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
     id: Annotated[int, typer.Argument(help="Map ID (the FLX entry index)")],
@@ -1118,7 +1127,7 @@ def treedat_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory for cache CSV files"),
+        typer.Option("-o", "--output-dir", help="Output directory for cache CSV files"),
     ] = None,
     spaces: Annotated[
         Optional[str],
@@ -1131,6 +1140,7 @@ def treedat_csv_cmd(
     )
 
 
+@meta(results=("text",))
 def areas_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
 ) -> None:
@@ -1138,6 +1148,7 @@ def areas_info_cmd(
     raise SystemExit(cmd_areas_info(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def areas_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
     id: Annotated[int, typer.Argument(help="Gameplay-zone ID (FLX entry index)")],
@@ -1153,7 +1164,7 @@ def areas_csv_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output directory for zone, box, and encounter CSV files",
         ),
     ] = None,

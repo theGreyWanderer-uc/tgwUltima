@@ -31,6 +31,7 @@ from titan.uo.tiledata import UOTileData
 from titan.uo.texture import UOTextureDecoder
 from titan.uo.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _load_art(
@@ -323,7 +324,7 @@ def cmd_art_export(args: SimpleNamespace) -> int:
         tilehelp = _common._try_load_tilehelp(client, "enu")
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     entries = _common._entry_iter(indexed, args.range_start, args.range_end)
     if args.kind == "land":
@@ -361,7 +362,7 @@ def cmd_gump_export(args: SimpleNamespace) -> int:
         defs = _common._try_load_defs(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     entries = _common._entry_iter(indexed, args.range_start, args.range_end)
     outdir = _common._out(args)
@@ -390,7 +391,7 @@ def cmd_texture_export(args: SimpleNamespace) -> int:
         defs = _common._try_load_defs(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     entries = _common._entry_iter(indexed, args.range_start, args.range_end)
     outdir = _common._out(args)
@@ -417,7 +418,7 @@ def cmd_light_export(args: SimpleNamespace) -> int:
         indexed = _load_lights(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     entries = _common._entry_iter(indexed, args.range_start, args.range_end)
     outdir = _common._out(args)
@@ -443,7 +444,7 @@ def cmd_hue_export(args: SimpleNamespace) -> int:
         hues = _load_hues(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     start = 0 if args.range_start is None else args.range_start
     end = (
@@ -491,7 +492,7 @@ def cmd_font_export(args: SimpleNamespace) -> int:
         fonts = _load_fonts(client, max_fonts=args.limit_fonts)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "fonts"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -550,8 +551,8 @@ def art_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     kind: Annotated[
@@ -587,8 +588,8 @@ def gump_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     limit: Annotated[
@@ -620,8 +621,8 @@ def texture_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     limit: Annotated[
@@ -653,8 +654,8 @@ def light_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     limit: Annotated[
@@ -686,8 +687,8 @@ def hue_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     limit: Annotated[
@@ -725,8 +726,8 @@ def font_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     limit_fonts: Annotated[

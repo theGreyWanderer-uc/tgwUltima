@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import struct
+from typing import Any
 from pathlib import Path
 
 from titan.fonts.exult_cfg import ExultGamePaths, find_exult_cfg, parse_exult_cfg
@@ -14,6 +15,7 @@ from titan.u7.shape_archive import (
     is_patch_archive,
     overlay_shape_archives,
 )
+from titan.errors import InvalidDataError
 
 # exult/data/exult_flx.h; these live in the common EXULT.FLX, not a game bundle.
 _BUNDLED_FONTS = {"fonts_original.vga": 29, "fonts_serif.vga": 30}
@@ -24,11 +26,11 @@ def game_paths(game: str) -> ExultGamePaths | None:
     return parse_exult_cfg(cfg, game) if cfg else None
 
 
-def _bundled_base(path: Path, paths: ExultGamePaths | None) -> U7FlexArchive:
-    from titan._config import exult_cfg
-
+def _bundled_base(
+    path: Path, paths: ExultGamePaths | None, install: Any = None
+) -> U7FlexArchive:
     candidates: list[Path] = []
-    configured = exult_cfg("flx")
+    configured = install.resources.get("exult_common_flx") if install else None
     if configured:
         candidates.append(Path(configured).expanduser())
     if paths and paths.data_path:
@@ -52,19 +54,19 @@ def _bundled_base(path: Path, paths: ExultGamePaths | None) -> U7FlexArchive:
     bundle = U7FlexArchive.from_file(str(bundle_path), strict=True)
     index = _BUNDLED_FONTS[path.name.lower()]
     if index >= len(bundle.records):
-        raise ValueError(f"Missing font record {index} in {bundle_path}")
+        raise InvalidDataError(f"Missing font record {index} in {bundle_path}")
     data = bundle.records[index]
     # Validate the nested Flex table before using the shared byte reader.
     if len(data) < 128:
-        raise ValueError(f"Invalid bundled font in {bundle_path}")
+        raise InvalidDataError(f"Invalid bundled font in {bundle_path}")
     count = struct.unpack_from("<I", data, 84)[0]
     table_end = 128 + count * 8
     if table_end > len(data):
-        raise ValueError("Truncated bundled font table")
+        raise InvalidDataError("Truncated bundled font table")
     for i in range(count):
         offset, size = struct.unpack_from("<II", data, 128 + i * 8)
         if size and (offset < table_end or offset + size > len(data)):
-            raise ValueError("Invalid bundled font record bounds")
+            raise InvalidDataError("Invalid bundled font record bounds")
     return U7FlexArchive.from_bytes(data)
 
 
@@ -75,8 +77,14 @@ def read_font_archive(
     base_archive: str | None = None,
     paths: ExultGamePaths | None = None,
     infer_base: bool = True,
+    install: Any = None,
 ) -> U7FlexArchive:
-    """Inspect effective slots without changing the sparse archive on disk."""
+    """Inspect effective slots without changing the sparse archive on disk.
+
+    A patch archive's base is looked for in Exult's STATIC, else *install*'s
+    (``titan._meta.configured_install``); Exult's own font slots come from
+    *install*'s ``exult_common_flx``, else a standard Exult install's.
+    """
     selected_path = Path(path).expanduser()
     selected = U7FlexArchive.from_file(str(selected_path), strict=True)
     base = None
@@ -96,16 +104,11 @@ def read_font_archive(
     elif infer_base and is_patch_archive(selected_path):
         paths = paths or game_paths(game)
         static = paths.static_path if paths else None
-        if not static:
-            from titan._config import get_config
-
-            section = get_config().get("u7bg" if game == "BG" else "u7si", {})
-            game_base = section.get("game", {}).get("base")
-            if game_base:
-                static = str(Path(game_base) / "STATIC")
+        if not static and install is not None and install.resources.get("static"):
+            static = str(install.resources["static"])
         base_path = discover_base_archive(selected_path, static)
         if selected_path.name.lower() in _BUNDLED_FONTS:
-            base = _bundled_base(selected_path, paths)
+            base = _bundled_base(selected_path, paths, install)
         elif base_path:
             base = U7FlexArchive.from_file(str(base_path), strict=True)
         elif selected_path.name.lower() == "fonts.vga":

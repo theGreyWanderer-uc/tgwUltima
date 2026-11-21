@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 
 from PIL import Image
+from titan.errors import InvalidDataError
 
 
 def slugify(value: str) -> str:
@@ -31,7 +32,7 @@ def render_output_filename(
 def parse_hex_color(value: str) -> tuple[int, int, int, int]:
     raw = value.strip().lstrip("#")
     if len(raw) != 6:
-        raise ValueError(f"Expected #RRGGBB background, got {value!r}")
+        raise InvalidDataError(f"Expected #RRGGBB background, got {value!r}")
     return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16), 255
 
 

@@ -11,11 +11,13 @@ from PIL import Image
 from PIL.GifImagePlugin import GifImageFile
 from typer.testing import CliRunner
 
-from titan import _config, _wizard_ui as ui
+from tests.test_u8_save_state import native_flex
+from titan import _config
+from titan import _wizard_ui as ui
+from titan.errors import EXIT_CODES
 from titan.u8 import shape_browser as browser
 from titan.u8 import shape_browser_ui as menus
 from titan.u8.cli import u8_app
-from tests.test_u8_save_state import native_flex
 
 
 def shape_bytes(frames: list[tuple[bytes, int, int]] | None = None) -> bytes:
@@ -173,12 +175,16 @@ def test_discovery_configuration_case_and_language_variants(owner: Path, monkeyp
     ] == ["English", "French"]
     assert browser.discover_u8_shape_targets(owner.parent)[0].static == owner
     assert browser.discover_u8_shape_targets(owner)[0].static == owner
-    monkeypatch.setattr(_config, "_config", {"game": {"base": str(installation)}})
-    assert len(browser.discover_u8_shape_targets()) == 2
-    monkeypatch.setattr(
-        _config, "_config", {"paths": {"u8shapes": str(owner / "u8shapes.flx")}}
+    from titan._meta import Installation
+
+    assert browser.discover_u8_shape_targets() == []  # nothing configured
+    configured = Installation("u8", installation, {})
+    assert len(browser.discover_u8_shape_targets(None, configured)) == 2
+    # Without a usable base, the configured U8SHAPES.FLX's folder is the owner.
+    shapes_only = Installation(
+        "u8", installation / "missing", {"u8shapes": owner / "u8shapes.flx"}
     )
-    assert browser.discover_u8_shape_targets()[0].static == owner
+    assert browser.discover_u8_shape_targets(None, shapes_only)[0].static == owner
 
 
 def test_optional_metadata_failure_keeps_browsing_and_explicit_failure_is_not_hidden(
@@ -554,7 +560,7 @@ def test_next_previous_shapes_follow_filter_and_live_playback_has_redirected_fal
 
 def test_cancellation_at_initial_source_prompt_is_clean(owner: Path):
     result = CliRunner().invoke(u8_app, ["shape-browse"])
-    assert result.exit_code == 0 and "Cancelled" in result.output
+    assert result.exit_code == EXIT_CODES["cancelled"] and "Cancelled" in result.output
 
 
 def test_invalid_explicit_frame_returns_command_error(owner: Path):
@@ -642,20 +648,20 @@ def test_configured_custom_assets_belong_only_to_the_selected_owner(
     colours.write_bytes((owner / "u8pal.pal").read_bytes())
     props = owner / "properties.dat"
     props.write_bytes((owner / "TYPEFLAG.DAT").read_bytes())
+    from titan._meta import Installation
+
+    install = Installation(
+        "u8", owner, {"u8shapes": custom, "palette": colours, "typeflag": props}
+    )
+    lib = browser.load_u8_shape_library(custom, install=install)
+    assert (
+        lib.world_shapes and lib.palette_path == colours and props in lib.source_paths
+    )
+    # The browser UI reads the configured install from titan.toml's [u8].
     monkeypatch.setattr(
         _config,
         "_config",
-        {
-            "paths": {
-                "u8shapes": str(custom),
-                "palette": str(colours),
-                "typeflag": str(props),
-            }
-        },
-    )
-    lib = browser.load_u8_shape_library(custom)
-    assert (
-        lib.world_shapes and lib.palette_path == colours and props in lib.source_paths
+        {"u8": {"game": {"base": str(owner)}, "paths": {"u8shapes": str(custom)}}},
     )
     monkeypatch.setattr(menus, "_menu", lambda *args: "1")
     assert menus._archive(browser.U8ShapeTarget("English", owner)) == custom
@@ -670,6 +676,7 @@ def test_configured_custom_assets_belong_only_to_the_selected_owner(
 def test_u8_sequence_runs_in_the_real_terminal_player(owner: Path):
     from prompt_toolkit.input import create_pipe_input
     from prompt_toolkit.output import DummyOutput
+
     from titan._terminal_image import playback_application
 
     images, rows = browser.aligned_u8_sequence(

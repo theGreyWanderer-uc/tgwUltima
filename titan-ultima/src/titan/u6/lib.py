@@ -63,6 +63,7 @@ import os
 from dataclasses import dataclass
 
 from titan.u6.lzw import U6Lzw
+from titan.errors import InvalidDataError
 
 HEADER_SIZE = 4
 FLAG_COMPRESSED = 0x01
@@ -70,7 +71,7 @@ FLAG_COMPRESSED_MD_FONTS = 0x20
 FLAG_DEFER_TO_NEXT = 0xFF
 
 
-class U6LibraryError(Exception):
+class U6LibraryError(InvalidDataError):
     """Raised on malformed library data or an out-of-range item index."""
 
 
@@ -197,6 +198,20 @@ class U6Library:
                 if later.flag != FLAG_DEFER_TO_NEXT:
                     return self.is_compressed(later.index)
         return False
+
+    @property
+    def entry_count(self) -> int:
+        """Number of slots, used or not (:class:`titan.protocols.IndexedArchive`)."""
+        return len(self.items)
+
+    def read(self, index: int) -> bytes | None:
+        """Slot *index*'s bytes, LZW-decompressed where stored compressed, or ``None``
+        for an empty slot (:class:`titan.protocols.IndexedArchive`)."""
+        if not 0 <= index < self.entry_count:
+            raise IndexError(
+                f"U6 library item index {index} out of range (0..{self.entry_count - 1})"
+            )
+        return self.get_item(index) or None
 
     def get_item(self, item_number: int) -> bytes:
         """Return the bytes for one item, transparently LZW-decompressed if needed."""

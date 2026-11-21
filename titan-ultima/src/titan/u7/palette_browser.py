@@ -19,6 +19,7 @@ from titan.u7.palette_cycle import DEFAULT_CYCLE_MS
 from titan.u7.palette_semantics import CYCLE_RANGES, palette_slot_name
 from titan.u7.shape_archive import find_archive
 from titan.u7.shape_browser import save_bytes
+from titan.errors import InvalidDataError
 
 
 def hex_colour(rgb: tuple[int, int, int]) -> str:
@@ -44,16 +45,16 @@ class Record:
 
     def load(self, encoding: PaletteEncoding = "auto", component: int = 0) -> U7Palette:
         if self.error:
-            raise ValueError(self.error)
+            raise InvalidDataError(self.error)
         if not self.raw:
-            raise ValueError(f"Palette record {self.index} is empty")
+            raise InvalidDataError(f"Palette record {self.index} is empty")
         palettes: tuple[U7Palette, ...]
         if len(self.raw) >= 1536:
             palettes = U7Palette.from_double_bytes(self.raw, encoding=encoding)
         else:
             palettes = (U7Palette.from_raw_bytes(self.raw, encoding=encoding),)
         if not 0 <= component < len(palettes):
-            raise ValueError("This record has no secondary palette")
+            raise InvalidDataError("This record has no secondary palette")
         palette = palettes[component]
         if any(not 0 <= value <= 255 for rgb in palette.colors for value in rgb):
             raise ValueError(
@@ -188,7 +189,7 @@ def parse_hex_stops(value: str) -> list[str]:
     if not 1 <= len(stops) <= 16 or any(
         not re.fullmatch(r"#?[0-9a-fA-F]{6}", stop) for stop in stops
     ):
-        raise ValueError("Enter 1-16 RGB hex colours, such as #6F263D, #236192.")
+        raise InvalidDataError("Enter 1-16 RGB hex colours, such as #6F263D, #236192.")
     return ["#" + stop.lstrip("#").lower() for stop in stops]
 
 

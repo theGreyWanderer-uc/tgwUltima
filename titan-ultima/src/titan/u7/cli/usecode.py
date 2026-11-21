@@ -14,6 +14,7 @@ import typer
 
 from titan.u7 import install
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _load_u7_intrinsic_names_for_cli(args: SimpleNamespace) -> dict[int, str]:
@@ -47,8 +48,7 @@ def cmd_usecode_scan_intrinsic(args: SimpleNamespace) -> int:
     from titan.u7.usecode import U7UsecodeFile
 
     if not os.path.isfile(args.file):
-        print(f"ERROR: USECODE file not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"USECODE file not found: {args.file}")
     try:
         intrinsic_id = int(str(args.intrinsic), 0)
     except ValueError:
@@ -65,7 +65,7 @@ def cmd_usecode_scan_intrinsic(args: SimpleNamespace) -> int:
         )
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in usecode.warnings:
         print(f"Warning: {warning}", file=sys.stderr)
     fmt = (getattr(args, "format", None) or "table").lower()
@@ -111,8 +111,7 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
     )
 
     if not os.path.isfile(args.file):
-        print(f"ERROR: USECODE file not found: {args.file}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"USECODE file not found: {args.file}")
     disasm_all = bool(getattr(args, "all_functions", False))
     if disasm_all and args.function is not None:
         print("ERROR: use either FUNCTION or --all, not both", file=sys.stderr)
@@ -147,7 +146,7 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
             stream_warnings.extend(patch.warnings)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
     for warning in stream_warnings:
         print(f"Warning: {warning}", file=sys.stderr)
     annotate = bool(getattr(args, "annotate", False))
@@ -187,7 +186,7 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
             content = definition.disassemble(annotate=annotate, intrinsic_names=names)
         except KeyError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
-            return 1
+            return exit_code(exc)
 
     if getattr(args, "validate", False):
         for definition in definitions_for_view():
@@ -215,7 +214,10 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "install-file"},
+)
 def usecode_scan_intrinsic_cmd(
     file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
     intrinsic: Annotated[
@@ -262,7 +264,14 @@ def usecode_scan_intrinsic_cmd(
     )
 
 
-@meta(results=("text",), params={"output": "output-file"})
+@meta(
+    results=("text",),
+    params={
+        "output": "output-file",
+        "file": "install-file",
+        "patch_file": "input-file",
+    },
+)
 def usecode_disasm_cmd(
     file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
     function: Annotated[

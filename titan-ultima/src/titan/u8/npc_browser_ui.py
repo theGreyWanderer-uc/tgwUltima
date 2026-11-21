@@ -9,8 +9,8 @@ from typing import Annotated, Any
 import typer
 from PIL import Image
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan._config import cfg
 from titan._terminal_image import terminal_image
 from titan.u8.npc_animation_report import export_u8_npc_animation_report
 from titan.u8.npc_browser import (
@@ -30,8 +30,9 @@ from titan.u8.shape_browser import (
     load_u8_shape_library,
 )
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
-from titan.u8.state_io import write_u8_state_report
-from titan._meta import meta
+from titan.u8.state_report_ui import write_u8_state_report
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 30
 
@@ -62,7 +63,9 @@ def _npc_optional_number(message: str, current: int | None, maximum: int) -> int
 
 
 def _choose_npc_source(library: U8ShapeLibrary) -> Path | None:
-    gamedats, saves = discover_u8_npc_sources(library.path.parent)
+    gamedats, saves = discover_u8_npc_sources(
+        library.path.parent, configured_install("u8")
+    )
     choices = [("GAMEDAT", path) for path in gamedats] + [
         ("Save", path) for path in saves
     ]
@@ -86,7 +89,7 @@ def _choose_npc_source(library: U8ShapeLibrary) -> Path | None:
         )
         selected = _npc_menu("Choose NPC snapshot:", labels)
         if selected == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if selected == "W":
             return None
         if selected == "C":
@@ -456,9 +459,11 @@ def browse_u8_npc_session(
     session: U8NpcSession,
     *,
     npc: int | None = None,
-    output: Path = U8_NPC_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> None:
     """Embed NPC browsing in a captured save snapshot; Q returns to its parent."""
+    if output is None:
+        output = export_dir("u8", U8_NPC_BROWSER_OUTPUT)
     if npc is not None and not 0 <= npc <= 255:
         raise ValueError("U8 NPC browser: NPC ID must be 0-255")
     _browse_npc_session(session, npc, output, embedded=True)
@@ -474,14 +479,17 @@ def run_u8_npc_browser(
     itemcach: Path | None = None,
     npc: int | None = None,
     names: Path | None = None,
-    output: Path = U8_NPC_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> int:
     """Browse native NPC snapshots using shared prompts; redirected input uses line menus."""
+    if output is None:
+        output = export_dir("u8", U8_NPC_BROWSER_OUTPUT)
     print("\nTitan U8 NPC Browser")
     try:
         if npc is not None and not 0 <= npc <= 255:
             raise ValueError("U8 NPC browser: NPC ID must be 0-255")
-        configured_shapes = cfg("u8shapes")
+        install = configured_install("u8")
+        configured_shapes = install.resources.get("u8shapes") if install else None
         initial_shapes = shapes or (
             Path(configured_shapes) if configured_shapes else None
         )
@@ -499,7 +507,9 @@ def run_u8_npc_browser(
                         print("  U8SHAPES.FLX not found in selected graphics source.")
                         continue
                 try:
-                    library = load_u8_shape_library(path, palette=palette, anim=anim)
+                    library = load_u8_shape_library(
+                        path, palette=palette, anim=anim, install=install
+                    )
                     print(f"  Graphics: {library.path}")
                     for issue in library.diagnostics:
                         print(f"  Metadata unavailable: {issue}")
@@ -554,18 +564,28 @@ def run_u8_npc_browser(
             if selected == "W":
                 library = None
                 palette, anim = None, None
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 @meta(
     results=("files",),
-    params={"output": "output-dir", "palette": "palette"},
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "source": "input-file",
+        "anim": "install-file",
+        "itemcach": "input-file",
+        "names": "input-file",
+        "shapes": "install-file",
+    },
     interactive=True,
+    resources={"shapes": "u8shapes"},
 )
 def npc_browse_cmd(
     source: Annotated[
@@ -622,11 +642,13 @@ def npc_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Export folder; existing files are preserved"
+            "-o", "--output-dir", help="Export folder; existing files are preserved"
         ),
-    ] = U8_NPC_BROWSER_OUTPUT,
+    ] = None,
 ) -> None:
     """Browse U8 NPC names/state, equipment, sprite animations and report exports."""
+    if output is None:
+        output = export_dir("u8", U8_NPC_BROWSER_OUTPUT)
     raise SystemExit(
         run_u8_npc_browser(
             source=source,

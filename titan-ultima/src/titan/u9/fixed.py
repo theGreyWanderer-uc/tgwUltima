@@ -125,6 +125,7 @@ __all__ = ["U9Fixed", "U9FixedChunk", "U9FixedError", "U9FixedObject", "U9FixedP
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 TABLE_OFFSET = 0x1C
 WIDTH_OFFSET = 0x10
@@ -146,7 +147,7 @@ MAX_OBJECTS_PER_PAGE = 166
 MAX_GRID_DIM = 256
 
 
-class U9FixedError(Exception):
+class U9FixedError(InvalidDataError):
     """Raised on malformed ``static/fixed.%d`` data."""
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from titan._version import TITAN_VERSION
 
@@ -18,6 +19,9 @@ from .data import load_place_data
 from .dungeons import DungeonFinds, find_dungeons
 from .geometry import in_rects
 from .scan import MapScan
+
+if TYPE_CHECKING:
+    from titan._meta import Installation
 
 FORMAT = "titan-u7-places"
 VERSION = 1
@@ -230,15 +234,22 @@ def assemble_document(
 
 
 def build_places_document(
-    static_dir: str | None = None, game: str = "bg", map_num: int = 0
+    static_dir: str | None = None,
+    game: str = "bg",
+    map_num: int = 0,
+    *,
+    install: Installation | None = None,
 ) -> dict:
-    """Find and name every building, dungeon, area and town on a U7 map."""
+    """Find and name every building, dungeon, area and town on a U7 map.
+
+    *static_dir* defaults to *install*'s (see :meth:`MapScan.load`).
+    """
     data = load_place_data(game)
     if data.get("map", 0) != map_num:
         raise ValueError(
             f"Place data covers map {data.get('map', 0)}, not map {map_num}."
         )
-    scan = MapScan.load(static_dir, game, map_num)
+    scan = MapScan.load(static_dir, game, map_num, install=install)
     buildings = find_buildings(scan, data["places"])
     dungeons = find_dungeons(scan, data["regions"])
     return assemble_document(scan, data, buildings, dungeons)

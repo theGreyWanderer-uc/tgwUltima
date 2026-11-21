@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from titan.u8.state_io import read_u8_state_bytes
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ class U8AvatarState:
     def from_bytes(cls, data: bytes) -> U8AvatarState:
         """Require the native 77-byte extension and decode DOS signed ints/chars."""
         if len(data) != 77:
-            raise ValueError(f"AVATAR.DAT: expected 77 bytes, found {len(data)}")
+            raise InvalidDataError(f"AVATAR.DAT: expected 77 bytes, found {len(data)}")
         points = struct.unpack_from("<3h", data)
         return cls(
             raw_data=bytes(data),

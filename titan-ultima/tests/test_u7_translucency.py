@@ -19,7 +19,7 @@ from titan.u7.palette_transform import (
     shift_index,
     xform_index,
 )
-from titan.u7.shapeinfo import U7Blends, U7BlendRecord, U7Xforms
+from titan.u7.shapeinfo import U7BlendRecord, U7Blends, U7Xforms
 from titan.u7.translucency import U7Translucency
 
 

@@ -102,11 +102,7 @@ def cmd_npc_show(args: SimpleNamespace) -> int:
     npcs = _load_npcs(args.file, args.save)
     if npcs is None:
         return 1
-    try:
-        n = npcs.npc(args.index)
-    except U9NpcError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    n = npcs.npc(args.index)
 
     print(f"{args.file} -- NPC {n.index}")
     print(f"  Name        : {n.name!r}")
@@ -472,7 +468,7 @@ def cmd_npc_diff(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(params={"save": "save"})
+@meta(results=("text",))
 def npc_list_cmd(
     file: Annotated[
         str,
@@ -521,7 +517,7 @@ def npc_list_cmd(
     )
 
 
-@meta(params={"save": "save"})
+@meta(results=("text",))
 def npc_show_cmd(
     file: Annotated[
         str,
@@ -541,7 +537,7 @@ def npc_show_cmd(
     raise SystemExit(cmd_npc_show(SimpleNamespace(file=file, index=index, save=save)))
 
 
-@meta(params={"save": "save"})
+@meta(results=("text",))
 def npc_classes_cmd(
     file: Annotated[
         str,
@@ -582,7 +578,7 @@ def npc_diff_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file", "save": "save"})
+@meta(results=("table",), params={"output": "output-file"})
 def npc_csv_cmd(
     file: Annotated[
         str,

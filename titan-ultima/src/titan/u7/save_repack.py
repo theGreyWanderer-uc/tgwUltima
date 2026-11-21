@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from titan.u7.save_container import U7SaveContainer, read_u7_save_container
 from titan.u7.save_repack_zip import repack_u7_zip_entries, u7_save_zip_start
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -46,18 +47,18 @@ def check_u7_save_hash(expected: object, data: bytes, description: str) -> None:
         not isinstance(expected, str)
         or re.fullmatch(r"[0-9a-fA-F]{64}", expected) is None
     ):
-        raise ValueError(
+        raise InvalidDataError(
             f"U7 save repack: {description} SHA-256 must have 64 hexadecimal digits"
         )
     if hashlib.sha256(data).hexdigest() != expected.lower():
-        raise ValueError(f"U7 save repack: {description} SHA-256 does not match")
+        raise InvalidDataError(f"U7 save repack: {description} SHA-256 does not match")
 
 
 def _read_repack_layout(data: bytes) -> U7SaveContainer:
     try:
         return read_u7_save_container(data, strict=True)
     except (NotImplementedError, struct.error) as error:
-        raise ValueError(
+        raise InvalidDataError(
             f"U7 save repack: unsupported or invalid container: {error}"
         ) from error
 
@@ -75,7 +76,7 @@ def _repack_flex_members(
     for index, payload in updates.items():
         match = re.fullmatch(r"flex#record=(\d+)", layout.members[index].source)
         if match is None:
-            raise ValueError("U7 save repack: missing Flex member provenance")
+            raise InvalidDataError("U7 save repack: missing Flex member provenance")
         replacements[int(match[1])] = payload
     populated = sorted(
         (offset, size, index)
@@ -83,7 +84,7 @@ def _repack_flex_members(
         if size
     )
     if not populated:
-        raise ValueError("U7 save repack: no populated Flex member to replace")
+        raise InvalidDataError("U7 save repack: no populated Flex member to replace")
     output = bytearray(layout.raw[: populated[0][0]])
     for ordinal, (offset, size, index) in enumerate(populated):
         following = (
@@ -92,7 +93,7 @@ def _repack_flex_members(
             else len(layout.raw)
         )
         if offset + size > following:
-            raise ValueError(
+            raise InvalidDataError(
                 "U7 save repack: overlapping/aliased Flex records cannot be edited"
             )
         new_offset = _save_u32(len(output))
@@ -117,7 +118,9 @@ def _repack_level2_group(blob: bytes, replacements: Mapping[int, bytes]) -> byte
         name = blob[pos : pos + 12]
         if name[0] == 0:
             if pending:
-                raise ValueError("U7 save repack: level-2 member index is out of range")
+                raise InvalidDataError(
+                    "U7 save repack: level-2 member index is out of range"
+                )
             output.extend(blob[start:])
             return bytes(output)
         if pos + 16 > len(blob):
@@ -132,7 +135,7 @@ def _repack_level2_group(blob: bytes, replacements: Mapping[int, bytes]) -> byte
         else:
             output.extend(blob[start:end])
         pos, ordinal = end, ordinal + 1
-    raise ValueError("U7 save repack: invalid or unterminated level-2 group")
+    raise InvalidDataError("U7 save repack: invalid or unterminated level-2 group")
 
 
 def _repack_zip_members(layout: U7SaveContainer, updates: Mapping[int, bytes]) -> bytes:
@@ -150,7 +153,7 @@ def _repack_zip_members(layout: U7SaveContainer, updates: Mapping[int, bytes]) -
         else:
             entry = re.match(r"zip#entry=(\d+):", source)
             if entry is None:
-                raise ValueError("U7 save repack: missing ZIP member provenance")
+                raise InvalidDataError("U7 save repack: missing ZIP member provenance")
             direct[int(entry[1])] = payload
     if groups:
         with zipfile.ZipFile(
@@ -173,12 +176,12 @@ def _validate_repacked_members(
         or before.declared_count != after.declared_count
         or len(before.members) != len(after.members)
     ):
-        raise ValueError("U7 save repack: output changed the member structure")
+        raise InvalidDataError("U7 save repack: output changed the member structure")
     if (
         before.zip_comment != after.zip_comment
         or before.group_trailing_data != after.group_trailing_data
     ):
-        raise ValueError(
+        raise InvalidDataError(
             "U7 save repack: output changed ZIP comment/group trailing bytes"
         )
     for original, rewritten in zip(before.members, after.members):
@@ -193,9 +196,11 @@ def _validate_repacked_members(
             rewritten.is_directory,
             rewritten.source,
         ):
-            raise ValueError("U7 save repack: output changed member identity/order")
+            raise InvalidDataError(
+                "U7 save repack: output changed member identity/order"
+            )
         if rewritten.data != updates.get(original.index, original.data):
-            raise ValueError(
+            raise InvalidDataError(
                 "U7 save repack: output member does not match the requested payload"
             )
 
@@ -211,7 +216,7 @@ def _repack_save_level(
     for replacement in replacements:
         index = replacement.member_path[0]
         if index >= len(layout.members):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 save repack: member path {prefix + replacement.member_path} is out of range"
             )
         selected.setdefault(index, []).append(replacement)
@@ -219,7 +224,9 @@ def _repack_save_level(
     for index, requests in selected.items():
         member = layout.members[index]
         if member.is_directory:
-            raise ValueError("U7 save repack: directory entries cannot be replaced")
+            raise InvalidDataError(
+                "U7 save repack: directory entries cannot be replaced"
+            )
         if len(requests[0].member_path) == 1:
             request = requests[0]
             if request.expected_sha256 is not None:
@@ -286,7 +293,9 @@ def repack_u7_save(
         if not isinstance(request.data, bytes):
             raise ValueError("U7 save repack: replacement data must be bytes")
         if any(path[: len(old)] == old or old[: len(path)] == path for old in paths):
-            raise ValueError("U7 save repack: duplicate or overlapping member paths")
+            raise InvalidDataError(
+                "U7 save repack: duplicate or overlapping member paths"
+            )
         paths.append(path)
     changes: list[dict[str, object]] = []
     output = _repack_save_level(data, requests, (), changes)

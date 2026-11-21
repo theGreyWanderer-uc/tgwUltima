@@ -30,6 +30,7 @@ import struct
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.errors import InvalidDataError
 
 SPACE_HEADER_SIZE = 56
 BOUNDARY_PLANE_SIZE = 40
@@ -54,7 +55,7 @@ _CLASSIFIED_AUDIO_BITS = (
 )
 
 
-class U9SpacesError(Exception):
+class U9SpacesError(InvalidDataError):
     """Raised when a used ``spaces.flx`` entry violates its fixed grammar."""
 
 

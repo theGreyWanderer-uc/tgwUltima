@@ -9,10 +9,12 @@ import pytest
 from typer.testing import CliRunner
 
 from titan import _config, cli
+from titan._meta import configured_install
 from titan._setup_config import write_setup_config
+from titan.errors import EXIT_CODES
+from titan.u7 import install as u7_install
 from titan.u7.flex import U7FlexArchive
 from titan.u7.install import inspect_install, install_roots, resolve_u7_path
-from titan.u7 import install as u7_install
 
 try:
     import tomllib
@@ -498,8 +500,9 @@ def test_u9_save_browser_help_mentions_config_default():
 
 
 def test_setup_menu_cancellation_preserves_files(setup_workspace, monkeypatch):
-    from titan import _wizard_ui as ui
     import questionary
+
+    from titan import _wizard_ui as ui
 
     monkeypatch.setattr(ui, "menus_enabled", lambda: True)
 
@@ -509,7 +512,7 @@ def test_setup_menu_cancellation_preserves_files(setup_workspace, monkeypatch):
 
     monkeypatch.setattr(questionary, "path", lambda *args, **kwargs: Prompt())
     result = CliRunner().invoke(cli.app, ["setup"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_CODES["cancelled"], result.output
     assert "Setup cancelled" in result.output
     assert not (setup_workspace / "work/titan.toml").exists()
 
@@ -545,7 +548,7 @@ def test_setup_preserves_custom_settings_and_backs_up_original(
     assert path.with_name("titan.toml.bak").read_bytes() == original
 
 
-def test_setup_keeps_legacy_u8_config_without_adding_overriding_defaults(
+def test_setup_moves_legacy_u8_config_under_u8_without_adding_defaults(
     setup_workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = Path.cwd() / "titan.toml"
@@ -555,8 +558,9 @@ def test_setup_keeps_legacy_u8_config_without_adding_overriding_defaults(
     assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
 
     saved = tomllib.loads(path.read_text())
-    assert "u8" not in saved
-    assert saved["paths"]["fixed"] == "CUSTOM.DAT"
+    assert "game" not in saved and "paths" not in saved
+    assert saved["u8"] == {"game": {"base": "legacy"}, "paths": {"fixed": "CUSTOM.DAT"}}
+    assert "[game]" in path.with_name("titan.toml.bak").read_text()
 
 
 @pytest.mark.parametrize("save_exists", [False, True])
@@ -719,8 +723,21 @@ def test_multi_game_u8_overrides_legacy_and_expands_fallback_paths(
     assert fixed is not None and palette is not None
     assert Path(fixed) == base / "ENGLISH" / "STATIC" / "FIXED.DAT"
     assert Path(palette) == base / "ENGLISH" / "STATIC" / "FALLBACK.PAL"
-    assert saved["u8"]["paths"] == saved["paths"]
-    assert saved["u8"]["game"] == saved["game"]
+    # The loaded config has [u8] only; titan's old top-level copy is gone.
+    assert "game" not in saved and "paths" not in saved
+    assert saved["u8"]["game"]["language"] == "ENGLISH"
+
+
+def test_legacy_flat_config_loads_as_u8(setup_workspace: Path, capsys) -> None:
+    base = setup_workspace / "u8"
+    path = setup_workspace / "flat.toml"
+    path.write_text(f'[game]\nbase="{base.as_posix()}"\n[paths]\nfixed="FIXED.DAT"\n')
+    saved = _config.load_config(str(path))
+    assert set(saved) == {"u8"}
+    assert Path(_config.cfg("fixed")) == base / "ENGLISH" / "STATIC" / "FIXED.DAT"
+    assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
+    out = capsys.readouterr().out
+    assert "[u8.paths]" in out and "old U8-only layout" in out
 
 
 def test_setup_writer_keeps_previous_backups(setup_workspace: Path) -> None:
@@ -901,17 +918,17 @@ def test_shared_workflows_fall_back_to_exult_for_missing_configured_paths(
         lambda game: {"base": root, "static": root / "STATIC"},
     )
     expected = root / "STATIC/PALETTES.FLX"
+    install = configured_install(section)
+    wizard_config = shape_wizard.ShapeWizardConfig(game=game, install=install)
     assert resolve_u7_path(game, "palette") == expected
-    assert shape_wizard._static_path(game) == str(root / "STATIC")
+    assert shape_wizard._static_path(wizard_config) == str(root / "STATIC")
     assert u7_install.resolve_u7_static_and_palette(game) == (
         str(root / "STATIC"),
         str(expected),
     )
     assert u7_install.resolve_u7_text_flx(game) == str(root / "STATIC/TEXT.FLX")
-    assert resolve_game_palette(game).colors[0] == (80, 121, 161)
-    assert shape_wizard._palette(shape_wizard.ShapeWizardConfig(game=game)).colors[
-        0
-    ] == (80, 121, 161)
+    assert resolve_game_palette(game, install=install).colors[0] == (80, 121, 161)
+    assert shape_wizard._palette(wizard_config).colors[0] == (80, 121, 161)
 
 
 def test_missing_explicit_palette_is_an_error_even_with_exult(
@@ -925,6 +942,167 @@ def test_missing_explicit_palette_is_an_error_even_with_exult(
     )
     with pytest.raises(FileNotFoundError):
         resolve_game_palette("BG", str(setup_workspace / "missing.pal"))
+
+
+def test_u7_configured_install_is_what_commands_use(setup_workspace, monkeypatch):
+    root = _u7_install(setup_workspace / "game")
+    bundle = setup_workspace / "exult_bg.flx"
+    bundle.write_bytes(b"")
+    exult = _u7_install(setup_workspace / "exult-game")
+    monkeypatch.setattr(
+        "titan.u7.install.exult_game_paths",
+        lambda game: {"base": exult, "static": exult / "STATIC"},
+    )
+    monkeypatch.setattr(
+        _config,
+        "_config",
+        {
+            "u7bg": {
+                "game": {"base": str(root), "variant": "blackgate"},
+                "paths": {"text": "STATIC/NOPE.FLX", "gamedat": "gamedat"},
+            },
+            "exult": {"paths": {"bg_flx": str(bundle)}},
+        },
+    )
+    install = configured_install("u7bg")
+    assert install.root == root
+    assert install.resources["static"] == root / "STATIC"
+    assert install.resources["palette"] == root / "STATIC/PALETTES.FLX"
+    # A missing configured file falls back, and the setting is still reported.
+    assert install.resources["text"] == root / "STATIC/TEXT.FLX"
+    assert install.problems["text"] == "NOT FOUND"
+    # Exult creates a configured gamedat on first run: kept, and reported.
+    assert install.resources["gamedat"] == root / "gamedat"
+    assert install.problems["gamedat"] == "NOT FOUND"
+    assert install.resources["exult_flx"] == bundle
+    assert install.configured == {"text", "gamedat"}
+    assert install.settings == {"variant": "blackgate"}
+    assert u7_install.resolve_u7_static_and_palette("BG") == (
+        str(root / "STATIC"),
+        str(root / "STATIC/PALETTES.FLX"),
+    )
+    assert u7_install.resolve_u7_gamedat("BG") == str(root / "gamedat")
+    assert u7_install.resolve_u7_exult_flx("BG") == str(bundle)
+    # The configured TEXT.FLX is missing, so a selected STATIC's own wins.
+    assert u7_install.resolve_u7_text_flx("BG", str(exult / "STATIC")) == str(
+        exult / "STATIC/TEXT.FLX"
+    )
+
+
+def test_u7_configured_install_without_config_uses_exult(setup_workspace, monkeypatch):
+    exult = _u7_install(setup_workspace / "exult-game")
+    monkeypatch.setattr("titan.u7.install.find_exult_flx", lambda name: None)
+    monkeypatch.setattr(
+        "titan.u7.install.exult_game_paths",
+        lambda game: {"base": exult, "static": exult / "STATIC"},
+    )
+    install = configured_install("u7si")
+    assert install.root == exult
+    assert install.resources["static"] == exult / "STATIC"
+    assert not install.problems and not install.configured
+    monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
+    assert configured_install("u7si") is None
+
+
+def test_u7_library_defaults_come_from_the_install_not_config(
+    setup_workspace, monkeypatch
+):
+    from titan.fonts.archive import read_font_archive
+    from titan.fonts.palette import resolve_game_palette
+    from titan.u7 import shape_wizard
+
+    root = _u7_install(setup_workspace / "game")
+    monkeypatch.setattr(_config, "_config", {"u7bg": {"game": {"base": str(root)}}})
+    monkeypatch.setattr("titan.fonts.palette._BUNDLED_PAL_DIRS", {})
+    assert resolve_game_palette("BG") is None
+    assert shape_wizard._static_path(shape_wizard.ShapeWizardConfig()) is None
+    install = configured_install("u7bg")
+    assert resolve_game_palette("BG", install=install) is not None
+    config = shape_wizard.ShapeWizardConfig(install=install)
+    assert shape_wizard._static_path(config) == str(root / "STATIC")
+
+    base = U7FlexArchive()
+    base.records = [b"base0", b"base1"]
+    base.save(str(root / "STATIC/FONTS.VGA"))
+    patch = setup_workspace / "mods/example/patch/fonts.vga"
+    patch.parent.mkdir(parents=True)
+    sparse = U7FlexArchive()
+    sparse.records = [b"", b"mine"]
+    sparse.save(str(patch))
+    monkeypatch.setattr("titan.fonts.archive.game_paths", lambda game: None)
+    with pytest.raises(ValueError, match="Cannot resolve FONTS.VGA base"):
+        read_font_archive(patch)
+    assert read_font_archive(patch, install=install).records == [b"base0", b"mine"]
+
+
+def test_u7_exult_bundles_come_from_the_record_not_library_config(
+    setup_workspace, monkeypatch
+):
+    bundle = setup_workspace / "custom/exult_bg.flx"
+    common = setup_workspace / "custom/exult.flx"
+    bundle.parent.mkdir()
+    bundle.write_bytes(b"")
+    common.write_bytes(b"")
+    monkeypatch.setattr("titan.u7.install.find_exult_flx", lambda name: None)
+    monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
+    root = _u7_install(setup_workspace / "game")
+    monkeypatch.setattr(
+        _config,
+        "_config",
+        {
+            "u7bg": {"game": {"base": str(root)}},
+            "exult": {"paths": {"bg_flx": str(bundle), "flx": str(common)}},
+        },
+    )
+    install = configured_install("u7bg")
+    assert install.resources["exult_flx"] == bundle
+    assert install.resources["exult_common_flx"] == common
+    assert u7_install.resolve_u7_exult_flx("BG") == str(bundle)
+    # What library loaders fall back to ignores [exult.paths].
+    assert u7_install.default_u7_exult_flx("BG") is None
+
+
+def test_library_modules_read_no_config():
+    """Only the CLI/UI layer and each game's install module read ``titan.toml``.
+
+    Library code gets an install record or explicit paths from its caller
+    (``titan._meta.configured_install``). Covers every titan package; the
+    interactive U7 world picker is the one exception.
+    """
+    import re
+
+    import titan
+
+    package = Path(titan.__file__).parent
+    reads = re.compile(
+        r"\bresolve_u7_(path|static_and_palette|text_flx|gamedat|exult_flx|"
+        r"mod_gamedat|mod_archive)\(|\bget_config\(|\bexult_cfg\(|"
+        r"\bgame_config_path\(|\bu8_cfg\(|\bu8_section\(\)"
+    )
+    allowed = {"u7/target_picker.py"}
+    folders = sorted(
+        path
+        for path in package.iterdir()
+        if (path / "__init__.py").is_file() and path.name != "third_party"
+    )
+    games = {"md", "u6", "u7", "u8", "u9", "uo", "uw1", "uw2", "fonts"}
+    assert games <= {folder.name for folder in folders}
+    offenders = []
+    for folder in folders:
+        for path in sorted(folder.rglob("*.py")):
+            relative = path.relative_to(package)
+            name = relative.as_posix()
+            if (
+                name in allowed
+                or "cli" in relative.parts[:-1]
+                or path.name in ("cli.py", "install.py", "installs.py")
+                or name.endswith("_ui.py")
+            ):
+                continue
+            for number, line in enumerate(path.read_text("utf-8").splitlines(), 1):
+                if reads.search(line):
+                    offenders.append(f"{name}:{number}: {line.strip()}")
+    assert offenders == []
 
 
 def test_config_reports_actual_resolved_paths_and_does_not_mask_bad_settings(
@@ -1076,3 +1254,101 @@ def test_relative_mod_paths_agree_between_inspector_and_workflows(
     assert all(
         "[OK]" in line for line in lines if "gamedat " in line or "archive " in line
     )
+
+
+@pytest.mark.parametrize("mod", ["Unplayed", "Nope"])
+def test_u7_mod_commands_stop_instead_of_reading_the_base_game(
+    setup_workspace, monkeypatch, capsys, mod
+):
+    from titan.u7.cli import npcs, saves
+
+    root = _u7_install(setup_workspace / "game")
+    (root / "gamedat").mkdir()
+    (root / "gamedat" / "npc.dat").touch()
+    path = Path.cwd() / "titan.toml"
+    path.write_text(
+        f'[u7bg.game]\nbase="{root.as_posix()}"\n'
+        '[u7bg.mods.Unplayed.paths]\nroot="mods/Unplayed"\n'
+    )
+    monkeypatch.setattr(_config, "_config", _config.load_config(str(path)))
+
+    def base_game(*_args, **_kwargs):
+        raise AssertionError("--mod fell back to the base game's GAMEDAT")
+
+    monkeypatch.setattr(u7_install, "resolve_u7_gamedat", base_game)
+    report = SimpleNamespace(game="bg", mod=mod, static=str(root / "STATIC"))
+    assert npcs.cmd_monster_report(report) == 1
+    assert saves.cmd_gamedat_info(SimpleNamespace(game="bg", mod=mod)) == 1
+    errors = capsys.readouterr().err
+    assert errors.count(f"ERROR: --mod {mod}: no ") == 2
+    if mod == "Nope":
+        assert "no BG mod or Exult game has that name (found: Unplayed;" in errors
+    else:
+        assert "Has it been played in Exult yet?" in errors
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_u7_gamedat_prefers_configured_then_exult_then_install(
+    setup_workspace, monkeypatch, configured
+):
+    root = _u7_install(setup_workspace / "game")
+    profile = setup_workspace / "local" / "Exult" / "blackgate" / "gamedat"
+    for folder in (root / "gamedat", profile):
+        folder.mkdir(parents=True)
+        (folder / "npc.dat").touch()
+    path = Path.cwd() / "titan.toml"
+    lines = [f'[u7bg.game]\nbase="{root.as_posix()}"\n']
+    if configured:
+        lines.append(f'[u7bg.paths]\ngamedat="{(root / "gamedat").as_posix()}"\n')
+    path.write_text("".join(lines))
+    monkeypatch.setattr(_config, "_config", _config.load_config(str(path)))
+    expected = root / "gamedat" if configured else profile
+    assert Path(u7_install.resolve_u7_gamedat("bg")) == expected
+    record = configured_install("u7bg")
+    assert record.resources["savegame"] == profile.parent  # Exult's save folder
+    assert cli.cmd_config(SimpleNamespace(config=str(path), edit=False)) == 0
+
+
+def test_u7_exult_cfg_runtime_paths_feed_the_record(setup_workspace, monkeypatch):
+    root = _u7_install(setup_workspace / "game")
+    live = root / "live"
+    live.mkdir()
+    (live / "npc.dat").touch()
+    (setup_workspace / "saves").mkdir()
+    cfg = setup_workspace / "exult.cfg"
+    cfg.write_text(
+        f"<config><disk><game><blackgate><path>{root}</path>"
+        f"<savegame_path>{setup_workspace / 'saves'}</savegame_path>"
+        "<gamedat_path>live</gamedat_path></blackgate></game></disk></config>"
+    )
+    monkeypatch.setattr(u7_install, "find_exult_cfg", lambda: cfg)
+    record = u7_install.configured_install({}, "u7bg")
+    assert record.root == root
+    assert record.resources["gamedat"] == live
+    assert record.resources["savegame"] == setup_workspace / "saves"
+
+
+def test_setup_finds_uo_through_the_install_protocol(
+    setup_workspace, monkeypatch, capsys
+):
+    client = setup_workspace / "UO"
+    client.mkdir()
+    (client / "tiledata.mul").write_bytes(b"\0")
+    prompt = "Ultima Online Classic Client base"
+    _answer_setup(monkeypatch, {prompt: str(client)})
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    path = Path.cwd() / "titan.toml"
+    assert tomllib.loads(path.read_text())["uo"]["game"]["base"] == client.as_posix()
+    # The configured base is the default; a folder without a client is rejected.
+    asked: list[str] = []
+    monkeypatch.setattr("builtins.input", lambda text: asked.append(text) or "")
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    shown = next(text for text in asked if text.startswith(prompt))
+    assert client.as_posix() in shown.replace("\\", "/")
+    assert tomllib.loads(path.read_text())["uo"]["game"]["base"] == client.as_posix()
+    empty = setup_workspace / "not-uo"
+    empty.mkdir()
+    _answer_setup(monkeypatch, {prompt: str(empty)})
+    assert cli.cmd_setup(SimpleNamespace(config=None)) == 0
+    assert "No Ultima Online Classic Client at that path" in capsys.readouterr().out
+    assert tomllib.loads(path.read_text())["uo"]["game"]["base"] == client.as_posix()

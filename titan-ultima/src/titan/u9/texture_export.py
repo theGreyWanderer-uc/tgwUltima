@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from PIL import Image
 
-from titan.u9.cli_paths import paired_u9_texture_key, resolve_u9_input
+from titan._meta import Installation
+from titan.u9.inputs import paired_u9_texture_key, resolve_u9_input
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.install import existing_u9_path
 from titan.u9.palette import U9Palette, U9PaletteError
 from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
 from titan.u9.texture import U9TextureError, decode_frame, parse_texture_set
 from titan.u9.texture_writer import U9TextureWriteError, frame_encoding
+from titan.errors import TitanError
 
 TextureProgress = Callable[[str, int, int, int], None]
 _BITMAP_TIERS = (
@@ -26,7 +27,7 @@ _BITMAP_TIERS = (
 )
 
 
-class U9TextureExportError(ValueError):
+class U9TextureExportError(TitanError, ValueError):
     """Raised when batch texture export cannot find or read its inputs."""
 
 
@@ -39,7 +40,9 @@ class U9TextureExportResult:
     errors: list[dict[str, object]] = field(default_factory=list)
 
 
-def _texture_sources(source: Path, all_tiers: bool) -> list[tuple[Path, str]]:
+def _texture_sources(
+    source: Path, all_tiers: bool, install: Installation | None
+) -> list[tuple[Path, str]]:
     if source.is_file():
         if all_tiers:
             raise U9TextureExportError(
@@ -56,7 +59,7 @@ def _texture_sources(source: Path, all_tiers: bool) -> list[tuple[Path, str]]:
         source = static
     sources = []
     for key, folder in _BITMAP_TIERS:
-        path = resolve_u9_input(None, key, owner=str(source))
+        path = resolve_u9_input(None, key, owner=str(source), install=install)
         if path is not None:
             archive = Path(path)
             if not archive.is_file():
@@ -71,24 +74,6 @@ def _texture_sources(source: Path, all_tiers: bool) -> list[tuple[Path, str]]:
     return sources if all_tiers else sources[:1]
 
 
-def print_texture_export_progress(
-    name: str, completed: int, total: int, images: int
-) -> None:
-    """Show per-archive progress using standard-library terminal output only."""
-    if completed not in (0, total) and completed % max(1, total // 100):
-        return
-    fraction = completed / total if total else 1.0
-    filled = int(24 * fraction)
-    line = (
-        f"{name}: [{'#' * filled}{'-' * (24 - filled)}] "
-        f"{fraction:4.0%} {completed}/{total} entries | {images} PNGs"
-    )
-    if sys.stdout.isatty():
-        print(f"\r{line}", end="\n" if completed == total else "", flush=True)
-    else:
-        print(line, flush=True)
-
-
 def export_texture_archives(
     source: str | Path,
     output: str | Path,
@@ -98,8 +83,12 @@ def export_texture_archives(
     all_tiers: bool = False,
     entry_id: int | None = None,
     progress: TextureProgress | None = None,
+    install: Installation | None = None,
 ) -> U9TextureExportResult:
     """Export every frame from one FLX or a directory's highest available tier.
+
+    *install* (the configured install the CLI passes) supplies configured
+    palettes and SDINFO tables; without it only files beside the source count.
 
     Game roots also select their STATIC folder. Base images are exported unless
     all_mips is requested. Tier preference is bitmap16, bitmapC, then bitmapsh;
@@ -107,7 +96,7 @@ def export_texture_archives(
     source files are read only.
     Missing palettes are errors for paletted frames, never grey fallback images.
     """
-    sources = _texture_sources(Path(source).expanduser().resolve(), all_tiers)
+    sources = _texture_sources(Path(source).expanduser().resolve(), all_tiers, install)
     output = Path(output).expanduser().resolve()
     if palette_path is not None and not Path(palette_path).expanduser().is_file():
         raise U9TextureExportError(f"Palette not found: {palette_path}")
@@ -123,11 +112,13 @@ def export_texture_archives(
         palette_file = (
             str(Path(palette_path).expanduser())
             if palette_path is not None
-            else resolve_u9_input(None, "palette", owner=str(archive_path))
+            else resolve_u9_input(
+                None, "palette", owner=str(archive_path), install=install
+            )
         )
-        table_key = paired_u9_texture_key(str(archive_path))
+        table_key = paired_u9_texture_key(str(archive_path), install)
         table_file = (
-            resolve_u9_input(None, table_key, owner=str(archive_path))
+            resolve_u9_input(None, table_key, owner=str(archive_path), install=install)
             if table_key and table_key.startswith("sdinfo")
             else None
         )

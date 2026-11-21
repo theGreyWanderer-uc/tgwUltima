@@ -16,7 +16,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw
 
-from titan._config import cfg
+from titan._meta import Installation
 from titan._terminal_image import FrameProvider, checkerboard
 from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
@@ -26,9 +26,11 @@ from titan.u8.shape import U8Shape
 from titan.u8.shape_names import load_u8_shape_names
 from titan.u8.typeflag import U8TypeFlags
 from titan.u8.wpnovlay import U8WeaponOverlayData
+from titan.errors import InvalidDataError
 
 U8_SHAPE_ARCHIVES = ("U8SHAPES.FLX", "U8GUMPS.FLX", "U8FONTS.FLX")
-U8_BROWSER_OUTPUT = Path("titan-out/u8_shape_browse_export")
+U8_BROWSER_OUTPUT = "shape-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 def find_u8_browser_file(directory: Path, filename: str) -> Path | None:
@@ -45,9 +47,15 @@ def find_u8_browser_file(directory: Path, filename: str) -> Path | None:
     )
 
 
-def configured_u8_browser_file(directory: Path, key: str) -> Path | None:
-    """Use a configured asset only when it belongs to the selected STATIC owner."""
-    value = cfg(key)
+def configured_u8_browser_file(
+    directory: Path, key: str, install: Installation | None = None
+) -> Path | None:
+    """*install*'s asset *key*, only when it belongs to the selected STATIC owner.
+
+    *install* is the configured install (:func:`titan._meta.configured_install`)
+    the UI passes; without one, nothing is configured.
+    """
+    value = install.resources.get(key) if install is not None else None
     if value:
         path = Path(value).expanduser().resolve()
         if path.parent == directory.resolve():
@@ -61,10 +69,12 @@ class U8ShapeTarget:
     static: Path
 
 
-def discover_u8_shape_targets(directory: Path | None = None) -> list[U8ShapeTarget]:
-    """Discover configured/explicit U8 STATIC owners and installed language variants."""
-    configured = cfg("base", "game")
-    shapes = cfg("u8shapes")
+def discover_u8_shape_targets(
+    directory: Path | None = None, install: Installation | None = None
+) -> list[U8ShapeTarget]:
+    """Discover explicit or configured (*install*) U8 STATIC owners and language variants."""
+    configured = install.root if install is not None and install.root.is_dir() else None
+    shapes = install.resources.get("u8shapes") if install is not None else None
     base = directory or (
         Path(configured).expanduser()
         if configured
@@ -141,11 +151,13 @@ class U8ShapeLibrary:
             return self._shapes[number]
         raw = self.records[number]
         if len(raw) < 6:
-            raise ValueError(f"U8 shape browser: shape {number} has a truncated header")
+            raise InvalidDataError(
+                f"U8 shape browser: shape {number} has a truncated header"
+            )
         count = struct.unpack_from("<H", raw, 4)[0]
         table_end = 6 + count * 6
         if not 0 < count <= 20000 or table_end > len(raw):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U8 shape browser: shape {number} has an invalid frame table"
             )
         offsets = [
@@ -172,14 +184,14 @@ class U8ShapeLibrary:
             offset = int.from_bytes(raw[cell : cell + 3], "little")
             size = struct.unpack_from("<H", raw, cell + 4)[0] + adjustment
             if offset < table_end or size < 18 or offset + size > len(raw):
-                raise ValueError(
+                raise InvalidDataError(
                     f"U8 shape browser: shape {number} frame {index} has invalid bounds"
                 )
             width, height = struct.unpack_from("<hh", raw, offset + 10)
             if width > 0 and height > 0:
                 pixels += width * height
                 if pixels > 16_000_000 or 18 + height * 2 > size:
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"U8 shape browser: shape {number} frame {index} has invalid dimensions"
                     )
         decoded = U8Shape.from_data(raw)
@@ -224,12 +236,17 @@ def load_u8_shape_library(
     anim: Path | None = None,
     wpnovlay: Path | None = None,
     shape_id: int | None = None,
+    install: Installation | None = None,
 ) -> U8ShapeLibrary:
-    """Load owner-bound assets; explicit optional files fail clearly if malformed."""
+    """Load owner-bound assets; explicit optional files fail clearly if malformed.
+
+    Missing companions come from *install* (the configured install) when its
+    files sit beside *path*, else from *path*'s own folder.
+    """
     path = path.expanduser().resolve()
     world = (
         path.name.casefold() == "u8shapes.flx"
-        or path == configured_u8_browser_file(path.parent, "u8shapes")
+        or path == configured_u8_browser_file(path.parent, "u8shapes", install)
         or typeflag is not None
         or anim is not None
     )
@@ -245,11 +262,11 @@ def load_u8_shape_library(
         }
     palette = (
         palette
-        or configured_u8_browser_file(path.parent, "palette")
+        or configured_u8_browser_file(path.parent, "palette", install)
         or find_u8_browser_file(path.parent, "U8PAL.PAL")
     )
     if palette is None:
-        raise ValueError("U8 shape browser: no owner U8PAL.PAL; supply --palette")
+        raise InvalidDataError("U8 shape browser: no owner U8PAL.PAL; supply --palette")
     colour = U8Palette.from_file(str(palette))
     sources = [path, palette.resolve()]
     issues = []
@@ -264,7 +281,7 @@ def load_u8_shape_library(
         source = explicit
         if source is None and world:
             source = configured_u8_browser_file(
-                path.parent, filename.split(".")[0].lower()
+                path.parent, filename.split(".")[0].lower(), install
             )
             source = source or find_u8_browser_file(path.parent, filename)
         if source is None:
@@ -273,14 +290,14 @@ def load_u8_shape_library(
             if filename == "TYPEFLAG.DAT":
                 raw = source.read_bytes()
                 if len(raw) % 8 or len(raw) > 2048 * 8:
-                    raise ValueError(
+                    raise InvalidDataError(
                         "TYPEFLAG.DAT requires complete eight-byte records, at most 2048"
                     )
                 props = {entry.shape_num: entry for entry in U8TypeFlags.parse(raw)}
             elif filename == "ANIM.DAT":
                 animations = U8AnimData.from_file(source)
             elif animations is None:
-                raise ValueError("WPNOVLAY.DAT requires valid paired ANIM.DAT")
+                raise InvalidDataError("WPNOVLAY.DAT requires valid paired ANIM.DAT")
             else:
                 overlays = U8WeaponOverlayData.from_file(source, animations)
             sources.append(source.resolve())
@@ -373,7 +390,7 @@ def aligned_u8_sequence(
     )
     for step, index in enumerate(indices):
         if not 0 <= index < len(shape.frames):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U8 shape browser: animation step {step} references missing frame {index}"
             )
         frame = shape.frames[index]
@@ -410,7 +427,7 @@ def aligned_u8_sequence(
             weapon = slot.directions[direction][step]
             wshape = library.shape(slot.shape_num)
             if weapon.frame >= len(wshape.frames):
-                raise ValueError(
+                raise InvalidDataError(
                     f"U8 shape browser: overlay references missing frame {weapon.frame}"
                 )
             wframe = wshape.frames[weapon.frame]

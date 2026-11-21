@@ -13,6 +13,7 @@ from titan import _wizard_ui as ui
 from titan.u7 import shape_browser as browser
 from titan.u7 import shape_browser_ui as browser_ui
 from titan.u7 import shape_properties as props
+from titan.u7 import shape_properties_ui as props_ui
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
@@ -82,7 +83,7 @@ def library(tmp_path, monkeypatch):
     (patch / "shape_info.txt").write_text(
         "%%section field_type\n:150/-1\n%%endsection\n%%section barge_type\n:150/3\n%%endsection\n"
     )
-    monkeypatch.setattr("titan.u7.install.resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr("titan.u7.install.default_u7_exult_flx", lambda game: None)
     monkeypatch.setattr(ui, "menus_enabled", lambda: False)
     return browser.load_library(target, "si", static / "SHAPES.VGA")
 
@@ -170,7 +171,7 @@ def test_search_obeys_active_filter_and_can_clear_it(library, monkeypatch):
     assert browser.matching_shapes(library, "") == [150]
     assert browser.matching_shapes(library, "151") == []
     actions(monkeypatch, ["A"])
-    props.choose_filter(library)
+    props_ui.choose_filter(library)
     assert browser.matching_shapes(library, "151") == [151]
 
 
@@ -253,17 +254,17 @@ def test_report_paging_and_export_are_read_only(library, tmp_path, monkeypatch, 
     output = tmp_path / "report.json"
     actions(monkeypatch, ["N", "B", "E", "Q"])
     monkeypatch.setattr(ui, "path", lambda *a, **k: str(output))
-    props.show_properties(library, library.shape(150), 150, 0)
+    props_ui.show_properties(library, library.shape(150), 150, 0)
     assert "page 2/" in capsys.readouterr().out
     assert json.loads(output.read_text())["shape"] == 150
     assert all(path.read_bytes() == data for path, data in before.items())
     with pytest.raises(FileExistsError):
-        props.export_report(library, report(library))
+        props_ui.export_report(library, report(library))
     monkeypatch.setattr(
         ui, "path", lambda *a, **k: str(library.target.patch / "report.json")
     )
     with pytest.raises(ValueError, match="outside"):
-        props.export_report(library, report(library))
+        props_ui.export_report(library, report(library))
 
 
 def test_browser_properties_and_filtered_next_shape(library, monkeypatch, capsys):

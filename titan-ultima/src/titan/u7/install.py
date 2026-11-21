@@ -9,9 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from titan import _config
+from titan._meta import Installation
 from titan.fonts.exult_cfg import find_exult_cfg, parse_exult_cfg
 from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
+from titan.errors import InvalidDataError
 
 RESOURCE_NAMES = {
     "shapes": "SHAPES.VGA",
@@ -24,13 +26,14 @@ U7_PATH_KINDS = {
     "gamedat": "save",
     "savegame": "save-dir",
     # Keys only mod sections ([u7bg.mods."<name>".paths]) use.
+    "saves": "save-dir",
     "root": "install-dir",
     "patch": "install-dir",
     "archive": "install-file",
 }
 """``[u7bg.paths]``/``[u7si.paths]`` and mod ``paths`` key -> kind (see
 :func:`titan._meta.path_kind`). ``gamedat`` is a ``save``: Exult's live game
-state, which ``--gamedat`` also reads from a save file."""
+state, which ``--save`` also reads from a save file."""
 _SKIP_DIRS = {"mods", "patch", "saves", "gamedat", "static"}
 
 
@@ -124,7 +127,7 @@ def check_resource(key: str, path: Path) -> str:
         if key != "palette" or path.suffix.lower() != ".pal":
             archive = U7FlexArchive.from_file(str(path), strict=True)
             if not any(archive.records):
-                raise ValueError("Archive has no populated records")
+                raise InvalidDataError("Archive has no populated records")
         if key == "palette":
             U7Palette.from_file(str(path), palette_index=0)
     except (OSError, ValueError) as error:
@@ -152,24 +155,70 @@ def inspect_install(
 
 
 def exult_game_paths(game: str) -> dict[str, Path]:
-    """Read Exult's configured base and STATIC, tolerating unavailable config."""
+    """What Exult uses for the game, tolerating unavailable config.
+
+    ``base`` and ``static`` from ``exult.cfg``. ``savegame`` (Exult's save
+    folder) and ``gamedat`` (its live game state) from ``exult.cfg``'s
+    ``savegame_path``/``gamedat_path``, else Exult's defaults: the profile's
+    ``blackgate``/``serpentisle`` folder and its ``gamedat``. These two are
+    where Exult would write; they need not exist.
+    """
     cfg_path = find_exult_cfg()
-    if cfg_path is None:
-        return {}
-    try:
-        paths = parse_exult_cfg(cfg_path, game)
-    except (OSError, ValueError):
-        return {}
+    paths = None
+    if cfg_path is not None:
+        try:
+            paths = parse_exult_cfg(cfg_path, game)
+        except (OSError, ValueError):
+            paths = None
     result = {}
-    if paths.game_path:
+    if paths and paths.game_path:
         result["base"] = existing_path(Path(paths.game_path).expanduser())
-    if paths.static_path:
+    if paths and paths.static_path:
         result["static"] = existing_path(Path(paths.static_path).expanduser())
+    if cfg_path is None:
+        profile = exult_profile_dir()
+    elif cfg_path.name == ".exult.cfg":
+        profile = cfg_path.parent / ".exult"
+    else:
+        profile = cfg_path.parent
+    base = result.get("base")
+    savegame = _config.resolve_config_path(paths and paths.savegame_path, base) or (
+        profile / exult_game_slug(game) if profile is not None else None
+    )
+    gamedat = _config.resolve_config_path(paths and paths.gamedat_path, base) or (
+        savegame / "gamedat" if savegame is not None else None
+    )
+    if savegame is not None:
+        result["savegame"] = existing_path(savegame)
+    if gamedat is not None:
+        result["gamedat"] = existing_path(gamedat)
     return result
 
 
-def u7_path_candidates(game: str, key: str) -> list[Path]:
-    """Try Titan settings, discovered nested roots, then Exult's game settings."""
+def _u7_section(game: str, config: dict) -> dict:
+    return config.get("u7bg" if game.upper() == "BG" else "u7si", {})
+
+
+def _section_path(section: dict, key: str) -> Path | None:
+    """``[<section>.paths] key`` resolved against the section's base."""
+    return _config.resolve_config_path(
+        section.get("paths", {}).get(key), section.get("game", {}).get("base")
+    )
+
+
+def u7_path_candidates(
+    game: str,
+    key: str,
+    config: dict | None = None,
+    *,
+    _roots: list[Path] | None = None,
+    _exult: dict[str, Path] | None = None,
+) -> list[Path]:
+    """Try Titan settings, discovered nested roots, then Exult's game settings.
+
+    *config* defaults to the loaded ``titan.toml``.
+    """
+    section = _u7_section(game, _config.get_config() if config is None else config)
     candidates: list[Path] = []
 
     def add(path: Path | None) -> None:
@@ -178,10 +227,9 @@ def u7_path_candidates(game: str, key: str) -> list[Path]:
             if path not in candidates:
                 candidates.append(path)
 
-    add(_config.game_config_path(game, key))
-    section = _config.get_config().get("u7bg" if game.upper() == "BG" else "u7si", {})
+    add(_section_path(section, key))
     base = _config.resolve_config_path(section.get("game", {}).get("base"))
-    static = _config.game_config_path(game, "static")
+    static = _section_path(section, "static")
     if key in RESOURCE_NAMES:
         if static:
             add(static / RESOURCE_NAMES[key])
@@ -190,7 +238,7 @@ def u7_path_candidates(game: str, key: str) -> list[Path]:
     elif key == "static" and base:
         add(base / "STATIC")
     if base and key in {"static", *RESOURCE_NAMES}:
-        for root in install_roots(base):
+        for root in install_roots(base) if _roots is None else _roots:
             if install_game(root) != game.upper() and root != base:
                 continue
             add(
@@ -198,7 +246,7 @@ def u7_path_candidates(game: str, key: str) -> list[Path]:
                 if key == "static"
                 else root / "STATIC" / RESOURCE_NAMES[key]
             )
-    exult = exult_game_paths(game)
+    exult = exult_game_paths(game) if _exult is None else _exult
     if "static" in exult:
         if key == "static":
             add(exult["static"])
@@ -207,13 +255,35 @@ def u7_path_candidates(game: str, key: str) -> list[Path]:
     return candidates
 
 
-def resolve_u7_path(game: str, key: str) -> Path | None:
-    """Return the first usable automatic path; a missing setting cannot mask Exult."""
-    for path in u7_path_candidates(game, key):
+def configured_u7_path(
+    game: str,
+    key: str,
+    config: dict | None = None,
+    *,
+    _roots: list[Path] | None = None,
+    _exult: dict[str, Path] | None = None,
+) -> Path | None:
+    """The first usable automatic path; a missing setting cannot mask Exult.
+
+    This is U7's rule for ``static`` and the STATIC archives
+    (:data:`RESOURCE_NAMES`); :func:`configured_install` applies it.
+    """
+    for path in u7_path_candidates(game, key, config, _roots=_roots, _exult=_exult):
         exists = path.is_dir() if key in {"static", "gamedat"} else path.is_file()
         if exists:
             return path
     return None
+
+
+def resolve_u7_path(game: str, key: str) -> Path | None:
+    """:func:`configured_u7_path` in the loaded ``titan.toml``, through the
+    configured install (``titan._meta.configured_install``)."""
+    install = _configured(game)
+    path = install.resources.get(key) if install is not None else None
+    if path is None:
+        return None
+    exists = path.is_dir() if key in {"static", "gamedat"} else path.is_file()
+    return path if exists else None
 
 
 def is_u7_folder_name(name: str) -> bool:
@@ -384,9 +454,13 @@ def _has_runtime_npc(path: Path) -> bool:
 
 
 def preferred_u7_gamedat(base_value: str, slug: str, exult_profile: Path | None) -> str:
-    """Prefer a live GAMEDAT from Exult's profile, then the install's own."""
+    """Prefer Exult's live GAMEDAT (see :func:`exult_game_paths`), then the
+    install's own, as :func:`configured_u7_gamedat` does without a setting."""
     candidates: list[Path] = []
-    if exult_profile is not None:
+    runtime = exult_game_paths("BG" if slug == "blackgate" else "SI").get("gamedat")
+    if runtime is not None:
+        candidates.append(runtime)
+    elif exult_profile is not None:
         candidates.append(exult_profile / slug / "gamedat")
     if base_value:
         candidates.append(Path(base_value) / "gamedat")
@@ -397,57 +471,36 @@ def preferred_u7_gamedat(base_value: str, slug: str, exult_profile: Path | None)
     return "gamedat/"
 
 
-def _best_saves_dir(runtime_root: Path | None) -> Path | None:
-    if runtime_root is None or not runtime_root.is_dir():
-        return None
-    counts: dict[Path, int] = {}
-    for save_file in runtime_root.rglob("*.sav"):
-        if save_file.is_file():
-            counts[save_file.parent] = counts.get(save_file.parent, 0) + 1
-    if not counts:
-        return None
-    return sorted(
-        counts.items(),
-        key=lambda item: (-item[1], len(str(item[0])), str(item[0]).lower()),
-    )[0][0]
-
-
 def discover_u7_mod_sources(
     base_value: str, slug: str, exult_profile: Path | None
 ) -> list[dict[str, str]]:
-    """Find each installed mod's runtime root, GAMEDAT, saves and initgame archive."""
+    """Setup's ``[u7xx.mods]`` tables: each mod under the install's ``mods``
+    folder (:func:`titan.u7.mods.configured_u7_mods`) with its Exult profile
+    folder, played GAMEDAT, saves and ``initgame.dat`` where they exist."""
+    from titan.u7.mods import configured_u7_mods
+
     if not base_value:
         return []
-    install_mods = Path(base_value) / "mods"
+    install_mods = existing_path(Path(base_value) / "mods")
     if not install_mods.is_dir():
         return []
-
+    game_id = "u7bg" if slug == "blackgate" else "u7si"
+    config = {game_id: {"game": {"base": base_value}}}
     sources: list[dict[str, str]] = []
-    for mod_dir in sorted(p for p in install_mods.iterdir() if p.is_dir()):
-        item: dict[str, str] = {"name": mod_dir.name}
-        runtime_root = (
-            exult_profile / slug / "mods" / mod_dir.name
-            if exult_profile is not None
-            else None
-        )
-        if runtime_root is not None and runtime_root.is_dir():
-            item["root"] = str(runtime_root).replace("\\", "/")
-        runtime_gamedat = runtime_root / "gamedat" if runtime_root is not None else None
-        install_gamedat = mod_dir / "gamedat"
-        if runtime_gamedat is not None and _has_runtime_npc(runtime_gamedat):
-            item["gamedat"] = str(runtime_gamedat).replace("\\", "/")
-        elif _has_runtime_npc(install_gamedat):
-            item["gamedat"] = str(install_gamedat).replace("\\", "/")
-        saves_dir = _best_saves_dir(runtime_root)
-        if saves_dir is not None:
-            item["saves"] = str(saves_dir).replace("\\", "/")
-        for archive in (
-            mod_dir / "patch" / "initgame.dat",
-            mod_dir / "data" / "initgame.dat",
-        ):
-            if archive.is_file():
-                item["archive"] = str(archive).replace("\\", "/")
-                break
+    for mod in sorted(configured_u7_mods(config, game_id), key=lambda m: m.key.lower()):
+        if mod.kind != "mod" or mod.install_dir is None:
+            continue
+        if mod.install_dir.parent.resolve() != install_mods.resolve():
+            continue
+        item: dict[str, str] = {"name": mod.key}
+        if mod.profile_dir is not None and mod.profile_dir.is_dir():
+            item["root"] = mod.profile_dir.as_posix()
+        if mod.played:
+            item["gamedat"] = mod.gamedat.as_posix()
+        if mod.saves is not None and any(mod.saves.glob("*.sav")):
+            item["saves"] = mod.saves.as_posix()
+        if mod.archive is not None:
+            item["archive"] = mod.archive.as_posix()
         if len(item) > 1:
             sources.append(item)
     return sources
@@ -473,6 +526,40 @@ def find_exult_flx(flx_name: str) -> Path | None:
     return next((p for p in candidates if p.is_file()), None)
 
 
+_VARIANTS = {"u7bg": "blackgate", "u7si": "serpentisle"}
+_GAME_LETTERS = {"u7bg": "BG", "u7si": "SI"}
+
+
+def u7_config_section(
+    variant: str,
+    base: str,
+    paths: dict[str, str],
+    gamedat: str,
+    mod_sources: list[dict[str, str]],
+) -> dict:
+    """One game's ``game``, ``paths`` and ``mods`` tables (see :func:`u7_setup_lines`)."""
+    section: dict = {
+        "game": {"base": base, "variant": variant},
+        "paths": {
+            **{key: paths[key] for key in ("static", *RESOURCE_NAMES)},
+            "gamedat": gamedat,
+        },
+    }
+    mods = {
+        item["name"]: {
+            "paths": {
+                key: item[key]
+                for key in ("gamedat", "saves", "root", "archive")
+                if key in item
+            }
+        }
+        for item in mod_sources
+    }
+    if mods:
+        section["mods"] = mods
+    return section
+
+
 def u7_setup_lines(
     section_name: str,
     variant: str,
@@ -482,62 +569,271 @@ def u7_setup_lines(
     mod_sources: list[dict[str, str]],
 ) -> list[str]:
     """Render one game's ``[u7xx.game]``, ``[u7xx.paths]`` and mod sections."""
-    lines = [
-        "",
-        f"[{section_name}.game]",
-        f'base     = "{base}"',
-        f'variant  = "{variant}"',
-        "",
-        f"[{section_name}.paths]",
-        f'static   = "{paths["static"]}"',
-        f'shapes   = "{paths["shapes"]}"',
-        f'palette  = "{paths["palette"]}"',
-        f'text     = "{paths["text"]}"',
-        f'gamedat  = "{gamedat}"',
-    ]
-    for item in mod_sources:
-        lines += [
-            "",
-            f'[{section_name}.mods."{item["name"]}".paths]',
-        ]
-        if "gamedat" in item:
-            lines.append(f'gamedat  = "{item["gamedat"]}"')
-        if "saves" in item:
-            lines.append(f'saves    = "{item["saves"]}"')
-        if "root" in item:
-            lines.append(f'root     = "{item["root"]}"')
-        if "archive" in item:
-            lines.append(f'archive  = "{item["archive"]}"')
-    return lines
+    from titan._setup_config import section_lines
+
+    return section_lines(
+        {section_name: u7_config_section(variant, base, paths, gamedat, mod_sources)}
+    )
+
+
+def u7_manual_config_section(static_path: str, variant: str) -> dict:
+    """One game's tables from a manually entered STATIC folder."""
+    static_p = Path(static_path).expanduser().absolute()
+    static_norm = static_p.as_posix()
+    return {
+        "game": {"base": static_p.parent.as_posix(), "variant": variant},
+        "paths": {
+            "static": static_norm,
+            **{key: f"{static_norm}/{name}" for key, name in RESOURCE_NAMES.items()},
+            "gamedat": (static_p.parent / "gamedat").as_posix(),
+        },
+    }
 
 
 def u7_manual_setup_lines(static_path: str, variant: str) -> list[str]:
     """Render a game's sections from a manually entered STATIC folder."""
-    static_norm = Path(static_path).expanduser().absolute().as_posix()
-    static_p = Path(static_norm)
-    base_guess = static_p.parent.as_posix()
-    gamedat_guess = str(static_p.parent / "gamedat").replace("\\", "/")
+    from titan._setup_config import section_lines
+
     section_name = "u7bg" if variant == "blackgate" else "u7si"
+    return section_lines({section_name: u7_manual_config_section(static_path, variant)})
+
+
+def as_installation(game_id: str, selected: U7Installation) -> Installation:
+    """The :class:`~titan._meta.Installation` for a :class:`U7Installation`."""
+    return Installation(
+        game_id,
+        selected.root,
+        dict(selected.paths),
+        {key: status for key, status in selected.checks.items() if status != "OK"},
+        {"variant": _VARIANTS[game_id]},
+    )
+
+
+def install_candidates(config: dict, game_id: str) -> list[Path]:
+    """Install protocol: configured, Exult-registered, GOG, Heroic and manual
+    folders. They can hold either game; :func:`discover_installs` sorts them."""
+    return u7_install_candidates(config)[0]
+
+
+def discover_installs(path: Path, game_id: str) -> list[Installation]:
+    """Install protocol: *game_id* roots within two levels of *path*.
+
+    A root's game comes from Exult's settings, then its folder name. When
+    *path* is itself a root that no hint places in either game, it counts as
+    the requested one: choosing a folder explicitly chooses the game.
+    """
+    game = _GAME_LETTERS[game_id]
+    hints: dict[Path, str] = {}
+    statics: dict[Path, Path] = {}
+    for letter in ("BG", "SI"):
+        exult = exult_game_paths(letter)
+        if "base" in exult:
+            hints[exult["base"].absolute()] = letter
+            if "static" in exult:
+                statics[exult["base"].absolute()] = exult["static"]
+    candidate = existing_path(path.expanduser().absolute())
+    roots = [root.absolute() for root in install_roots(candidate)]
+    if candidate in statics and not roots:
+        roots = [candidate]
+    matching = [
+        root for root in roots if (hints.get(root) or install_game(root)) == game
+    ]
+    if not matching and candidate in roots and candidate not in hints:
+        matching = [candidate]
     return [
-        "",
-        f"[{section_name}.game]",
-        f'base     = "{base_guess}"',
-        f'variant  = "{variant}"',
-        "",
-        f"[{section_name}.paths]",
-        f'static   = "{static_norm}"',
-        f'shapes   = "{static_norm}/SHAPES.VGA"',
-        f'palette  = "{static_norm}/PALETTES.FLX"',
-        f'text     = "{static_norm}/TEXT.FLX"',
-        f'gamedat  = "{gamedat_guess}"',
+        as_installation(game_id, inspect_install(root, game, static=statics.get(root)))
+        for root in matching
     ]
 
 
-def resolve_u7_static_and_palette(game: str) -> tuple[str | None, str | None]:
-    """Share verified config/nested-install/Exult paths with the shape wizard."""
-    static = resolve_u7_path(game, "static")
-    palette = resolve_u7_path(game, "palette")
+def install_config(install: Installation) -> dict:
+    """Install protocol: the game's tables as setup writes them, with the
+    preferred GAMEDAT and any mods found under the install."""
+    variant = _VARIANTS[install.game_id]
+    base = install.root.as_posix()
+    profile = exult_profile_dir()
+    paths = {
+        key: path.relative_to(install.root).as_posix()
+        if path.is_relative_to(install.root)
+        else path.as_posix()
+        for key, path in install.resources.items()
+    }
+    return u7_config_section(
+        variant,
+        base,
+        paths,
+        preferred_u7_gamedat(base, variant, profile),
+        discover_u7_mod_sources(base, variant, profile),
+    )
+
+
+def configured_u7_gamedat(
+    game: str, config: dict | None = None, *, _exult: dict | None = None
+) -> Path | None:
+    """U7's ``gamedat`` rule: ``[<section>.paths] gamedat`` as configured (it
+    need not exist yet), else Exult's live GAMEDAT when it holds a played game
+    (``npc.dat``; see :func:`exult_game_paths`), else the base's own
+    ``gamedat`` folder."""
+    section = _u7_section(game, _config.get_config() if config is None else config)
+    base = section.get("game", {}).get("base")
+    base_path = Path(str(base)).expanduser() if base else None
+    configured = section.get("paths", {}).get("gamedat")
+    if configured:
+        path = Path(str(configured)).expanduser()
+        if path.is_absolute() or base_path is None:
+            return path
+        return base_path / path
+    runtime = (exult_game_paths(game) if _exult is None else _exult).get("gamedat")
+    if runtime is not None and _has_runtime_npc(runtime):
+        return runtime
+    if base_path is not None:
+        for name in ("gamedat", "GAMEDAT"):
+            candidate = base_path / name
+            if candidate.is_dir():
+                return candidate
+    return None
+
+
+def default_u7_exult_flx(game: str) -> str | None:
+    """A standard Exult install's ``exult_bg.flx``/``exult_si.flx``, or ``None``.
+
+    What library loaders use when given no bundle. It reads no ``titan.toml``:
+    an ``[exult.paths]`` bundle comes from the caller (``resolve_u7_exult_flx``,
+    or ``configured_install(...).resources["exult_flx"]``).
+    """
+    found = find_exult_flx(f"exult_{'bg' if game.lower() == 'bg' else 'si'}.flx")
+    return str(found) if found else None
+
+
+def configured_u7_exult_flx(game: str, config: dict | None = None) -> Path | None:
+    """Exult's per-game bundle: ``[exult.paths] bg_flx``/``si_flx`` when it
+    exists, else a standard Exult install's ``exult_bg.flx``/``exult_si.flx``."""
+    game_key = "bg" if game.lower() == "bg" else "si"
+    loaded = _config.get_config() if config is None else config
+    configured = loaded.get("exult", {}).get("paths", {}).get(f"{game_key}_flx")
+    if configured and Path(configured).is_file():
+        return Path(configured)
+    return find_exult_flx(f"exult_{game_key}.flx")
+
+
+def configured_install(config: dict, game_id: str) -> Installation | None:
+    """Install protocol hook: what U7 commands use by default.
+
+    ``resources`` hold ``static`` and the STATIC archives from
+    :func:`configured_u7_path` (the configured path, then the base's own
+    STATIC, nested roots and Exult's game settings: a configured path that
+    doesn't exist falls back rather than masking Exult), ``gamedat`` from
+    :func:`configured_u7_gamedat` (kept even when it doesn't exist yet, since
+    Exult creates it), ``savegame`` (as configured, else Exult's save folder
+    when it exists, else the folder holding GAMEDAT), any other ``[<section>.paths]`` key that exists, and
+    ``exult_flx`` (:func:`configured_u7_exult_flx`), and ``exult_common_flx``
+    (``[exult.paths] flx``, Exult's ``exult.flx``) when set. ``problems`` reports
+    each ``[<section>.paths]`` entry that doesn't exist (``"NOT FOUND"``), even
+    when a fallback stands in for it. ``root`` is
+    the configured base, else Exult's base for the game, else ``Path()``.
+    ``None`` when neither the config nor Exult provides the game.
+    """
+    game = _GAME_LETTERS[game_id]
+    section = _u7_section(game, config)
+    declared = [
+        key
+        for key, value in section.get("paths", {}).items()
+        if isinstance(value, (str, Path))
+    ]
+    base = _config.resolve_config_path(section.get("game", {}).get("base"))
+    roots = install_roots(base) if base else []
+    exult = exult_game_paths(game)
+    resources: dict[str, Path] = {}
+    problems: dict[str, str] = {}
+    for key in ("static", *RESOURCE_NAMES):
+        path = configured_u7_path(game, key, config, _roots=roots, _exult=exult)
+        if path is not None:
+            resources[key] = path
+        setting = _section_path(section, key) if key in declared else None
+        if setting is not None and existing_path(setting) != path:
+            problems[key] = "NOT FOUND"
+    gamedat = configured_u7_gamedat(game, config, _exult=exult)
+    if gamedat is not None:
+        resources["gamedat"] = gamedat
+        if not gamedat.is_dir():
+            problems["gamedat"] = "NOT FOUND"
+    for key in declared:
+        if key in resources or key in problems:
+            continue
+        path = _section_path(section, key)
+        if path is not None and path.exists():
+            resources[key] = path
+        else:
+            problems[key] = "NOT FOUND"
+    if "savegame" not in resources and "savegame" not in problems:
+        saves = exult.get("savegame")
+        if saves is not None and saves.is_dir():
+            resources["savegame"] = saves
+        elif gamedat is not None and gamedat.is_dir():
+            resources["savegame"] = gamedat.parent
+    runtime_only = {"gamedat", "savegame"}
+    if base is None and not set(resources) - runtime_only and not problems:
+        return None
+    exult_flx = configured_u7_exult_flx(game, config)
+    if exult_flx is not None:
+        resources["exult_flx"] = exult_flx
+    common = config.get("exult", {}).get("paths", {}).get("flx")
+    if common and Path(common).expanduser().is_file():
+        resources["exult_common_flx"] = Path(common).expanduser()
+    settings = {"variant": _VARIANTS[game_id]}
+    settings.update(
+        (key, str(value))
+        for key, value in section.get("game", {}).items()
+        if key != "base" and isinstance(value, (str, int, float, bool))
+    )
+    return Installation(
+        game_id,
+        base or exult.get("base") or Path(),
+        resources,
+        problems,
+        settings,
+        frozenset(declared),
+    )
+
+
+def _configured(game: str) -> Installation | None:
+    """The configured install for ``"BG"``/``"SI"`` (``titan._meta.configured_install``)."""
+    from titan._meta import configured_install as configured
+
+    return configured("u7bg" if game.upper() == "BG" else "u7si")
+
+
+def u7_static_and_palette(
+    install: Installation | None,
+) -> tuple[str | None, str | None]:
+    """*install*'s STATIC folder and PALETTES.FLX, as strings."""
+    resources = install.resources if install is not None else {}
+    static, palette = resources.get("static"), resources.get("palette")
     return str(static) if static else None, str(palette) if palette else None
+
+
+def u7_text_flx(
+    install: Installation | None, static_dir: str | None = None
+) -> str | None:
+    """TEXT.FLX: the configured one when it exists, else *static_dir*'s own,
+    else whatever *install* found."""
+    text = install.resources.get("text") if install is not None else None
+    if (
+        text is not None
+        and "text" in install.configured
+        and "text" not in install.problems
+    ):
+        return str(text)
+    if static_dir:
+        selected = existing_path(Path(static_dir) / "TEXT.FLX")
+        if selected.is_file():
+            return str(selected)
+    return str(text) if text else None
+
+
+def resolve_u7_static_and_palette(game: str) -> tuple[str | None, str | None]:
+    """The configured install's STATIC and PALETTES.FLX (:func:`u7_static_and_palette`)."""
+    return u7_static_and_palette(_configured(game))
 
 
 def resolve_u7_patch_base_static(
@@ -573,53 +869,25 @@ def resolve_u7_patch_base_static(
 
 
 def resolve_u7_text_flx(game: str, static_dir: str | None = None) -> str | None:
-    """Resolve TEXT.FLX path from config, with fallback to STATIC dir."""
-    configured = _config.game_config_path(game, "text")
-    if configured and existing_path(configured).is_file():
-        return str(existing_path(configured))
-    if static_dir:
-        selected = existing_path(Path(static_dir) / "TEXT.FLX")
-        if selected.is_file():
-            return str(selected)
-    path = resolve_u7_path(game, "text")
-    return str(path) if path else None
+    """The configured install's TEXT.FLX (:func:`u7_text_flx`)."""
+    return u7_text_flx(_configured(game), static_dir)
 
 
 def resolve_u7_gamedat(game: str) -> str | None:
-    """Resolve loose GAMEDAT path from multi-game config for BG/SI."""
-    cfg = _config.get_config() or {}
-    section_key = "u7bg" if game.lower() == "bg" else "u7si"
-    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
-    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
-    paths_cfg = section.get("paths", {}) if isinstance(section, dict) else {}
-
-    base = game_cfg.get("base") if isinstance(game_cfg, dict) else None
-    base_path = Path(str(base)).expanduser() if base else None
-
-    configured = paths_cfg.get("gamedat") if isinstance(paths_cfg, dict) else None
-    if configured:
-        path = Path(str(configured)).expanduser()
-        if path.is_absolute() or base_path is None:
-            return str(path)
-        return str(base_path / path)
-
-    if base_path is not None:
-        for name in ("gamedat", "GAMEDAT"):
-            candidate = base_path / name
-            if candidate.is_dir():
-                return str(candidate)
-    return None
+    """The configured install's loose GAMEDAT (:func:`configured_u7_gamedat`)."""
+    install = _configured(game)
+    gamedat = install.resources.get("gamedat") if install is not None else None
+    return str(gamedat) if gamedat else None
 
 
 def resolve_u7_exult_flx(game: str) -> str | None:
-    """Resolve installed Exult per-game FLX bundle path."""
-    game_key = "bg" if game.lower() == "bg" else "si"
-    configured = _config.exult_cfg(f"{game_key}_flx")
-    if configured and Path(configured).is_file():
-        return configured
-
-    found = find_exult_flx(f"exult_{game_key}.flx")
-    return str(found) if found else None
+    """The Exult bundle the configured install uses (:func:`configured_u7_exult_flx`)."""
+    install = _configured(game)
+    if install is None:
+        bundle = configured_u7_exult_flx(game)
+    else:
+        bundle = install.resources.get("exult_flx")
+    return str(bundle) if bundle else None
 
 
 def resolve_ucxt_intrinsics_data(
@@ -654,45 +922,33 @@ def exult_game_slug(game: str) -> str:
     return "blackgate" if game.lower() == "bg" else "serpentisle"
 
 
-def resolve_u7_mod_gamedat(game: str, mod: str | None) -> str | None:
-    """Resolve per-user Exult runtime GAMEDAT for a base game or mod."""
-    cfg = _config.get_config() or {}
-    section_key = "u7bg" if game.lower() == "bg" else "u7si"
-    section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
-    game_cfg = section.get("game", {}) if isinstance(section, dict) else {}
-    mods_cfg = section.get("mods", {}) if isinstance(section, dict) else {}
-    if mod and isinstance(mods_cfg, dict):
-        mod_cfg = mods_cfg.get(mod, {})
-        if isinstance(mod_cfg, dict):
-            paths_cfg = mod_cfg.get("paths", {})
-            if isinstance(paths_cfg, dict):
-                configured = paths_cfg.get("gamedat")
-                if configured:
-                    path = _config.resolve_config_path(configured, game_cfg.get("base"))
-                    if path and (path / "npc.dat").is_file():
-                        return str(path)
+def _configured_mod(game: str, mod: str | None, config: dict | None):
+    from titan.u7.mods import configured_u7_mods, find_u7_mod
 
-    root = exult_profile_dir()
-    if root is None:
-        return None
-    base = root / exult_game_slug(game)
-    candidate = base / "gamedat" if not mod else base / "mods" / mod / "gamedat"
-    if (candidate / "npc.dat").is_file():
-        return str(candidate)
-
-    base_path = game_cfg.get("base") if isinstance(game_cfg, dict) else None
-    if mod and base_path:
-        install_candidate = Path(str(base_path)).expanduser() / "mods" / mod / "gamedat"
-        if (install_candidate / "npc.dat").is_file():
-            return str(install_candidate)
-    return None
-
-
-def resolve_u7_mod_archive(game: str, mod: str | None) -> str | None:
-    """Resolve configured Exult mod archive data, such as patch/initgame.dat."""
     if not mod:
         return None
-    cfg = _config.get_config() or {}
+    loaded = (_config.get_config() if config is None else config) or {}
+    game_id = "u7bg" if game.lower() == "bg" else "u7si"
+    return find_u7_mod(configured_u7_mods(loaded, game_id), mod)
+
+
+def resolve_u7_mod_gamedat(
+    game: str, mod: str | None, config: dict | None = None
+) -> str | None:
+    """The played GAMEDAT of ``--mod MOD`` (:func:`titan.u7.mods.configured_u7_mods`),
+    or ``None``. *config* defaults to the loaded ``titan.toml``."""
+    found = _configured_mod(game, mod, config)
+    return str(found.gamedat) if found is not None and found.played else None
+
+
+def resolve_u7_mod_archive(
+    game: str, mod: str | None, config: dict | None = None
+) -> str | None:
+    """The ``initgame.dat`` of ``--mod MOD`` (see :func:`resolve_u7_mod_gamedat`)."""
+    found = _configured_mod(game, mod, config)
+    archive = found.archive if found is not None else None
+    return str(archive) if archive is not None and archive.is_file() else None
+    cfg = (_config.get_config() if config is None else config) or {}
     section_key = "u7bg" if game.lower() == "bg" else "u7si"
     section = cfg.get(section_key, {}) if isinstance(cfg, dict) else {}
     game_cfg = section.get("game", {}) if isinstance(section, dict) else {}

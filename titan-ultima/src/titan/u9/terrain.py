@@ -93,6 +93,7 @@ import struct
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 HEADER_SIZE = 0x98
 WIDTH_OFFSET = 0x00
@@ -125,7 +126,7 @@ _TEXTURE_SHIFT = 22
 _TEXTURE_MASK = 0x3FF
 
 
-class U9TerrainError(Exception):
+class U9TerrainError(InvalidDataError):
     """Raised on malformed ``static/terrain.%d`` data."""
 
 

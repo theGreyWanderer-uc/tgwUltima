@@ -11,6 +11,7 @@ from typing import Mapping
 from titan.u7.ireg import U7ObjectFlags, decode_ireg_payload
 from titan.u7.ireg_metadata import U7IregContext
 from titan.u7.ireg_rewrite import U7IregWireRecord, read_ireg_wire_records
+from titan.errors import InvalidDataError
 
 IREG_TREE_MAX_DEPTH = 128
 
@@ -172,7 +173,7 @@ def read_ireg_tree(
         or not isinstance(superchunk, int)
         or not 0 <= superchunk < 144
     ):
-        raise ValueError("IREG tree: superchunk must be an integer in 0..143")
+        raise InvalidDataError("IREG tree: superchunk must be an integer in 0..143")
     if context.game not in ("bg", "si"):
         raise ValueError("IREG tree: game must be bg or si")
     records = read_ireg_wire_records(data, data_format="exult")
@@ -186,7 +187,7 @@ def read_ireg_tree(
     ) -> U7IregTreeScope:
         nonlocal position
         if depth > IREG_TREE_MAX_DEPTH:
-            raise ValueError("IREG tree: nesting exceeds 128 lists")
+            raise InvalidDataError("IREG tree: nesting exceeds 128 lists")
         events: list[U7IregTreeObject | U7IregWireRecord] = []
         last: int | None = None
         index_word: int | None = None
@@ -194,7 +195,7 @@ def read_ireg_tree(
             record = records[position]
             position += 1
             if record.raw == b"\xff\x02":
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree: FF02 is an actor-only terminator, not a world-stream control"
                 )
             if record.kind == "control" and record.raw in (b"\0", b"\1"):
@@ -222,7 +223,7 @@ def read_ireg_tree(
                 else payload[2] + (payload[3] & 3) * 256
             )
             if context.tfa is None or context.tfa.get(shape) is None:
-                raise ValueError(
+                raise InvalidDataError(
                     f"IREG tree: TFA class unavailable for shape {shape} at {record.offset}"
                 )
             decoded = decode_ireg_payload(
@@ -234,11 +235,11 @@ def read_ireg_tree(
                 context=context,
             )
             if decoded is None or decoded.context_warnings:
-                raise ValueError(
+                raise InvalidDataError(
                     f"IREG tree: ambiguous/unsupported class layout at {record.offset}"
                 )
             if decoded.kind == "egg" and owner is not None:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree: contained eggs are outside the supported world ownership model"
                 )
             child_scope = (
@@ -265,7 +266,7 @@ def read_ireg_tree(
             events.append(node)
             last = record.offset
         if owner is not None:
-            raise ValueError(
+            raise InvalidDataError(
                 f"IREG tree: missing child-list terminator for object {owner}"
             )
         return U7IregTreeScope(None, tuple(events))
@@ -288,5 +289,5 @@ def read_ireg_tree(
         MappingProxyType({offset: tuple(rows) for offset, rows in owned.items()}),
     )
     if result.to_bytes() != data:
-        raise ValueError("IREG tree: internal lossless reconstruction mismatch")
+        raise InvalidDataError("IREG tree: internal lossless reconstruction mismatch")
     return result

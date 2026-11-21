@@ -45,6 +45,7 @@ import os
 
 import numpy as np
 from PIL import Image
+from titan.errors import InvalidDataError
 
 GLYPHS_PER_FONT = 128
 GLYPH_BYTES = 8
@@ -53,7 +54,7 @@ FONT_BYTES = GLYPHS_PER_FONT * GLYPH_BYTES  # 1024
 FILE_SIZE = FONT_BYTES * 2  # 2048
 
 
-class U6FontError(Exception):
+class U6FontError(InvalidDataError):
     """Raised when font data is too short."""
 
 

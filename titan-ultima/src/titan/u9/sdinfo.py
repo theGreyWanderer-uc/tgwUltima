@@ -81,12 +81,13 @@ __all__ = ["U9SdInfo", "U9SdInfoError", "U9SdInfoRecord"]
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 RECORD_SIZE = 48
 RECORD_STRUCT = "<12I"
 
 
-class U9SdInfoError(Exception):
+class U9SdInfoError(InvalidDataError):
     """Raised on malformed ``static/sdInfo*.flx`` data."""
 
 

@@ -6,10 +6,10 @@ import struct
 
 from typer.testing import CliRunner
 
+from titan.u7 import install as u7_install
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map_inventory import build_u7_map_inventory, write_u7_map_inventory
-from titan.u7 import install as u7_install
 
 
 def _cell(shape: int, frame: int) -> bytes:
@@ -178,6 +178,7 @@ def test_cli_area_options_name_the_output(tmp_path, monkeypatch):
         u7_install, "resolve_u7_static_and_palette", lambda game: (None, None)
     )
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TITAN_DATA", str(tmp_path / "data"))
     result = CliRunner().invoke(
         u7_app,
         [
@@ -192,8 +193,8 @@ def test_cli_area_options_name_the_output(tmp_path, monkeypatch):
         ],
     )
     assert result.exit_code == 0, result.output
-    assert (
-        tmp_path / "u7data" / "map-inventory" / "bg-map00-c0_0_0_0" / "placements.csv"
-    ).is_file()
+    exports = tmp_path / "data" / "u7" / "exports" / "map-inventory"
+    assert (exports / "bg-map00-c0_0_0_0" / "placements.csv").is_file()
+    assert not (tmp_path / "u7data").exists()
     bad = CliRunner().invoke(u7_app, ["map-inventory", str(static), "--sc", "0x90"])
     assert bad.exit_code == 1

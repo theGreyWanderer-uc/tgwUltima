@@ -75,7 +75,10 @@ def test_gamedat_option_unpacks_for_a_command(
     assert result.exit_code == 2 and "Not a U7 save" in result.output
 
 
-def test_exult_saves_are_listed_per_game(tmp_path: Path) -> None:
+def test_exult_saves_are_listed_per_game(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
     (tmp_path / "gamedat").mkdir()
     (tmp_path / "exult00bg.sav").write_bytes(_exult_zip("Trinsic", FILES))
     (tmp_path / "exult12bg.sav").write_bytes(
@@ -95,3 +98,19 @@ def test_exult_saves_are_listed_per_game(tmp_path: Path) -> None:
     ]
     assert all(s.slot == str(s.path) for s in bg)
     assert [s.name for s in _meta.list_saves("u7si", config)] == ["Monitor"]
+
+
+def test_exult_save_folder_is_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    game = tmp_path / "game"
+    (game / "gamedat").mkdir(parents=True)
+    exult = tmp_path / "Exult" / "blackgate"
+    exult.mkdir(parents=True)
+    (exult / "exult03bg.sav").write_bytes(_exult_zip("Britain", FILES))
+    monkeypatch.setattr(
+        "titan.u7.install.exult_game_paths",
+        lambda g: {"savegame": exult, "gamedat": exult / "gamedat"},
+    )
+    config = {"u7bg": {"game": {"base": game.as_posix()}}}
+    assert [s.name for s in _meta.list_saves("u7bg", config)] == ["Britain"]

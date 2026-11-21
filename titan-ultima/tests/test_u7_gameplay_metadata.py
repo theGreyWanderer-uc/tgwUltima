@@ -12,6 +12,7 @@ from typing import Callable
 import pytest
 
 from titan.u7 import cli
+from titan.u7 import install as u7_install
 from titan.u7.gameplay_metadata import U7GameplayMetadata, read_gameplay_table
 from titan.u7.monster import (
     U7MonsterDefinitions,
@@ -23,8 +24,6 @@ from titan.u7.monster import (
 )
 from titan.u7.save import U7ReadyTypes
 from titan.u7.shapeinfo import U7Ammos, U7Armors, U7Weapons
-from titan.u7 import install as u7_install
-
 
 READERS: list[tuple[Callable[[bytes], U7GameplayMetadata], int]] = [
     (U7Weapons.from_bytes, 21),
@@ -254,6 +253,7 @@ def test_cli_table_diagnostics_do_not_contaminate_csv(
 ) -> None:
     (tmp_path / "ARMOR.DAT").write_bytes(b"\x02" + record(10))
     monkeypatch.setattr(u7_install, "resolve_u7_exult_flx", lambda game: None)
+    monkeypatch.setattr(u7_install, "default_u7_exult_flx", lambda game: None)
     args = SimpleNamespace(
         static=str(tmp_path), kind="armor", game="si", output=None, exult_flx=None
     )

@@ -24,6 +24,8 @@ from titan.u9.script_research import export_script_research_bundle
 from titan.u9.trigger_operands import operand_summary
 from titan.u9.triggers import U9Triggers, U9TriggersError, trigger_opcode_info
 from titan._meta import meta
+from titan._config import DEFAULT_OUTPUT, export_output
+from titan.errors import exit_code
 
 
 def _load_triggers(filepath: str) -> Optional[U9Triggers]:
@@ -44,11 +46,7 @@ def cmd_trigger_list(args: SimpleNamespace) -> int:
     if triggers is None:
         return 1
 
-    try:
-        entries = triggers.triggers()
-    except U9TriggersError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    entries = triggers.triggers()
 
     if not args.all:
         entries = [t for t in entries if not t.is_empty]
@@ -79,11 +77,7 @@ def cmd_trigger_show(args: SimpleNamespace) -> int:
     if triggers is None:
         return 1
 
-    try:
-        trigger = triggers.trigger(args.id)
-    except U9TriggersError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    trigger = triggers.trigger(args.id)
 
     if trigger is None:
         print(f"Trigger {args.id} is an unused slot.")
@@ -131,12 +125,8 @@ def cmd_trigger_opcodes(args: SimpleNamespace) -> int:
     if triggers is None:
         return 1
 
-    try:
-        histogram = triggers.opcode_histogram()
-        unterminated = triggers.unterminated_trigger_ids()
-    except U9TriggersError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    histogram = triggers.opcode_histogram()
+    unterminated = triggers.unterminated_trigger_ids()
 
     total = sum(histogram.values())
     print(f"{args.file} -- {total} body record(s), {len(histogram)} distinct opcode(s)")
@@ -172,12 +162,8 @@ def cmd_activity_list(args: SimpleNamespace) -> int:
     if activities is None:
         return 1
 
-    try:
-        entries = activities.activities()
-        incomplete = activities.incomplete_activity_ids()
-    except U9ActivityError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    entries = activities.activities()
+    incomplete = activities.incomplete_activity_ids()
 
     shown = entries[: args.limit] if args.limit else entries
     print(
@@ -204,11 +190,7 @@ def cmd_activity_show(args: SimpleNamespace) -> int:
     if activities is None:
         return 1
 
-    try:
-        activity = activities.activity(args.id)
-    except U9ActivityError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    activity = activities.activity(args.id)
 
     if activity is None:
         print(f"Activity {args.id} is an unused slot.")
@@ -272,12 +254,8 @@ def cmd_activity_opcodes(args: SimpleNamespace) -> int:
     if activities is None:
         return 1
 
-    try:
-        opcodes = activities.opcode_histogram()
-        names = activities.name_histogram()
-    except U9ActivityError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    opcodes = activities.opcode_histogram()
+    names = activities.name_histogram()
 
     total = sum(opcodes.values())
     print(
@@ -322,7 +300,7 @@ def cmd_script_research_export(args: SimpleNamespace) -> int:
         )
     except (OSError, U9TriggersError, U9ActivityError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Wrote {len(paths)} script research file(s) to {args.output}")
     for path in paths:
@@ -330,6 +308,7 @@ def cmd_script_research_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def trigger_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     all: Annotated[
@@ -345,6 +324,7 @@ def trigger_list_cmd(
     raise SystemExit(cmd_trigger_list(SimpleNamespace(file=file, all=all, limit=limit)))
 
 
+@meta(results=("text",))
 def trigger_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     id: Annotated[
@@ -355,6 +335,7 @@ def trigger_show_cmd(
     raise SystemExit(cmd_trigger_show(SimpleNamespace(file=file, id=id)))
 
 
+@meta(results=("text",))
 def trigger_opcodes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     limit: Annotated[
@@ -366,6 +347,7 @@ def trigger_opcodes_cmd(
     raise SystemExit(cmd_trigger_opcodes(SimpleNamespace(file=file, limit=limit)))
 
 
+@meta(results=("text",))
 def activity_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     limit: Annotated[
@@ -377,6 +359,7 @@ def activity_list_cmd(
     raise SystemExit(cmd_activity_list(SimpleNamespace(file=file, limit=limit)))
 
 
+@meta(results=("text",))
 def activity_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     id: Annotated[int, typer.Argument(help="Activity set ID (the FLX entry index)")],
@@ -385,6 +368,7 @@ def activity_show_cmd(
     raise SystemExit(cmd_activity_show(SimpleNamespace(file=file, id=id)))
 
 
+@meta(results=("text",))
 def activity_opcodes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     limit: Annotated[
@@ -403,11 +387,14 @@ def script_research_export_cmd(
     output: Annotated[
         str,
         typer.Option(
-            "-o", "--output", help="Directory for CSV and JSON evidence tables"
+            "-o",
+            "--output-dir",
+            help="Directory for CSV and JSON evidence tables" + DEFAULT_OUTPUT,
         ),
-    ] = "u9-script-research",
+    ] = None,
 ) -> None:
     """Export lossless trigger/activity evidence tables for external analysis."""
+    output = export_output(output, "u9", "script-research-export")
     raise SystemExit(
         cmd_script_research_export(
             SimpleNamespace(

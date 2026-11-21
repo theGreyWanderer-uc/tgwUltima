@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Literal, Sequence
 
 from titan.u7.flex import U7FlexArchive
+from titan.errors import InvalidDataError
 
 TextEncoding = Literal["auto", "utf-8", "latin-1"]
 SIVariant = Literal["unmapped", "original", "silver-seed", "beta"]
@@ -17,7 +18,7 @@ MAX_TEXT_INDEX = 0xFFFF
 def decode_text_source(data: bytes, encoding: TextEncoding = "auto") -> tuple[str, str]:
     """Decode authoring text as UTF-8 when valid, with explicit legacy Latin-1 support."""
     if encoding not in ("auto", "utf-8", "latin-1"):
-        raise ValueError(f"U7 text encoding is unsupported: {encoding}")
+        raise InvalidDataError(f"U7 text encoding is unsupported: {encoding}")
     if encoding != "latin-1":
         try:
             return data.decode("utf-8-sig"), "utf-8"
@@ -45,7 +46,7 @@ class U7TextMessages:
         max_index: int = MAX_TEXT_INDEX,
     ) -> U7TextMessages:
         if len(data) > 32 * 1024 * 1024:
-            raise ValueError("U7 text file exceeds the 32 MiB inspection limit")
+            raise InvalidDataError("U7 text file exceeds the 32 MiB inspection limit")
         text, selected_encoding = decode_text_source(data, encoding)
         result = cls({"": {}}, selected_encoding, data)
         section = ""
@@ -57,7 +58,7 @@ class U7TextMessages:
             if line.startswith("%%section"):
                 name = line[len("%%section") :].lstrip(" \t\b")
                 if section or not name or name in result.sections:
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"U7 text invalid or duplicate section at line {number}"
                     )
                 section = name
@@ -65,7 +66,9 @@ class U7TextMessages:
                 continue
             if line.startswith("%%endsection"):
                 if not section:
-                    raise ValueError(f"U7 text unmatched endsection at line {number}")
+                    raise InvalidDataError(
+                        f"U7 text unmatched endsection at line {number}"
+                    )
                 section = ""
                 continue
             key, colon, value = line.partition(":")
@@ -91,17 +94,17 @@ class U7TextMessages:
                     else r"[0-9]+"
                 )
                 if not re.fullmatch(pattern, key):
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"U7 text invalid unsigned index at line {number}: {key!r}"
                     )
                 index = int(key, base)
             if not 0 <= index <= max_index:
-                raise ValueError(
+                raise InvalidDataError(
                     f"U7 text index {index} exceeds inspection limit {max_index}"
                 )
             result.sections[section][index] = value
         if section:
-            raise ValueError(f"U7 text unclosed section: {section}")
+            raise InvalidDataError(f"U7 text unclosed section: {section}")
         return result
 
     @classmethod
@@ -182,10 +185,10 @@ class U7TextBanks:
     ) -> U7TextBanks:
         game = game.lower()
         if game not in ("bg", "si"):
-            raise ValueError(f"U7 text requires BG or SI: {game}")
+            raise InvalidDataError(f"U7 text requires BG or SI: {game}")
         remap_si_misc_index(0, si_variant)
         if game == "bg" and si_variant != "unmapped":
-            raise ValueError("SI text variants cannot be applied to BG")
+            raise InvalidDataError("SI text variants cannot be applied to BG")
         count = len(records)
         cap = 0x600 if game == "bg" else 0x686
         shapes = [""] * min(count, 0x400)

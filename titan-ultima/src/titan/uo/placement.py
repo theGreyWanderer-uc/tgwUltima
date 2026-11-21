@@ -53,6 +53,7 @@ from titan.uo.housing import HouseFootprint, house_footprint
 from titan.uo.map import UOMap
 from titan.uo.multi import UOMulti
 from titan.uo.tiledata import UOTileData
+from titan.errors import InvalidDataError
 
 # RunUO HousePlacement.m_RoadIDs: inclusive land ID ranges.
 ROAD_LAND_RANGES = (
@@ -209,7 +210,7 @@ def _parse_region_rects(path, facet_name, forbidding_types):
         None,
     )
     if facet is None:
-        raise ValueError(f"no <Facet name={facet_name!r}> in {path}")
+        raise InvalidDataError(f"no <Facet name={facet_name!r}> in {path}")
     types = NO_HOUSING_REGION_TYPES if forbidding_types is None else forbidding_types
     rects: list[tuple] = []
     counts: dict[str, int] = {}

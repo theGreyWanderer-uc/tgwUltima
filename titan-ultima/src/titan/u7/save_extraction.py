@@ -8,6 +8,7 @@ from pathlib import Path, PureWindowsPath
 from typing import Sequence
 
 from titan.u7.save_container import U7SaveMember
+from titan.errors import InvalidDataError
 
 
 def _is_windows_reserved(windows: PureWindowsPath) -> bool:
@@ -37,7 +38,7 @@ def extract_u7_save_members(
     original: list[Path] = []
     for member in selected:
         if member.is_directory and member.data:
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 save extraction: directory member has a payload: {member.name!r}"
             )
         windows = PureWindowsPath(member.name)
@@ -57,9 +58,11 @@ def extract_u7_save_members(
                 for part in path.parts
             )
         ):
-            raise ValueError(f"U7 save extraction: unsafe member name {member.name!r}")
+            raise InvalidDataError(
+                f"U7 save extraction: unsafe member name {member.name!r}"
+            )
         if not (root / path).resolve().is_relative_to(root):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 save extraction: member escapes output directory: {member.name!r}"
             )
         original.append(path)
@@ -88,7 +91,7 @@ def extract_u7_save_members(
         allocated.add(candidate.as_posix().casefold())
         target = (root / candidate).resolve()
         if not target.is_relative_to(root):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 save extraction: destination escapes output directory: {candidate}"
             )
         if target.exists() and (not member.is_directory or not target.is_dir()):
@@ -101,7 +104,7 @@ def extract_u7_save_members(
             and path in files
             or any(parent in files or parent.is_file() for parent in path.parents)
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 save extraction: conflicting file/directory destination: {path}"
             )
     manifest = None

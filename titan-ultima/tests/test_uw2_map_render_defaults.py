@@ -16,7 +16,7 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from titan.uw2.cli import map_render_cmd
+from titan.uw2.cli.maps import map_render_cmd
 from titan.uw2.map_pipeline import _render_options
 
 MAX_WALL_HEIGHT = 24.0

@@ -23,6 +23,7 @@ from titan.u7.gump_metadata import (
     load_u7_gump_sources,
     read_u7_gump_metadata,
 )
+from titan.errors import InvalidDataError
 
 
 @dataclass
@@ -69,7 +70,7 @@ class U7ContainerGumps:
         # Exult uses this rectangle for unrecognised container gump shapes.
         area = self.areas.get(number, U7GumpArea(52, 22, 60, 40))
         if area.width <= 0 or area.height <= 0:
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 container gump: invalid storage area for gump {number}"
             )
         return number, area, source
@@ -188,7 +189,7 @@ def compose_u7_container_gump(
     if layout not in {"random", "saved"}:
         raise ValueError("U7 container gump: layout must be random or saved")
     if area.width <= 0 or area.height <= 0:
-        raise ValueError("U7 container gump: invalid storage area")
+        raise InvalidDataError("U7 container gump: invalid storage area")
     ax, ay = area.x + gump_origin[0], area.y + gump_origin[1]
     left, top = max(0, ax), max(0, ay)
     right, bottom = (

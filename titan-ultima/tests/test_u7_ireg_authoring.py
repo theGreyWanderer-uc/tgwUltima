@@ -13,10 +13,10 @@ import pytest
 from typer.testing import CliRunner
 
 from titan.u7.cli import u7_app
-from titan.u7.ireg_authoring import U7IregCreate, U7IregConvert, create_ireg_record
+from titan.u7.ireg_authoring import U7IregConvert, U7IregCreate, create_ireg_record
+from titan.u7.ireg_metadata import U7IregContext
 from titan.u7.ireg_tree import read_ireg_tree
 from titan.u7.ireg_tree_edit import U7IregDelete, U7IregReparent, edit_ireg_tree
-from titan.u7.ireg_metadata import U7IregContext
 from titan.u7.typeflag import U7TypeFlags
 
 

@@ -5,15 +5,14 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
+import pytest
+from PIL import Image, ImageDraw, ImageFont
 from typer.testing import CliRunner
 
 from titan.u7 import cli as u7_cli
-from titan.u7.flex import U7FlexArchive
-from titan.u7.map import U7MapRenderer
 from titan.u7 import install as u7_install
-import pytest
-from PIL import Image, ImageDraw, ImageFont
-from titan.u7.map import _frame_to_rgba, _load_map_font
+from titan.u7.flex import U7FlexArchive
+from titan.u7.map import U7MapRenderer, _frame_to_rgba, _load_map_font
 from titan.u7.shape import U7Shape
 
 

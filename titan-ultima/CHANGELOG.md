@@ -6,6 +6,239 @@ work for the next release.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **The configured install, for front ends:** `titan._meta.configured_install()`
+  returns the install your `titan.toml` selects for a game, with its files
+  and any `[<game>.paths]` overrides, and the configured paths that are
+  missing. Commands now take their default game folders from it in one
+  shared place, now for U6, Martian Dreams, both Ultima Underworlds,
+  Ultima 7 (both games), Ultima Online, Ultima 8 and Ultima 9; nothing changes in how the
+  commands behave, except that some setup mistakes now exit 78 with the
+  setup hint and the missing path, like other setup problems (was 1): a
+  `[uo.game] install` naming a missing `[uo.installs.*]` entry, and a
+  `[u8.paths]` map file or `[u9.paths]` file that doesn't exist.
+- **U8 front-end metadata fix:** the browsers' and `npc-animation-report`'s
+  `--shapes` (and `map-browse --globs`) are now described as the
+  `U8SHAPES.FLX` / `GLOB.FLX` archives they take, not as extracted folders.
+- **Every file and folder input is described for front ends:** each
+  command's file and folder parameters now say what they take (a game file
+  or folder from the install, the user's own file or folder, a save, a
+  working folder or a palette) through `titan._meta.command_metas()`, and
+  install inputs name the install file that fills them (`resources`, e.g.
+  `u7 shape-export FILE` → `shapes`). A new `install-dir` kind covers
+  `--gamedir`, U7 `--static` and similar folders. A test fails when a new
+  file or folder parameter has no kind.
+- **Update check:** `titan --version` now tells you when a newer titan is
+  on PyPI, and how to update. It asks PyPI at most once a day, sends nothing
+  about you, and gives up quickly when you're offline. Ordinary commands
+  never check. Set `TITAN_NO_UPDATE_CHECK=1` to turn it off. Front ends can
+  ask too, with `latest_release()` and `is_dev_build()` in `titan._version`.
+- **Front-end metadata for every command:** the 70 commands that had no
+  `@meta` tag now have one, so `titan._meta.command_meta()` describes every
+  visible command. Most of them print a report (`results=("text",)`): the
+  U9 `-info`/`-list`/`-show` inspectors, U6 `lib-list`, `object-list`,
+  `actor-list` and `flags-*`, `u8 save-list`, `uw2 object-info`, and root
+  `flex-info`, `flex-list` and `config`. Some also say what their
+  parameters mean: `u9 save-check --json` is an output file, `u7 map-create
+  --output-root` and `dialogue prepare --workdir` are output folders, and
+  `dialogue validate`/`launch --workdir` read the folder `prepare` writes.
+  A new test fails when a visible command has no tag.
+- **Ultima Underworld in setup:** `titan setup` now finds Ultima Underworld
+  and Ultima Underworld II installs, including both games inside a GOG
+  "Ultima Underworld 1+2" folder, and writes `[uw1.game]` / `[uw2.game]`.
+  `titan config` shows `[uw1.game]` too.
+- **One way to find installs, for every game:** front ends can find and check
+  installs without running setup's prompts. `titan._meta` now has
+  `find_installs(game_id)`, `inspect_install(game_id, path)`,
+  `discover_installs(game_id, path)` and `install_candidates(game_id)`, which
+  return `Installation` records (root, resources found, problems, settings),
+  and `install_config(install)`, which gives the `titan.toml` section to
+  write. Every game with a config section supports them: U6, Martian Dreams,
+  UW1, UW2, U7 Black Gate and Serpent Isle, U8, U9 and UO. Setup uses the same
+  code, so the CLI and front ends agree on what counts as an install.
+
+### Changed
+
+- **Library code no longer prints:** saving a Flex archive, reading a
+  damaged one, importing an oversized U7 frame and writing animation
+  metadata now report through logging, so code using titan as a library
+  gets no stray output. The commands print the same lines as before, except
+  that these warnings now start `Warning:` (was `WARNING:`), like titan's
+  other warnings. Flex imports still ask whether multi-frame U7 shapes
+  animate; library callers pass a `choose` callback or an explicit choice.
+- **Font creation without the wizard:** the `u7 font-create` wizard now
+  lives in `titan.fonts.wizard_ui`, and `titan.fonts.wizard` holds the work
+  itself with no prompts or printing. Front ends and scripts can build a
+  font from recipe values in memory (`config_from_recipe_data()`, then
+  `create_font()`), or step by step (`render()`, `mapped_glyphs()` for a
+  preview, `encode()`, `write_outputs()`). The command's output is
+  unchanged. `font-create` also reports the shape and archive it writes
+  through `TITAN_RESULTS_FILE`.
+- **Option names now match across games.** The old spellings still work, and
+  `--help` shows only the new ones:
+
+  | Old | New | Where |
+  |---|---|---|
+  | `--gamedir` | `--game-dir` | U6, Martian Dreams, UW1, UW2 |
+  | `--savegame` | `--save` | Martian Dreams |
+  | `--nonfixed` | `--save` | U8 (U9's `--nonfixed`, a region file, is unchanged) |
+  | `--gamedat` | `--save` | U7 commands that read a GAMEDAT folder or Exult save |
+  | `--output` | `--output-dir` | Commands that write a folder of files; `-o` is unchanged |
+  | `--output-root` | `--output-dir` | `u7 map-create`, `u3 map-create` |
+  | `--json` | `--format json` | `uw1 texture-info`, `uw2 map-verify`, `uw2 shape-info`, `u7 save-list` |
+  | `--json FILE` | `-o/--output FILE` | `u9 save-check` |
+
+  Front ends reading `@meta`: parameter names are unchanged except the
+  four `--format` commands above, whose `json_output` is now `output_format`.
+- **U9 NPC commands' `--save` flag** is no longer tagged as a save for front
+  ends: it's an on/off switch saying FILE is a save, not a save to pick.
+- **Config loading:** titan's U8 code now reads `[u8]` directly, and loading
+  a config without U8 settings no longer imports the U8 package. The
+  top-level `[game]`/`[paths]` copy of `[u8]` is kept for older readers
+  outside titan but is deprecated.
+- **Clearer errors and exit codes.** titan's own errors now print as one
+  `ERROR:` line instead of a traceback, and the exit status says what kind of
+  problem it was: `78` titan isn't set up for this (no install configured, a
+  missing configured folder, or an invalid `titan.toml`, with a hint to run
+  `titan config` / `titan setup`), `65` a damaged or unexpected input file,
+  `66` a missing file, `69` unsupported here (or an optional library is
+  missing), `74` a read/write failure, and `70` a bug in titan (the traceback
+  is still printed). Before, most of these exited `1`. An invalid
+  `titan.toml` used to crash with a traceback; it's now reported. For code
+  using titan as a library, every game's error class now derives from
+  `titan.errors` (`TitanError`, `ConfigError`, `InvalidDataError`,
+  `UnsupportedError`), and they keep the built-in types callers already catch.
+- **Default export folders no longer depend on where you run titan.** The U7
+  and U8 browsers, `u8 world-query`/`egg-query`, `u8 npc-animation-report`
+  and `u9 save-browse` used to write to a `titan-out/` folder in the current
+  directory when no `-o` is given; UO exports without a configured output
+  used `uodata/` there. They now write to titan's data folder, under
+  `<game>/exports/<command>` (`titan config` shows the data folder), and
+  still print where things went. Passing `-o` works as before.
+
+- **U7 wizards split into logic and terminal halves.** The interactive parts
+  of `shape-create`, `map-render`'s guided mode, `world-query`, `egg-query`
+  and `container-browse` now live in `titan.u7.shape_wizard_ui`,
+  `map_wizard_ui`, `world_workflow_ui`, `eggs_ui` and `container_ui`; the
+  original modules keep the conversion, rendering and query code, which no
+  longer prints. What you see in the terminal is unchanged. For code that
+  imported them: `run_wizard` (and `run_from_config`, `show_preview` for
+  shapes) moved to the `_ui` modules.
+- **Library progress and warnings go through `logging`.** titan's library
+  code logs to `titan.*` loggers; the CLI shows INFO lines as before and
+  warnings/errors as `Warning: ...` / `ERROR: ...` on stderr. A test now
+  stops new `print`/`input`/terminal-toolkit use in library modules.
+
+### Added (front ends)
+
+- **Run results file:** set `TITAN_RESULTS_FILE` to a path and titan writes
+  `{"outputs": [...], "exit_code": N}` there when a command ends, listing what
+  it wrote. `flex-extract` and `uw1 texture-export` report so far; more
+  commands will follow. `titan._config.export_dir(game, name)` gives the
+  default export folder.
+
+### Fixed
+
+- **`u7 monster-report --game si`:** the world-object part of the report
+  (`monster_world_objects.csv`) was read with Black Gate's shape metadata;
+  it now uses Serpent Isle's.
+- **`u7 monster-report --mod` and `u7 gamedat-info --mod`:** a mod name that is
+  not configured, or a mod with no saved game state yet, quietly used the base
+  game's GAMEDAT. Both commands now stop with an error naming the mod (and, for
+  an unknown name, the configured ones).
+- **U7 mod save folders:** `titan setup` writes each mod's save folder as
+  `saves` under `[u7bg.mods."<name>".paths]`, but the world picker only read
+  `savegame`, so the setting was ignored. The picker now reads `saves` (and
+  still accepts `savegame`), and `titan config` checks it as a save folder.
+- **`u7 monster-report` and `u7 gamedat-info` without `--mod`:** when Exult's
+  profile held a played game, they read it even if `[u7bg.paths] gamedat` /
+  `[u7si.paths] gamedat` named another folder. A configured gamedat now wins, as
+  in every other command.
+
+### Added
+
+- **`titan.protocols`:** small interfaces the games share, for cross-game tools.
+  `Palette` (`colors`, `to_flat_rgb()`, `to_pil_image()`) is met by every
+  game's palette (U6 and MD, U7, U8, U9, UW1, UW2); `IndexedArchive`
+  (`entry_count`, `read(index)`, `None` for an empty slot) by the U8/U7 Flex
+  readers, U9 FLX, U6 `.LIB` and UW2 `.ARK` archives.
+- **`titan u7 mods`:** lists a game's mods and Exult custom games, with the
+  names `--mod` takes, whether each has been played, and its paths
+  (`--format json` for every path). `--mod` completes these names in the shell.
+
+### Changed
+
+- **Exit codes:** commands now exit with the kind of problem they hit instead
+  of `1`: `65` for a damaged or unexpected input file (including a malformed
+  plan or recipe), `66` for a missing file, `73` (new) for an output that
+  already exists without `--force`/`--replace`, `74` for a read/write failure
+  and `78` for setup problems. `1` now means an error of none of those kinds,
+  usually a bad option value. The messages are the same. See "Errors and exit
+  codes" in `cli_reference.md`.
+- **`TITAN_RESULTS_FILE`:** every command with an output file or folder now
+  reports what it wrote (the file, or the folder and the files written into
+  it), not only the three that did before.
+- **Old U8-only config layout:** top-level `[game]`/`[paths]` (titan's
+  original U8-only `titan.toml`) are read as `[u8]`, and `titan setup` now
+  moves them under `[u8]` (keeping a `.bak`). The loaded config no longer has a
+  top-level `game`/`paths` copy of `[u8]`: code reading
+  `get_config()["paths"]` should read `get_config()["u8"]["paths"]`
+  (`titan._config.cfg()` already does). `titan config` notes a file that still
+  uses the old layout.
+- **Faster `import titan`:** the names `titan` re-exports (`FlexArchive`,
+  `U8Shape`, `U7Palette`, ...) now load on first use, so importing any titan
+  module no longer loads the U8 and U7 readers (`import titan._meta`: 0.35 s
+  to 0.06 s). `from titan import U8Shape` works as before.
+- **Deprecated:** the old top-level U8 modules `titan.palette`, `titan.map`,
+  `titan.shape`, `titan.save`, `titan.credits`, `titan.sound`,
+  `titan.typeflag` and `titan.xformpal` warn on import; import from `titan.u8.*`
+  (or `from titan import ...`) instead.
+- **UW1/UW2 palettes:** `to_flat_rgb()` (bytes) and `to_pil_image()`, as in the
+  other games; `flattened_rgb()` and `to_swatch_image()` still work. U8 palette
+  read errors are `U8PaletteError` (still a `ValueError`).
+- **Code layout (no command changes):** U6 and UW2 commands moved from one
+  `cli.py` into `cli/` packages split by topic; the loose U7, U8 and MD
+  `*_cli.py` modules moved into their `cli/` packages; the U7 edit-plan readers
+  (`ireg-tree-edit`, `actor-rewrite`, `save-repack`) are now
+  `titan.u7.edit_plans`.
+- **`titan setup` and Ultima Online:** setup now finds and checks the Classic
+  Client the same way as the other games: your configured base is the default,
+  a folder without client files is rejected (keeping the current setting), and
+  a corrected base is proposed like any other. Before, it offered only the
+  detected client and saved whatever path was typed.
+- **Default output folders:** 24 commands that wrote to a folder (or file) of
+  their own name in the current directory when `-o` was omitted now write to
+  titan's export folder, `<data folder>/<game>/exports/<command>`, as the
+  browsers already did, and print where. They are U6 `tile-export-all`; U7
+  `map-export-json`, `map-inventory`, `palette-export`, `shape-cycle-scan`; U8
+  `map-render-all`, `map-sample-all`, `shape-convert-u7-all`; U9
+  `texture-export-all`, `icon-export-all`, `model-export-all`, `map-atlas`,
+  `animation-library-export`, `script-research-export`, `dimension-csv`,
+  `spaces-csv`, `treedat-csv`, `areas-csv`; UW2 `map-render`, `map-3d-render`,
+  `map-3d-export`, `map-stack`, `model-render`, `model-export`. Pass `-o` to
+  write somewhere else. Commands whose default is the current folder itself
+  (most extract commands) are unchanged.
+- **Ultima 7 mods, one list everywhere:** `--mod`, the world picker (shape,
+  NPC, monster and palette browsers, the map, shape and font wizards) and
+  `titan setup` now find mods the same way: their `.cfg` descriptions and
+  folders in Exult's and the install's `mods` folders, `[u7xx.mods]` tables
+  and Exult custom games.
+  - `--mod` accepts Exult custom games too, and any letter case.
+  - The picker shows each mod's title with the name `--mod` takes, e.g.
+    "BLACK GATE KEYRING (Keyring)".
+- **Ultima 7 GAMEDAT and saves, one rule everywhere:** with no
+  `[u7bg.paths] gamedat` / `[u7si.paths] gamedat` set, every U7 command, the
+  world picker and `titan setup` now use Exult's live game state (`exult.cfg`'s
+  `gamedat_path`, else Exult's profile folder) when it holds a played game, then
+  the install's own `gamedat`. Before, most commands used only the install's
+  `gamedat`, and failed when there was none. Exult's save folder (`exult.cfg`'s
+  `savegame_path`, else its profile folder) is now where Exult saves are listed
+  from, so saves Exult wrote there are found even when GAMEDAT is configured
+  elsewhere.
+
 ## [0.8.0]
 
 ### Added
@@ -65,6 +298,22 @@ work for the next release.
 
 ### Fixed
 
+- **Cancelled wizards no longer look successful:** pressing Ctrl+C in a
+  wizard or browser, or its input running out before it finished, now exits
+  with status `130` and prints `Cancelled.` on stderr. Before, most wizards
+  exited `0`, as if they had finished, and a few exited `1` with Typer's
+  `Aborted!`. Choosing a wizard's Quit option still exits `0`. This covers
+  every wizard and browser, `titan setup` and `dialogue copy`.
+- **U7 query commands without a terminal:** `titan u7 egg-query`,
+  `world-query` and `container-browse` crashed when their input or output
+  was piped or captured. With no filter options they start a wizard, and the
+  wizard can't prompt without a terminal. They now run unfiltered instead and
+  print every egg, a world summary, or every container. Your terminal still
+  gets the wizard.
+- **Output that can't show some characters:** when titan's output goes to a
+  file or pipe on Windows, characters such as the wizards' `─` separators
+  now print as `?` instead of crashing the command. Set
+  `PYTHONIOENCODING=utf-8` to keep the real characters.
 - **Ultima 8 setup on GOG:** `titan setup` wrote `nonfixed = "U8SAVE.000"`
   without checking it existed, so on GOG installs, whose saves start at 001,
   the map commands failed. Re-running setup removes that value when the file

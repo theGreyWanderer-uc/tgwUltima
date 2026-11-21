@@ -9,6 +9,8 @@ from typing import Annotated, Optional
 
 import typer
 
+from titan._cli_aliases import renamed_options
+from titan._meta import meta
 from titan.u9.integrity import check_save, render_integrity_report
 
 
@@ -28,6 +30,8 @@ def cmd_save_check(args: SimpleNamespace) -> int:
     return {"PASS": 0, "WARN": 1, "ERROR": 2, "FATAL": 3}[report.overall]
 
 
+@meta(results=("text", "json"), params={"json_output": "output-file"})
+@renamed_options({"--json": "--output"})
 def save_check_cmd(
     target: Annotated[
         str,
@@ -52,7 +56,9 @@ def save_check_cmd(
     ] = None,
     json_output: Annotated[
         Optional[str],
-        typer.Option("--json", help="Also write the complete report as JSON"),
+        typer.Option(
+            "-o", "--output", help="Also write the complete report as JSON to this file"
+        ),
     ] = None,
     partial: Annotated[
         bool,

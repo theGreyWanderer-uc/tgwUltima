@@ -14,6 +14,7 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
+from titan.errors import InvalidDataError
 
 __all__ = ["U8AnimData", "U8AnimAction", "U8AnimFrame", "U8AnimError"]
 
@@ -95,7 +96,7 @@ ACTION_FLAG_NAMES = {
 }
 
 
-class U8AnimError(ValueError):
+class U8AnimError(InvalidDataError):
     """ANIM.DAT has an invalid offset table or truncated animation payload."""
 
 

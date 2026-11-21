@@ -11,31 +11,32 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
+from tests.test_u8_cached_state import item_blocks, save_bytes, state_flex
+from tests.test_u8_map_browser import assets as assets
+from tests.test_u8_native_runtime_state import container_bytes, gumps_bytes
+from tests.test_u8_npc_animation_report import Links
+from tests.test_u8_npc_animation_report import case as case
+from tests.test_u8_shape_browser import shape_bytes
+from titan.errors import EXIT_CODES
 from titan.flex import FlexArchive
-
 from titan.u8 import container_browser_ui as browser
 from titan.u8.cli import u8_app
 from titan.u8.container_browser import (
     build_u8_container_session,
     export_u8_container_bundle,
     filter_u8_containers,
-    u8_container_gump_images,
     u8_container_gump_composition,
+    u8_container_gump_images,
     u8_container_item_image,
     u8_inventory_rows,
     validate_u8_container_output,
 )
-from titan.u8.itemcach import U8ItemCache
 from titan.u8.container_gump import U8_CONTAINER_GUMP_SHAPES, U8ContainerGumpPreview
 from titan.u8.gumpage import U8GumpAreas
+from titan.u8.itemcach import U8ItemCache
 from titan.u8.map_browser import load_u8_map_session
 from titan.u8.save_state import U8SaveSnapshot
 from titan.u8.shape_browser import load_u8_shape_library
-from tests.test_u8_cached_state import item_blocks, save_bytes, state_flex
-from tests.test_u8_map_browser import assets as assets
-from tests.test_u8_native_runtime_state import container_bytes, gumps_bytes
-from tests.test_u8_npc_animation_report import Links, case as case
-from tests.test_u8_shape_browser import shape_bytes
 
 
 def put_item(
@@ -549,7 +550,7 @@ def test_redirected_menus_and_cancellation(inventory, tmp_path):
     result = CliRunner().invoke(
         u8_app, ["container-browse", str(gamedat), "--data-only"], input=""
     )
-    assert result.exit_code == 0
+    assert result.exit_code == EXIT_CODES["cancelled"]
 
 
 def composition_session(inventory):

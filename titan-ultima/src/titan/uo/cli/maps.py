@@ -25,6 +25,7 @@ from titan.uo.render import UOMapRenderer
 from titan.uo.tiles import FacetTileJob, build_facet_tiles
 from titan.uo.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_radar_export(args: SimpleNamespace) -> int:
@@ -38,7 +39,7 @@ def cmd_radar_export(args: SimpleNamespace) -> int:
         tilehelp = _common._try_load_tilehelp(client, "enu")
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "radar"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -97,7 +98,7 @@ def cmd_map_export(args: SimpleNamespace) -> int:
         radar = _common._load_radar(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     facets = args.facet or [
         facet
@@ -122,7 +123,7 @@ def cmd_map_export(args: SimpleNamespace) -> int:
             )
         except Exception as exc:
             print(f"ERROR: facet {facet}: {exc}", file=sys.stderr)
-            return 1
+            return exit_code(exc)
 
         stem = f"map{facet}{args.suffix}"
         facet_map.render_radar(radar, statics=not args.no_statics).save(
@@ -173,7 +174,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         renderer = UOMapRenderer.from_client(client, facet_map, hues=not args.no_hues)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     image = renderer.render(
         center[0],
@@ -205,7 +206,7 @@ def cmd_map_inventory(args: SimpleNamespace) -> int:
         client = _common._client_path(args.client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     facets = args.facet or [
         facet
@@ -220,7 +221,7 @@ def cmd_map_inventory(args: SimpleNamespace) -> int:
         art = None if args.no_previews else UOArtSource.from_client(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     root = _common._out(args) if args.output else _common._out(args) / "map-inventory"
     for facet in facets:
@@ -239,7 +240,7 @@ def cmd_map_inventory(args: SimpleNamespace) -> int:
             )
         except Exception as exc:
             print(f"ERROR: facet {facet}: {exc}", file=sys.stderr)
-            return 1
+            return exit_code(exc)
         statics, land = summary["statics"], summary["land"]
         coverage = statics["coverage_by_top_names_pct"]
         print(
@@ -256,7 +257,7 @@ def cmd_map_tiles(args: SimpleNamespace) -> int:
         client = _common._client_path(args.client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     output = _common._out(args) / "maps" / "tiles" / f"map{args.facet}{args.suffix}"
     job = FacetTileJob(
@@ -278,7 +279,7 @@ def cmd_map_tiles(args: SimpleNamespace) -> int:
         build_facet_tiles(job, workers=workers)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
     return 0
 
 
@@ -299,7 +300,7 @@ def cmd_multi_export(args: SimpleNamespace) -> int:
         cliloc = _common._load_cliloc(client, "enu")
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "multis"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -381,8 +382,8 @@ def radar_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     columns: Annotated[
@@ -410,8 +411,8 @@ def map_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     facet: Annotated[
@@ -475,8 +476,8 @@ def map_render_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     facet: Annotated[
@@ -544,8 +545,8 @@ def map_tiles_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     facet: Annotated[
@@ -621,7 +622,7 @@ def map_inventory_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output directory; each facet goes in mapN/ inside it. Default: <install output>/map-inventory.",
         ),
     ] = None,
@@ -681,8 +682,8 @@ def multi_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     limit: Annotated[

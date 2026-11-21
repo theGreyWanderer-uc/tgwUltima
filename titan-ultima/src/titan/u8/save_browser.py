@@ -22,7 +22,8 @@ from titan.u8.npc_names import describe_u8_npc_identity
 from titan.u8.save_state import U8SaveSnapshot, describe_u8_save_snapshot
 from titan.u8.state_report import format_u8_itemcach_report, format_u8_npcdata_report
 
-U8_SAVE_BROWSER_OUTPUT = Path("titan-out/u8_save_browse_export")
+U8_SAVE_BROWSER_OUTPUT = "save-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 U8_SAVE_BROWSER_VIEWS = {
     "entries": "Save entries",
     "avatar": "Avatar extension state",

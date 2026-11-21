@@ -78,7 +78,7 @@ titan u7 typeflag-dump --game si -f csv -o tfa_si.csv
 titan u7 gamedat-info --game si -f detail -o gamedat_info.txt
 
 # Build embedded U3 NES Sosaria as a selected native U7 secondary map
-titan u3 map-create si_source_map.json --output-root scratch/ --map-num 4 --no-render
+titan u3 map-create si_source_map.json --output-dir scratch/ --map-num 4 --no-render
 
 # UO configured commands, if [uo.game] base is set
 titan uo gump-export -o uo_gumps/
@@ -136,15 +136,16 @@ available map, VGA tile, palette, dialogue, book, font, portrait, schedule
 and DOS save resources under `[u6.paths]`. `titan config` displays these
 paths and checks they exist. The `[u6.paths]` entries are an inventory;
 commands use standard filenames below `[u6.game] base`.
-You can also configure the base manually or pass `-g`/`--gamedir` directly,
+You can also configure the base manually or pass `-g`/`--game-dir` directly,
 which overrides the configured base and works without setup:
 
 ```bash
 titan u6 map-render -g "C:/Ultima6" --full -o u6_world.png
 ```
 
-Ultima Underworld II install detection is not in `titan setup` yet. Add its
-root manually; commands also accept `-g`/`--gamedir`:
+`titan setup` detects Ultima Underworld and Ultima Underworld II installs,
+including both games inside a GOG "Ultima Underworld 1+2" folder. You can also
+set the root manually; commands also accept `-g`/`--game-dir`:
 
 ```toml
 [uw2.game]
@@ -200,6 +201,8 @@ place for command options, longer examples, and format notes.
 Native UW1 support currently covers all floor/ceiling and wall texture
 archives. It preserves texture IDs, uses palette 0 from `PALS.DAT`, joins the
 descriptions in `STRINGS.PAK`, and writes both CSV and JSON manifests.
+
+`titan setup` records the install as `[uw1.game] base`; `-g` overrides it.
 
 ```powershell
 titan uw1 texture-info -g "C:/UW1"
@@ -268,12 +271,12 @@ map bounds produce a clear error before the output file is written.
 `titan md map-render` reuses the U6 tile, map, animation and object decoders
 with an explicit MD resource profile. It reads MD's size-prefixed libraries
 and `MDPAL` directly; no extraction or renaming of game files is required.
-Use the `MARTIAN` directory or its installation parent with `--gamedir`,
+Use the `MARTIAN` directory or its installation parent with `--game-dir`,
 or run `titan setup` to detect GOG Galaxy, GOG offline, Heroic and manual installs.
 Setup saves `[md.game] base` and inventories available map, tile, palette,
 dialogue, text, font, portrait, music and DOS save resources under `[md.paths]`.
 `titan config` displays these paths and checks they exist. MD commands use
-`[md.game] base` by default; `--gamedir` overrides it. The `[md.paths]` entries
+`[md.game] base` by default; `--game-dir` overrides it. The `[md.paths]` entries
 are an inventory; individual commands retain their standard MD filenames.
 
 ```powershell
@@ -292,7 +295,7 @@ per-cell precedence.
 `--actors` adds party members, NPCs and creatures between ordinary objects
 and foreground cells. MD cold, appearance and flag fields use explicit MD
 layouts. Invisible NPCs are hidden; invisible party members retain outlines.
-`--savegame <DOS SAVEGAME directory>` selects the saved clock and world flags,
+`--save <DOS SAVEGAME directory>` selects the saved clock and world flags,
 plus saved actor/object placements when their overlays are enabled. Initial
 placements are the default. Saved cistern pressure and canal-valve flags select
 fixed dry/wet art; changing `--tick` cannot switch the water state. Power flags
@@ -312,14 +315,14 @@ MD inspections are read-only:
 
 | Command | Reads |
 |---|---|
-| `actor-list [--actor N] [--savegame DIR]` | Active actor slots or one slot, names, stats, appearance and raw flags (JSON) |
-| `gamestate-dump [--savegame DIR]` | Party, Gregorian clock, gender, dream state, berry timers and world flags (JSON) |
+| `actor-list [--actor N] [--save DIR]` | Active actor slots or one slot, names, stats, appearance and raw flags (JSON) |
+| `gamestate-dump [--save DIR]` | Party, Gregorian clock, gender, dream state, berry timers and world flags (JSON) |
 | `converse-dump [--item N]` | NPC scripts in `TALK.LZC`, excluding the non-NPC build-text record |
 | `converse-report` | Script counts and unresolved opcode offsets/operands (JSON) |
 | `look-dump [--tile N]` | Correctly unwrapped `LOOK.LZC` name records and range lookup (JSON) |
 | `book-dump [--book N]` | `MDTEXT.LZC` books/signs with page markers preserved |
 
-All accept `-g/--gamedir` and `-o/--output FILE`; inspections print to stdout
+All accept `-g/--game-dir` and `-o/--output FILE`; inspections print to stdout
 when output is omitted. Retail `TALK.LZC` contains 99 NPC scripts. Dr. Blood's
 two `0xdf` instructions decode as MD `SET_YSTRING`: select an actor's name
 for `$Y`, with `"you"` for resolved actor 1. This was verified against the
@@ -414,7 +417,7 @@ titan u7 map-render-json u7_map.json --static STATIC/ --sc 0x55 \
   -o superChunk_85_from_json.png
 
 # Materialize universal JSON as a selected native secondary map.
-titan u7 map-create --output-root scratch/ --map-num 4 --from-json u7_map.json
+titan u7 map-create --output-dir scratch/ --map-num 4 --from-json u7_map.json
 
 # Superchunk render.
 titan u7 map-render STATIC/ --sc 0x55 -o superChunk_85.png
@@ -468,7 +471,7 @@ titan u7 map-export-json --game si -o si_source_map.json
 
 # Create the map in the selected native U7 secondary-map slot
 titan u3 map-create si_source_map.json \
-  --output-root "D:/work/maps" --map-num 4 --seed 42
+  --output-dir "D:/work/maps" --map-num 4 --seed 42
 ```
 
 U3-specific generation uses Titan's embedded original NES overworld, then
@@ -484,10 +487,10 @@ render after creation. Scripts can choose `--render` or `--no-render`.
 titan u7 world-query --game bg
 
 # With explicit paths (no titan.toml required).
-titan u7 world-query STATIC/ --gamedat gamedat/
+titan u7 world-query STATIC/ --save gamedat/
 
 # Pre-set STATIC from config, add a runtime GAMEDAT for IREG objects.
-titan u7 world-query --game si --gamedat Exult/serpentisle/gamedat
+titan u7 world-query --game si --save Exult/serpentisle/gamedat
 ```
 
 The wizard prompts for shape-class checkboxes, optional shape numbers, TFA flag
@@ -501,13 +504,13 @@ full text / CSV). Output can be printed or saved to a file.
 titan u7 container-browse --game bg
 
 # Show all chests with their full contents tree.
-titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
+titan u7 container-browse STATIC/ --save gamedat/ --container-name chest
 
 # Find containers holding a sword.
-titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword
+titan u7 container-browse STATIC/ --save gamedat/ --contains-name sword
 
 # Export to CSV with per-frame item names (requires Exult installation).
-titan u7 container-browse STATIC/ --gamedat gamedat/ -f csv -o containers.csv \
+titan u7 container-browse STATIC/ --save gamedat/ -f csv -o containers.csv \
   --exult-flx "<Exult install>/data/exult_bg.flx"
 
 # Configured paths with per-frame names from titan.toml [exult.paths].
@@ -594,13 +597,13 @@ raw used-in-game words remain separate from effective unused status.
 titan u7 egg-query --game bg
 
 # All usecode eggs.
-titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
+titan u7 egg-query STATIC/ --save gamedat/ --type usecode
 
 # Find every placement of a specific usecode function.
-titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
+titan u7 egg-query STATIC/ --save gamedat/ --fn 0x06BC
 
 # Export usecode eggs to CSV.
-titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o usecode_eggs.csv
+titan u7 egg-query STATIC/ --save gamedat/ --type usecode -f csv -o usecode_eggs.csv
 ```
 
 ### U8 Map Rendering
@@ -808,8 +811,10 @@ titan config --edit
 
 TITAN can also be imported as a Python library. U8 modules live under
 `titan.u8`; U7 modules live under `titan.u7`; U6 modules live under
-`titan.u6`; early U9 modules live under `titan.u9`. Backward-compatible
-imports such as `from titan.shape import U8Shape` are still supported.
+`titan.u6`; early U9 modules live under `titan.u9`. The old top-level U8
+modules (`from titan.shape import U8Shape`, `titan.palette`, `titan.map`, ...)
+still work but are deprecated and warn on import; `from titan import U8Shape`
+keeps working without a warning.
 
 ```python
 from titan.u7.flex import U7FlexArchive

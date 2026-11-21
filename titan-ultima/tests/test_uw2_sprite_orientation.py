@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 from PIL import Image
 
-from titan.uw2.map3d import _camera_billboard_part, _camera_basis
+from titan.uw2.map3d import _camera_basis, _camera_billboard_part
 from titan.uw2.scene3d import build_level_scene
 
 SPRITE_ITEM = 0x00A0

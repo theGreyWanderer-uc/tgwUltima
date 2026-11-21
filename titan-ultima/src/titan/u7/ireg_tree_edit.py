@@ -27,6 +27,7 @@ from titan.u7.save_repack import (
     check_u7_save_hash,
     repack_u7_save,
 )
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -120,7 +121,7 @@ def _guard_hash(expected: object, actual: str, label: str) -> None:
         or re.fullmatch(r"[0-9a-fA-F]{64}", expected) is None
         or expected.lower() != actual
     ):
-        raise ValueError(f"IREG tree edit: {label} SHA-256 does not match")
+        raise InvalidDataError(f"IREG tree edit: {label} SHA-256 does not match")
 
 
 def _integer(value: object, label: str, maximum: int) -> int:
@@ -190,7 +191,7 @@ def edit_ireg_tree(
     requests: list[U7IregDelete | U7IregReparent] = []
     for request in all_requests:
         if not isinstance(request, (U7IregDelete, U7IregReparent)):
-            raise ValueError("IREG tree edit: unsupported operation")
+            raise InvalidDataError("IREG tree edit: unsupported operation")
         requests.append(request)
     source_hash = hashlib.sha256(data).hexdigest()
     _guard_hash(expected_sha256, source_hash, "source")
@@ -202,10 +203,10 @@ def edit_ireg_tree(
     moves: dict[int, U7IregReparent] = {}
     for operation in requests:
         if not isinstance(operation, (U7IregDelete, U7IregReparent)):
-            raise ValueError("IREG tree edit: unsupported operation")
+            raise InvalidDataError("IREG tree edit: unsupported operation")
         offset = _integer(operation.offset, "offset", len(data))
         if offset not in tree.objects or offset in targeted:
-            raise ValueError("IREG tree edit: missing or duplicate source object")
+            raise InvalidDataError("IREG tree edit: missing or duplicate source object")
         original_node = tree.objects[offset]
         _guard_hash(
             operation.expected_sha256,
@@ -221,14 +222,14 @@ def edit_ireg_tree(
                 and original_node.children.events
                 and not operation.cascade
             ):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: nonempty contents require cascade=true"
                 )
             deleted.update(_descendants(tree, offset))
             deleted_records.update(_owned_offsets(tree, original_node))
         else:
             if original_node.kind in ("egg", "barge"):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: egg/barge reparenting needs a class-specific model"
                 )
             if operation.flag_policy not in ("preserve", "inherit"):
@@ -238,7 +239,7 @@ def edit_ireg_tree(
             _integer(operation.index_word, "index_word", 65535)
             low = operation.index_word & 255
             if low != 255 and not 0 <= low < 18:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: index_word must request slot 0..17 or explicit no-slot"
                 )
             _integer(
@@ -248,13 +249,13 @@ def edit_ireg_tree(
             )
             if operation.parent_offset is None:
                 if operation.parent_sha256 is not None:
-                    raise ValueError(
+                    raise InvalidDataError(
                         "IREG tree edit: root destination has no parent hash"
                     )
                 x = _integer(operation.x, "world x", 3071)
                 y = _integer(operation.y, "world y", 3071)
                 if x // 256 != superchunk % 12 or y // 256 != superchunk // 12:
-                    raise ValueError(
+                    raise InvalidDataError(
                         "IREG tree edit: cross-superchunk moves are not supported"
                     )
             else:
@@ -276,7 +277,7 @@ def edit_ireg_tree(
                 _integer(operation.x, "gump x", 255)
                 _integer(operation.y, "gump y", 255)
             if operation.parent_offset == original_node.parent_offset:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: object already has that parent; use field edits for placement"
                 )
             moves[offset] = operation
@@ -284,7 +285,7 @@ def edit_ireg_tree(
         ancestor = tree.objects[offset].parent_offset
         while ancestor is not None:
             if ancestor in targeted:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: source subtrees overlap; use separate guarded transactions"
                 )
             ancestor = tree.objects[ancestor].parent_offset
@@ -298,12 +299,12 @@ def edit_ireg_tree(
         seen: set[int] = set()
         while current is not None:
             if current in seen or current not in parents:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: cycle or deleted destination in resulting hierarchy"
                 )
             seen.add(current)
             if len(seen) > IREG_TREE_MAX_DEPTH + 1:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: resulting hierarchy exceeds depth limit"
                 )
             current = parents[current]
@@ -424,7 +425,7 @@ def edit_ireg_tree(
     def emit_record(record: U7IregWireRecord) -> None:
         if record.offset >= 0:
             if record.offset in wire_positions:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: original record emitted more than once"
                 )
             wire_positions[record.offset] = len(output)
@@ -452,12 +453,14 @@ def edit_ireg_tree(
 
             state = decode()
             if state is None or state.context_warnings:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: rewritten object layout is not resolved"
                 )
             if state.object_flags != node.original.flags and active != "inherit":
                 if active is None:
-                    raise ValueError("IREG tree edit: unplanned inherited-flag change")
+                    raise InvalidDataError(
+                        "IREG tree edit: unplanned inherited-flag change"
+                    )
                 fields: dict[str, int | bool] = {}
                 for flag, name in (
                     (U7ObjectFlags.INVISIBLE, "invisible"),
@@ -476,11 +479,11 @@ def edit_ireg_tree(
                     ) from error
                 state = decode()
                 if state is None or state.object_flags != node.original.flags:
-                    raise ValueError(
+                    raise InvalidDataError(
                         "IREG tree edit: preserved inherited flags cannot be represented"
                     )
             if state.has_children_marker != (node.children is not None):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: child marker does not match serialized list"
                 )
             positions[node.original.offset] = len(output)
@@ -496,17 +499,17 @@ def edit_ireg_tree(
         set(wire_positions)
         != {record.offset for record in tree.records} - deleted_records
     ):
-        raise ValueError("IREG tree edit: unexpected record loss or retention")
+        raise InvalidDataError("IREG tree edit: unexpected record loss or retention")
     result = bytes(output)
     reread = read_ireg_tree(result, context=context, superchunk=superchunk)
     if set(positions) != set(parents) or set(positions.values()) != set(reread.objects):
-        raise ValueError("IREG tree edit: output object identity set changed")
+        raise InvalidDataError("IREG tree edit: output object identity set changed")
     record_changes: list[dict[str, object]] = []
     flag_changes: list[dict[str, object]] = []
     for offset, location in positions.items():
         before, after = tree.objects[offset], reread.objects[location]
         if after.record.raw != nodes[offset].record.raw:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG tree edit: serialized object bytes differ from the prepared record"
             )
         parent_id = parents[offset]
@@ -519,7 +522,7 @@ def edit_ireg_tree(
             or after.saved_index_word != expected_index
             or after.flags != expected_flags[offset]
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG tree edit: output ownership/index/flags validation failed"
             )
         if (after.shape, after.frame, after.kind) != (
@@ -527,14 +530,16 @@ def edit_ireg_tree(
             before.frame,
             before.kind,
         ):
-            raise ValueError("IREG tree edit: output changed shape/class/frame")
+            raise InvalidDataError("IREG tree edit: output changed shape/class/frame")
         expected_position = (
             (moves[offset].x, moves[offset].y, moves[offset].lift)
             if offset in moves
             else (before.x, before.y, before.lift)
         )
         if (after.x, after.y, after.lift) != expected_position:
-            raise ValueError("IREG tree edit: output coordinates do not match the edit")
+            raise InvalidDataError(
+                "IREG tree edit: output coordinates do not match the edit"
+            )
         if before.record.raw != after.record.raw:
             record_changes.append(
                 {
@@ -558,7 +563,7 @@ def edit_ireg_tree(
             continue
         location = wire_positions[old.offset]
         if old.offset not in tree.objects and new_records[location].raw != old.raw:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG tree edit: changed an untouched control/special/opaque record"
             )
         if old.offset in tree.special_owners:
@@ -566,7 +571,7 @@ def edit_ireg_tree(
             if reread.special_owners.get(location, -1) != (
                 positions[owner] if owner is not None else None
             ):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree edit: special ownership changed unexpectedly"
                 )
     return U7IregTreeEditResult(
@@ -591,13 +596,15 @@ def read_ireg_save_member(
     if expected_sha256 is not None:
         check_u7_save_hash(expected_sha256, data, "source")
     if not isinstance(member_path, tuple) or not 1 <= len(member_path) <= 16:
-        raise ValueError("IREG tree edit: save member path must contain 1..16 indices")
+        raise InvalidDataError(
+            "IREG tree edit: save member path must contain 1..16 indices"
+        )
     raw = data
     for index in member_path:
         _integer(index, "member index", 0xFFFFFFFF)
         archive = read_u7_save_container(raw, strict=True)
         if index >= len(archive.members) or archive.members[index].is_directory:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG tree edit: save member path is out of range or a directory"
             )
         member = archive.members[index]
@@ -608,7 +615,7 @@ def read_ireg_save_member(
         re.IGNORECASE,
     )
     if match is None or int(match[1], 16) != superchunk:
-        raise ValueError(
+        raise InvalidDataError(
             "IREG tree edit: save leaf must be a standalone U7IREG member matching superchunk"
         )
     return raw

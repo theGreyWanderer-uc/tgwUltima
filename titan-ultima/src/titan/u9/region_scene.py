@@ -35,6 +35,7 @@ from dataclasses import dataclass
 from titan.u9.fixed import CHUNK_SPAN, U9Fixed, U9FixedObject
 from titan.u9.nonfixed import U9Entity, U9Nonfixed
 from titan.u9.terrain import U9Terrain, U9TerrainPoint
+from titan.errors import TitanError
 
 TERRAIN_POINT_WORLD_XY = 128
 TERRAIN_HEIGHT_WORLD_Z = 4
@@ -43,7 +44,7 @@ REGION_CHUNK_TERRAIN_POINTS = CHUNK_SPAN // TERRAIN_POINT_WORLD_XY
 FIXED_CHUNK_TERRAIN_POINTS = REGION_CHUNK_TERRAIN_POINTS
 
 
-class U9RegionSceneError(Exception):
+class U9RegionSceneError(TitanError):
     """Raised when region files cannot share one consistent U9 world space."""
 
 

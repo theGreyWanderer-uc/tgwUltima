@@ -31,6 +31,7 @@ __all__ = ["U6Lzw", "U6LzwError"]
 
 import os
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 CLEAR_CODE = 0x100
 END_CODE = 0x101
@@ -40,7 +41,7 @@ MAX_CODE_SIZE = 12
 HEADER_SIZE = 4
 
 
-class U6LzwError(Exception):
+class U6LzwError(InvalidDataError):
     """Raised when data is not a well-formed U6 LZW stream."""
 
 

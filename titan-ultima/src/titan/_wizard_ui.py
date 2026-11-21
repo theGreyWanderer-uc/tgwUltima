@@ -12,6 +12,31 @@ class PromptCancelled(Exception):
     pass
 
 
+class WizardQuit(PromptCancelled):
+    """The user chose Quit: a normal finish, exit status 0.
+
+    A :class:`PromptCancelled` so code that unwinds on cancellation still
+    does; catch it first wherever the two need different exit statuses.
+    """
+
+
+CANCELLED_EXCEPTIONS = (PromptCancelled, KeyboardInterrupt, EOFError)
+"""What a prompt raises when the run stops early: cancelled, Ctrl+C, input ended."""
+
+
+def cancelled(message: str = "Cancelled.") -> int:
+    """Report a wizard that stopped before finishing; return the exit status.
+
+    For Ctrl+C or input ending mid-prompt, not for the user choosing Quit
+    (that's a normal finish, status 0). The status is
+    ``EXIT_CODES["cancelled"]``, so a front end can tell it apart from success.
+    """
+    from titan.errors import EXIT_CODES
+
+    print(f"\n{message}", file=sys.stderr)
+    return EXIT_CODES["cancelled"]
+
+
 def menus_enabled() -> bool:
     return bool(sys.stdin.isatty() and sys.stdout.isatty())
 

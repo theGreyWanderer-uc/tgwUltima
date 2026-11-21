@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u7.actor_rewrite import (
     U7ActorHeaderEdit,
     read_actor_wire_file,
@@ -19,8 +20,8 @@ from titan.u7.actor_rewrite import (
     rewrite_actor_header,
     rewrite_actor_save,
 )
-from titan.u7.actor_rewrite_cli import read_actor_edit_plan
 from titan.u7.cli import u7_app
+from titan.u7.edit_plans import read_actor_edit_plan
 from titan.u7.ireg_metadata import U7IregContext
 from titan.u7.ireg_tree import ireg_context_sha256
 from titan.u7.save import U7Save
@@ -356,7 +357,10 @@ def test_actor_cli_inspect_dry_run_write_and_stale_guards(
     output.unlink()
     plan["source_sha256"] = "0" * 64
     plan_path.write_text(json.dumps(plan))
-    assert runner.invoke(u7_app, args).exit_code == 1 and not output.exists()
+    assert (
+        runner.invoke(u7_app, args).exit_code == EXIT_CODES["invalid-data"]
+        and not output.exists()
+    )
 
 
 @pytest.mark.parametrize(

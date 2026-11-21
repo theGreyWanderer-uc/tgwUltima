@@ -11,8 +11,7 @@ Library usage::
 
     from titan.flex import FlexArchive
     from titan.u8.palette import U8Palette
-    from titan.u8.shape import U8Shape    # canonical U8 import path
-    from titan.shape import U8Shape       # backward-compat shim (also works)
+    from titan.u8.shape import U8Shape
 
     archive = FlexArchive.from_file("U8SHAPES.FLX")
     archive.extract_all("shapes/")
@@ -24,28 +23,48 @@ Library usage::
 
 from __future__ import annotations
 
-# Version is defined before submodule imports to avoid circular-import issues
-# (flex.py imports TITAN_VERSION from ._version, which has no cycle).
+from importlib import import_module
+
 from ._version import TITAN_VERSION, __version__
 
-# Shared / game-agnostic modules
-from .flex import FlexArchive, detect_record_type, get_extension_for_flex
-from .music import XMIDIConverter
+# The original U8 and U7 names, loaded on first use: importing any titan module
+# runs this file, so eager imports here would load U8's map renderer, sound
+# decoder and more for every caller (``titan._meta`` included).
+_EXPORTS = {
+    # Shared / game-agnostic (canonical paths shown)
+    "FlexArchive": "titan.flex",
+    "detect_record_type": "titan.flex",
+    "get_extension_for_flex": "titan.flex",
+    "XMIDIConverter": "titan.music",
+    # U8 (canonical paths are titan.u8.*)
+    "U8Palette": "titan.u8.palette",
+    "U8Shape": "titan.u8.shape",
+    "SonarcDecoder": "titan.u8.sound",
+    "U8SaveArchive": "titan.u8.save",
+    "U8TypeFlags": "titan.u8.typeflag",
+    "U8MapRenderer": "titan.u8.map",
+    "U8MapSampler": "titan.u8.map",
+    "decrypt_credit_text": "titan.u8.credits",
+    "U8_XFORM_PALETTE": "titan.u8.xformpal",
+    # U7 (canonical paths are titan.u7.*)
+    "U7Shape": "titan.u7.shape",
+    "U7Palette": "titan.u7.palette",
+    "VocDecoder": "titan.u7.sound",
+}
 
-# U8-specific modules (canonical paths are titan.u8.*)
-from .u8.palette import U8Palette
-from .u8.shape import U8Shape
-from .u8.sound import SonarcDecoder
-from .u8.save import U8SaveArchive
-from .u8.typeflag import U8TypeFlags
-from .u8.map import U8MapRenderer, U8MapSampler
-from .u8.credits import decrypt_credit_text
-from .u8.xformpal import U8_XFORM_PALETTE
 
-# U7-specific modules (canonical paths are titan.u7.*)
-from .u7.shape import U7Shape
-from .u7.palette import U7Palette
-from .u7.sound import VocDecoder
+def __getattr__(name: str):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module 'titan' has no attribute {name!r}")
+    value = getattr(import_module(module), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted({*globals(), *_EXPORTS})
+
 
 __all__ = [
     "TITAN_VERSION",

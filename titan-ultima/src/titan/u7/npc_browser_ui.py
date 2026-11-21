@@ -12,6 +12,7 @@ from pathlib import Path
 from titan import _wizard_ui as ui
 from titan._terminal_image import terminal_image
 from titan.u7.archive_targets import ArchiveTarget
+from titan.u7.install import resolve_u7_exult_flx
 from titan.u7.save import U7NPC, U7NPCData, U7Schedules
 from titan.u7.shape_browser import load_library
 from titan.u7.target_picker import game_targets, select_target
@@ -45,7 +46,9 @@ def npc_preview(session: Session, npc: U7NPC) -> None:
             path = owner_file(session.target, "SHAPES.VGA")
             if path is None:
                 raise ValueError("SHAPES.VGA not found for the selected world")
-            session.preview_library = load_library(session.target, session.game, path)
+            session.preview_library = load_library(
+                session.target, session.game, path, exult_flx=session.exult_flx
+            )
         except READ_ERRORS as error:
             # Cache shared resource failures rather than retrying for every NPC.
             session.preview_error = str(error)
@@ -231,7 +234,7 @@ def _choose_source(target: ArchiveTarget, default: str) -> Source | None:
             default,
         )
         if action == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if action == "W":
             return None
         if action == "C":
@@ -510,7 +513,12 @@ def run_browser(
                     source = None
                     if selected is None:
                         break
-                    session = load_session(target, selected, game)
+                    session = load_session(
+                        target,
+                        selected,
+                        game,
+                        exult_flx=resolve_u7_exult_flx(game),
+                    )
                     if have_si_shapes is not None:
                         session.have_si_shapes = have_si_shapes
                     session.avatar_skin, session.avatar_female = (
@@ -577,6 +585,7 @@ def run_browser(
                 if action == "W":
                     break
                 npc = None
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()

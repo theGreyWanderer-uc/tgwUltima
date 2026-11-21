@@ -32,8 +32,10 @@ from titan.u8.save_browser import (
 from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
 from titan.u8.shape_browser import U8ShapeLibrary, find_u8_browser_file
 from titan.u8.state_report import format_u8_npcdata_report
+from titan.errors import InvalidDataError
 
-U8_MAP_BROWSER_OUTPUT = Path("titan-out/u8_map_browse_export")
+U8_MAP_BROWSER_OUTPUT = "map-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 @dataclass(frozen=True)
@@ -116,10 +118,10 @@ def load_u8_map_session(
         raise ValueError("U8 map browser: select U8SHAPES.FLX world graphics")
     fixed_path = fixed or find_u8_browser_file(library.path.parent, "FIXED.DAT")
     if fixed_path is None:
-        raise ValueError("U8 map browser: FIXED.DAT is missing; specify --fixed")
+        raise InvalidDataError("U8 map browser: FIXED.DAT is missing; specify --fixed")
     fixed_data = U8MapItems.from_file(fixed_path, kind="fixed")
     if source is not None and snapshot is not None:
-        raise ValueError(
+        raise InvalidDataError(
             "U8 map browser: specify a source or captured snapshot, not both"
         )
     nonfixed = None
@@ -131,15 +133,15 @@ def load_u8_map_session(
         else:
             snapshot = U8SaveSnapshot.from_path(source)
             if "NONFIXED.DAT" in snapshot.decode_errors:
-                raise ValueError(snapshot.decode_errors["NONFIXED.DAT"])
+                raise InvalidDataError(snapshot.decode_errors["NONFIXED.DAT"])
             if snapshot.nonfixed is None:
-                raise ValueError("U8 map browser: snapshot has no NONFIXED.DAT")
+                raise InvalidDataError("U8 map browser: snapshot has no NONFIXED.DAT")
             nonfixed = snapshot.nonfixed
     elif snapshot is not None:
         if "NONFIXED.DAT" in snapshot.decode_errors:
-            raise ValueError(snapshot.decode_errors["NONFIXED.DAT"])
+            raise InvalidDataError(snapshot.decode_errors["NONFIXED.DAT"])
         if snapshot.nonfixed is None:
-            raise ValueError("U8 map browser: snapshot has no NONFIXED.DAT")
+            raise InvalidDataError("U8 map browser: snapshot has no NONFIXED.DAT")
         nonfixed = snapshot.nonfixed
     glob_path = globs or find_u8_browser_file(library.path.parent, "GLOB.FLX")
     glob_records = (

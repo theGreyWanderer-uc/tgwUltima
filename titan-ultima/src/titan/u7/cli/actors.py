@@ -1,121 +1,34 @@
-"""Actor header inspection, explicit edit plans and new-file save embedding commands."""
+"""``titan u7 actor-headers`` / ``actor-rewrite``: guarded actor header edits."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
 import typer
 
+from titan._meta import meta
 from titan.u7.actor_rewrite import (
     ActorFileKind,
     ActorSourceFlavor,
-    U7ActorHeaderEdit,
     read_actor_save_member,
     read_actor_wire_file,
     rewrite_actor_file,
     rewrite_actor_save,
 )
+from titan.u7.cli.ireg import load_ireg_cli_context
+from titan.u7.edit_plans import (
+    read_actor_edit_plan,
+    write_new_u7_output,
+)
 from titan.u7.ireg_tree import ireg_context_sha256
-from titan.u7.ireg_tree_cli import load_ireg_cli_context, write_new_u7_output
-from titan._meta import meta
+from titan.errors import exit_code
 
 
-@dataclass(frozen=True)
-class U7ActorEditPlan:
-    """A flavor-explicit actor edit plan, optionally targeting one save occurrence."""
-
-    source_sha256: str
-    context_sha256: str
-    game: Literal["bg", "si"]
-    kind: ActorFileKind
-    flavor: ActorSourceFlavor
-    edits: tuple[U7ActorHeaderEdit, ...]
-    save_sha256: str | None = None
-    member_path: tuple[int, ...] | None = None
-
-
-def read_actor_edit_plan(value: object) -> U7ActorEditPlan:
-    """Validate JSON actor edit identities, source flavor, header operations and optional save path."""
-    from titan.u7.ireg_tree_cli import parse_u7_plan_hash, parse_u7_plan_number
-
-    required = {"source_sha256", "context_sha256", "game", "kind", "flavor", "edits"}
-    if (
-        not isinstance(value, dict)
-        or not required <= value.keys()
-        or set(value) - required - {"save"}
-    ):
-        raise ValueError(
-            "Actor rewrite plan: source/context/game/kind/flavor/edits are required"
-        )
-    if (
-        value["game"] not in ("bg", "si")
-        or value["kind"] not in ("npc", "monsters")
-        or value["flavor"] not in ("runtime", "original-new-game")
-        or not isinstance(value["edits"], list)
-    ):
-        raise ValueError("Actor rewrite plan: invalid game/kind/flavor/edits")
-    edits = []
-    for row in value["edits"]:
-        if not isinstance(row, dict) or set(row) not in (
-            {"index", "expected_sha256", "fields"},
-            {"index", "expected_sha256", "header_hex"},
-        ):
-            raise ValueError(
-                "Actor rewrite plan: each actor needs index, hash and fields or header_hex"
-            )
-        fields = row.get("fields", {})
-        if not isinstance(fields, dict) or any(
-            not isinstance(key, str)
-            or isinstance(item, bool)
-            or not isinstance(item, (int, str))
-            for key, item in fields.items()
-        ):
-            raise ValueError(
-                "Actor rewrite plan: fields must map names to integers or strings"
-            )
-        if "header_hex" in row and not isinstance(row["header_hex"], str):
-            raise ValueError("Actor rewrite plan: header_hex must be hex text")
-        edits.append(
-            U7ActorHeaderEdit(
-                parse_u7_plan_number(row["index"]),
-                parse_u7_plan_hash(row["expected_sha256"]),
-                fields,
-                bytes.fromhex(row["header_hex"]) if "header_hex" in row else None,
-            )
-        )
-    save_hash = None
-    path = None
-    if "save" in value:
-        saved = value["save"]
-        if (
-            not isinstance(saved, dict)
-            or set(saved) != {"source_sha256", "member_path"}
-            or not isinstance(saved["member_path"], list)
-            or not 1 <= len(saved["member_path"]) <= 16
-        ):
-            raise ValueError(
-                "Actor rewrite plan: save requires archive hash and 1..16 occurrence indices"
-            )
-        save_hash = parse_u7_plan_hash(saved["source_sha256"])
-        path = tuple(parse_u7_plan_number(index) for index in saved["member_path"])
-    return U7ActorEditPlan(
-        parse_u7_plan_hash(value["source_sha256"]),
-        parse_u7_plan_hash(value["context_sha256"]),
-        value["game"],
-        value["kind"],
-        value["flavor"],
-        tuple(edits),
-        save_hash,
-        path,
-    )
-
-
-@meta(results=("json",), params={"output": "output-file"})
+@meta(results=("json",), params={"output": "output-file", "file": "input-file"})
 def actor_headers_cmd(
     file: Annotated[
         str,
@@ -174,10 +87,10 @@ def actor_headers_cmd(
             print(content, end="")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "file": "input-file"})
 def actor_rewrite_cmd(
     file: Annotated[
         str, typer.Argument(help="Loose actor stream or explicitly selected save")
@@ -247,4 +160,4 @@ def actor_rewrite_cmd(
         print(json.dumps(report, indent=2))
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error

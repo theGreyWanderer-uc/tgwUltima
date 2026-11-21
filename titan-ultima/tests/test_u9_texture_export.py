@@ -235,7 +235,7 @@ def test_explicit_bc1_archive_uses_its_stored_compression(texture_install, tmp_p
 def test_standard_library_progress_terminal_and_redirected_output(monkeypatch, capsys):
     import sys
 
-    from titan.u9.texture_export import print_texture_export_progress
+    from titan.u9.cli.textures import print_texture_export_progress
 
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True)
     print_texture_export_progress("bitmap16.flx", 1, 2, 3)

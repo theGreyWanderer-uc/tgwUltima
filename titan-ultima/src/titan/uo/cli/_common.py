@@ -32,7 +32,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
 
-from titan.uo.installs import resolve_install
+from titan._config import export_dir
+from titan.errors import InstallNotFoundError
+from titan.uo.installs import NOT_CONFIGURED, resolve_install
 from titan.uo.animdata import UOAnimData, UOAnimDataEntry
 from titan.uo.artdef import UOArtDef
 from titan.uo.definfo import (
@@ -47,12 +49,19 @@ from titan.uo.tiledata import UOLandTile, UOStaticTile, UOTileData
 
 
 def _client_path(client: str | None = None) -> Path:
-    """Resolve CLIENT (a directory or a [uo.installs.*] name) to a directory."""
+    """Resolve CLIENT (a directory or a [uo.installs.*] name) to a directory.
+
+    When CLIENT is omitted the CLI fills it from the configured install
+    (titan._input_fill), so ``None`` here means nothing is configured.
+    """
+    if client is None:
+        raise InstallNotFoundError(NOT_CONFIGURED)
     return resolve_install(client)[0]
 
 
 def _out(args: SimpleNamespace) -> Path:
-    """Output root: ``-o`` if given, else the install's output, else ``uodata``."""
+    """Output root: ``-o`` if given, else the install's output, else
+    :func:`titan._config.export_dir` for ``uo``."""
     if getattr(args, "output", None):
         return Path(args.output)
     try:
@@ -61,7 +70,7 @@ def _out(args: SimpleNamespace) -> Path:
         install = None
     if install is not None and install.output is not None:
         return install.output
-    return Path("uodata")
+    return export_dir("uo")
 
 
 def _source(args: SimpleNamespace, key: str) -> str:

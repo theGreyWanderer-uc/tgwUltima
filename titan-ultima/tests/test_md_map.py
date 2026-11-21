@@ -10,19 +10,19 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
+from tests.md_fixtures import initial_martian_objlist, object_block, resource_library
+from tests.md_fixtures import md_game as md_game
+from titan.md.actor import MD_ACTOR_LAYOUT
 from titan.md.cli import md_app
 from titan.md.game_profile import MD_PROFILE
-from titan.md.actor import MD_ACTOR_LAYOUT
-from titan.md.map_render import MartianMapRenderer
 from titan.md.map_placements import project_martian_placements
+from titan.md.map_render import MartianMapRenderer
 from titan.u6.game_profile import U6_PROFILE
 from titan.u6.map_objects import overlay_map_objects
 from titan.u6.object import U6Object
 from titan.u6.palette import U6Palette
 from titan.u6.tile import U6AnimData, U6Tiles
 from titan.u6.tileflag import U6TileFlagEntry
-from tests.md_fixtures import initial_martian_objlist, object_block, resource_library
-from tests.md_fixtures import md_game as md_game
 
 
 def test_md_resource_wrapper_is_explicit_and_validated(md_game: Path) -> None:
@@ -304,7 +304,8 @@ def test_md_show_invisible_cli_wiring_and_requirement(
 def test_md_cli_renders_png_using_config(md_game: Path, tmp_path: Path) -> None:
     destination = tmp_path / "output" / "map.png"
     with patch(
-        "titan.md.cli.get_config", return_value={"md": {"game": {"base": str(md_game)}}}
+        "titan._config.get_config",
+        return_value={"md": {"game": {"base": str(md_game)}}},
     ):
         result = CliRunner().invoke(
             md_app,
@@ -338,7 +339,7 @@ def test_md_cli_reports_missing_resources_without_traceback(md_game: Path) -> No
     result = CliRunner().invoke(
         md_app, ["map-render", "-g", str(md_game), "--region", "0,0,1,1"]
     )
-    assert result.exit_code == 1
+    assert result.exit_code == 66  # titan.errors.EXIT_CODES["file-not-found"]
     assert "MAPTILES.VGA" in result.output
     assert "Traceback" not in result.output
 

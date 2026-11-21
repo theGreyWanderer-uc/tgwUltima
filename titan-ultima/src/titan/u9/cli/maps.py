@@ -46,19 +46,15 @@ from titan.u9.terrain import U9TerrainError
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan.u9.cli import _common
 from titan._meta import meta
+from titan._config import export_output
+from titan.errors import exit_code
 
 
 def cmd_map_atlas(args: SimpleNamespace) -> int:
     """Render a labelled, numerically ordered catalogue of U9 regions."""
     resolution = getattr(args, "resolution", "full")
     explicit_pixels = getattr(args, "pixels_per_cell", None)
-    try:
-        args.pixels_per_cell = resolve_topdown_pixels_per_cell(
-            resolution, explicit_pixels
-        )
-    except U9MapRenderError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    args.pixels_per_cell = resolve_topdown_pixels_per_cell(resolution, explicit_pixels)
     effective_resolution = "custom" if explicit_pixels is not None else resolution
     object_meshes = getattr(args, "objects", False)
     object_lod = getattr(args, "object_lod", 0)
@@ -66,50 +62,35 @@ def cmd_map_atlas(args: SimpleNamespace) -> int:
     static_directory = Path(args.static)
     runtime_directory = Path(args.runtime) if args.runtime else None
     if not static_directory.is_dir():
-        print(f"ERROR: Static directory not found: {static_directory}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Static directory not found: {static_directory}")
     if runtime_directory is not None and not runtime_directory.is_dir():
-        print(
-            f"ERROR: Runtime directory not found: {runtime_directory}",
-            file=sys.stderr,
-        )
-        return 1
+        raise FileNotFoundError(f"Runtime directory not found: {runtime_directory}")
 
     textures_path = args.textures
     if textures_path is None:
         match = _common._find_case_insensitive_file(static_directory, "bitmap16.flx")
         textures_path = str(match) if match is not None else None
     if textures_path is None or not os.path.isfile(textures_path):
-        print(
-            "ERROR: bitmap16.flx was not found in the static directory; "
-            "pass --textures",
-            file=sys.stderr,
+        raise FileNotFoundError(
+            "bitmap16.flx was not found in the static directory; pass --textures"
         )
-        return 1
 
     models_path = args.models
     types_path = args.types
-    try:
-        sources = discover_region_files(
-            static_directory,
-            runtime_directory=runtime_directory,
-            region_ids=tuple(args.region_ids or ()),
-        )
-    except U9MapAtlasError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    sources = discover_region_files(
+        static_directory,
+        runtime_directory=runtime_directory,
+        region_ids=tuple(args.region_ids or ()),
+    )
 
     if needs_models:
         if models_path is None:
             match = _common._find_case_insensitive_file(static_directory, "sappear.flx")
             models_path = str(match) if match is not None else None
         if models_path is None or not os.path.isfile(models_path):
-            print(
-                "ERROR: sappear.flx was not found in the static directory; "
-                "pass --models",
-                file=sys.stderr,
+            raise FileNotFoundError(
+                "sappear.flx was not found in the static directory; pass --models"
             )
-            return 1
         if any(source.fixed_path is not None for source in sources):
             if types_path is None:
                 match = _common._find_case_insensitive_file(
@@ -117,14 +98,11 @@ def cmd_map_atlas(args: SimpleNamespace) -> int:
                 )
                 types_path = str(match) if match is not None else None
             if types_path is None or not os.path.isfile(types_path):
-                print(
-                    "ERROR: TYPES.DAT was not found in the static directory; "
-                    "pass --types",
-                    file=sys.stderr,
+                raise FileNotFoundError(
+                    "TYPES.DAT was not found in the static directory; pass --types"
                 )
-                return 1
 
-    output_directory = Path(args.output or "u9_map_atlas")
+    output_directory = Path(export_output(args.output, "u9", "map-atlas"))
     try:
         textures = U9MapTextureSource.from_file(
             textures_path,
@@ -184,7 +162,7 @@ def cmd_map_atlas(args: SimpleNamespace) -> int:
         U9FlxArchiveError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     metadata = Path(args.metadata) if args.metadata else output_directory / "atlas.json"
     metadata.parent.mkdir(parents=True, exist_ok=True)
@@ -259,13 +237,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     """Render terrain with decoded textures and optional object placements."""
     resolution = getattr(args, "resolution", "full")
     explicit_pixels = getattr(args, "pixels_per_cell", None)
-    try:
-        args.pixels_per_cell = resolve_topdown_pixels_per_cell(
-            resolution, explicit_pixels
-        )
-    except U9MapRenderError as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    args.pixels_per_cell = resolve_topdown_pixels_per_cell(resolution, explicit_pixels)
     effective_resolution = "custom" if explicit_pixels is not None else resolution
     object_meshes = getattr(args, "objects", False)
     object_lod = getattr(args, "object_lod", 0)
@@ -292,8 +264,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         ("Types", types_path),
     ):
         if path is not None and not os.path.isfile(path):
-            print(f"ERROR: {label} file not found: {path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"{label} file not found: {path}")
 
     textures_path = args.textures
     if textures_path is None:
@@ -303,12 +274,9 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         )
         textures_path = str(textures_match) if textures_match is not None else None
     if textures_path is None or not os.path.isfile(textures_path):
-        print(
-            "ERROR: bitmap16.flx was not found beside the terrain file; "
-            "pass --textures",
-            file=sys.stderr,
+        raise FileNotFoundError(
+            "bitmap16.flx was not found beside the terrain file; pass --textures"
         )
-        return 1
 
     terrain_dir = Path(args.terrain).resolve().parent
     if needs_models:
@@ -324,23 +292,18 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             )
             models_path = str(models_match) if models_match is not None else None
         if models_path is None or not os.path.isfile(models_path):
-            print(
-                "ERROR: sappear.flx was not found beside the terrain file; "
-                "pass --models",
-                file=sys.stderr,
+            raise FileNotFoundError(
+                "sappear.flx was not found beside the terrain file; pass --models"
             )
-            return 1
         if args.fixed is not None and types_path is None:
             types_match = _common._find_case_insensitive_file(terrain_dir, "TYPES.DAT")
             types_path = str(types_match) if types_match is not None else None
         if args.fixed is not None and (
             types_path is None or not os.path.isfile(types_path)
         ):
-            print(
-                "ERROR: TYPES.DAT was not found beside the terrain file; pass --types",
-                file=sys.stderr,
+            raise FileNotFoundError(
+                "TYPES.DAT was not found beside the terrain file; pass --types"
             )
-            return 1
 
     try:
         scene = U9RegionScene.from_files(
@@ -402,7 +365,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         U9FlxArchiveError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     output = Path(args.output) if args.output else Path(f"{args.terrain}_map.png")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -552,8 +515,7 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
         ("Types", types_path),
     ):
         if path is not None and not os.path.isfile(path):
-            print(f"ERROR: {label} file not found: {path}", file=sys.stderr)
-            return 1
+            raise FileNotFoundError(f"{label} file not found: {path}")
 
     terrain_dir = Path(args.terrain).resolve().parent
     textures_path = args.textures
@@ -561,12 +523,9 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
         match = _common._find_case_insensitive_file(terrain_dir, "bitmap16.flx")
         textures_path = str(match) if match is not None else None
     if textures_path is None or not os.path.isfile(textures_path):
-        print(
-            "ERROR: bitmap16.flx was not found beside the terrain file; "
-            "pass --textures",
-            file=sys.stderr,
+        raise FileNotFoundError(
+            "bitmap16.flx was not found beside the terrain file; pass --textures"
         )
-        return 1
 
     has_object_input = args.fixed is not None or args.nonfixed is not None
     if args.objects and has_object_input:
@@ -574,23 +533,18 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
             match = _common._find_case_insensitive_file(terrain_dir, "sappear.flx")
             models_path = str(match) if match is not None else None
         if models_path is None or not os.path.isfile(models_path):
-            print(
-                "ERROR: sappear.flx was not found beside the terrain file; "
-                "pass --models",
-                file=sys.stderr,
+            raise FileNotFoundError(
+                "sappear.flx was not found beside the terrain file; pass --models"
             )
-            return 1
         if args.fixed is not None and types_path is None:
             match = _common._find_case_insensitive_file(terrain_dir, "TYPES.DAT")
             types_path = str(match) if match is not None else None
         if args.fixed is not None and (
             types_path is None or not os.path.isfile(types_path)
         ):
-            print(
-                "ERROR: TYPES.DAT was not found beside the terrain file; pass --types",
-                file=sys.stderr,
+            raise FileNotFoundError(
+                "TYPES.DAT was not found beside the terrain file; pass --types"
             )
-            return 1
 
     output = Path(args.output) if args.output else Path(f"{args.terrain}_map.glb")
     try:
@@ -649,7 +603,7 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
         U9GlbExportError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     metadata = Path(args.metadata) if args.metadata else output.with_suffix(".json")
     metadata.parent.mkdir(parents=True, exist_ok=True)
@@ -725,8 +679,7 @@ def cmd_map_render_3d(args: SimpleNamespace) -> int:
     """Render a Titan U9 region GLB with the south-high orthographic camera."""
     scene = Path(args.scene)
     if not scene.is_file():
-        print(f"ERROR: Scene GLB not found: {scene}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Scene GLB not found: {scene}")
     output = (
         Path(args.output)
         if args.output
@@ -754,7 +707,7 @@ def cmd_map_render_3d(args: SimpleNamespace) -> int:
         )
     except (OSError, U9VtkRenderError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     metadata = Path(args.metadata) if args.metadata else output.with_suffix(".json")
     metadata.parent.mkdir(parents=True, exist_ok=True)
@@ -788,7 +741,10 @@ def cmd_map_render_3d(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette", "metadata": "output-file"},
+)
 def map_atlas_cmd(
     static: Annotated[
         str,
@@ -835,7 +791,7 @@ def map_atlas_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output directory (default: ./u9_map_atlas)",
         ),
     ] = None,
@@ -1069,7 +1025,10 @@ def map_atlas_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("image",),
+    params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
+)
 def map_render_cmd(
     terrain: Annotated[
         str, typer.Argument(help="Path to a static/terrain.<region> file")
@@ -1306,7 +1265,10 @@ def map_render_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("file",),
+    params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
+)
 def map_export_glb_cmd(
     terrain: Annotated[
         str, typer.Argument(help="Path to a static/terrain.<region> file")
@@ -1444,7 +1406,7 @@ def map_export_glb_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file"})
+@meta(results=("image",), params={"output": "output-file", "metadata": "output-file"})
 def map_render_3d_cmd(
     scene: Annotated[
         str,

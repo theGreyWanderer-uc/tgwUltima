@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
+from titan.errors import InvalidDataError
 
 PALETTE_COLOR_COUNT = 256
 PALETTE_BYTE_SIZE = PALETTE_COLOR_COUNT * 3
 
 
-class UW1PaletteError(ValueError):
+class UW1PaletteError(InvalidDataError):
     """Raised when a complete UW1 palette cannot be decoded."""
 
 
@@ -51,11 +52,15 @@ class UW1Palette:
         """Read one palette from ``PALS.DAT``."""
         return cls.from_data(Path(path).read_bytes(), index=index)
 
-    def flattened_rgb(self) -> list[int]:
-        """Return Pillow-compatible flattened RGB components."""
-        return [component for color in self.colors for component in color]
+    def to_flat_rgb(self) -> bytes:
+        """768 bytes ``r0 g0 b0 r1 ...`` for Pillow's ``putpalette``."""
+        return bytes(component for color in self.colors for component in color)
 
-    def to_swatch_image(self, swatch_size: int = 16) -> Image.Image:
+    def flattened_rgb(self) -> list[int]:
+        """:meth:`to_flat_rgb` as a list of ints (the older name)."""
+        return list(self.to_flat_rgb())
+
+    def to_pil_image(self, swatch_size: int = 16) -> Image.Image:
         """Render the palette as a 16-by-16 swatch grid."""
         if swatch_size < 1:
             raise UW1PaletteError(
@@ -67,3 +72,7 @@ class UW1Palette:
             y = (color_index // 16) * swatch_size
             image.paste(color, (x, y, x + swatch_size, y + swatch_size))
         return image
+
+    def to_swatch_image(self, swatch_size: int = 16) -> Image.Image:
+        """:meth:`to_pil_image` (the older name)."""
+        return self.to_pil_image(swatch_size)

@@ -15,8 +15,10 @@ __all__ = ["uo_app"]
 import typer
 
 from titan.uo.cli import graphics, maps, housing, data, animations
+from titan._cli_aliases import alias_group
 
 uo_app = typer.Typer(
+    cls=alias_group({"--output": "--output-dir"}),
     name="uo",
     help="Ultima Online Classic Client commands.",
     no_args_is_help=True,

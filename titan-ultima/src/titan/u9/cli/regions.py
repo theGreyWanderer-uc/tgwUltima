@@ -139,11 +139,7 @@ def cmd_nonfixed_entities(args: SimpleNamespace) -> int:
         except ValueError:
             print(f"ERROR: --chunk expects 'X,Y', got {args.chunk!r}", file=sys.stderr)
             return 1
-        try:
-            chunk = region.chunk(cx, cy)
-        except U9NonfixedError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            return 1
+        chunk = region.chunk(cx, cy)
         if chunk is None:
             print(f"Chunk ({cx}, {cy}) holds no pages.")
             return 0
@@ -346,11 +342,7 @@ def cmd_fixed_objects(args: SimpleNamespace) -> int:
         except ValueError:
             print(f"ERROR: --chunk expects 'X,Y', got {args.chunk!r}", file=sys.stderr)
             return 1
-        try:
-            chunk = region.chunk(cx, cy)
-        except U9FixedError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            return 1
+        chunk = region.chunk(cx, cy)
         if chunk is None:
             print(f"Chunk ({cx}, {cy}) holds no pages.")
             return 0
@@ -480,22 +472,16 @@ def cmd_terrain_chunk(args: SimpleNamespace) -> int:
     region = _load_terrain(args.file)
     if region is None:
         return 1
-    try:
-        if args.tile is not None:
-            try:
-                tile_x, tile_y = (int(v) for v in args.tile.split(",", 1))
-            except ValueError:
-                print(
-                    f"ERROR: --tile expects 'X,Y', got {args.tile!r}", file=sys.stderr
-                )
-                return 1
-            index = region.tile(tile_x, tile_y)
-        else:
-            index = args.index or 0
-        chunk = region.chunk(index)
-    except U9TerrainError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    if args.tile is not None:
+        try:
+            tile_x, tile_y = (int(v) for v in args.tile.split(",", 1))
+        except ValueError:
+            print(f"ERROR: --tile expects 'X,Y', got {args.tile!r}", file=sys.stderr)
+            return 1
+        index = region.tile(tile_x, tile_y)
+    else:
+        index = args.index or 0
+    chunk = region.chunk(index)
 
     field = args.field
     pick = {
@@ -657,6 +643,7 @@ def cmd_terrain_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def nonfixed_info_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
@@ -666,6 +653,7 @@ def nonfixed_info_cmd(
     raise SystemExit(cmd_nonfixed_info(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def nonfixed_chunks_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
@@ -675,6 +663,7 @@ def nonfixed_chunks_cmd(
     raise SystemExit(cmd_nonfixed_chunks(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def nonfixed_entities_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
@@ -715,6 +704,7 @@ def nonfixed_entities_cmd(
     )
 
 
+@meta(results=("text",))
 def nonfixed_diff_cmd(
     left: Annotated[str, typer.Argument(help="First runtime/nonfixed.<region> file")],
     right: Annotated[str, typer.Argument(help="Second runtime/nonfixed.<region> file")],
@@ -731,6 +721,7 @@ def nonfixed_diff_cmd(
     )
 
 
+@meta(results=("text",))
 def fixed_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
 ) -> None:
@@ -738,6 +729,7 @@ def fixed_info_cmd(
     raise SystemExit(cmd_fixed_info(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def fixed_chunks_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
     by_grid: Annotated[
@@ -754,6 +746,7 @@ def fixed_chunks_cmd(
     )
 
 
+@meta(results=("text",))
 def fixed_objects_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
     chunk: Annotated[
@@ -784,6 +777,7 @@ def fixed_objects_cmd(
     )
 
 
+@meta(results=("text",))
 def fixed_types_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
     typenames: Annotated[
@@ -802,6 +796,7 @@ def fixed_types_cmd(
     )
 
 
+@meta(results=("text",))
 def terrain_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
 ) -> None:
@@ -809,6 +804,7 @@ def terrain_info_cmd(
     raise SystemExit(cmd_terrain_info(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def terrain_tiles_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
 ) -> None:
@@ -816,6 +812,7 @@ def terrain_tiles_cmd(
     raise SystemExit(cmd_terrain_tiles(SimpleNamespace(file=file)))
 
 
+@meta(results=("text",))
 def terrain_chunk_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     index: Annotated[
@@ -863,6 +860,7 @@ def terrain_chunk_cmd(
     )
 
 
+@meta(results=("text",))
 def terrain_textures_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     sdinfo: Annotated[

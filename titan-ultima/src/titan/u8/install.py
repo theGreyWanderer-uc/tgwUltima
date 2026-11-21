@@ -8,16 +8,22 @@ __all__ = [
     "U8_STATIC_FILES",
     "U8_WORKING_DIRS",
     "U8_WORKING_DIR_ARCHIVES",
+    "discover_installs",
     "discover_u8_installs",
     "expand_u8_paths",
     "find_u8_engine_save",
+    "install_candidates",
+    "install_config",
     "is_u8_folder_name",
     "prune_stale_u8_save_default",
     "resolve_u8_save",
     "resolve_u8_working_dir",
     "u8_detected_paths",
     "u8_install_candidates",
+    "u8_cfg",
+    "u8_config_section",
     "u8_save_dir",
+    "u8_section",
     "u8_setup_lines",
     "u8_working_archive",
     "u8_working_dir_for_archive",
@@ -26,6 +32,8 @@ __all__ = [
 import os
 from pathlib import Path
 from typing import Optional
+
+from titan._meta import Installation
 
 U8_STATIC_FILES = {
     "fixed": "FIXED.DAT",
@@ -132,11 +140,36 @@ U8_WORKING_DIR_ARCHIVES = {
 """Working folder -> (``[u8.paths]`` key, file name) of the archive it comes from."""
 
 
+def u8_section(config: Optional[dict] = None) -> dict:
+    """The ``[u8]`` section of a loaded config, as ``{"game": ..., "paths": ...}``.
+
+    *config* is a loaded config (by default the one titan loaded), raw TOML
+    still in titan's old flat layout (top-level ``[game]``/``[paths]``) or a
+    U8 section itself.
+    """
+    if config is None:
+        from titan._config import get_config
+
+        config = get_config()
+    section = config.get("u8")
+    if isinstance(section, dict):
+        return section
+    return {"game": config.get("game", {}), "paths": config.get("paths", {})}
+
+
+def u8_cfg(key: str, table: str = "paths") -> Optional[str]:
+    """One ``[u8.<table>]`` value from the loaded config, e.g. ``u8_cfg("fixed")``."""
+    value = u8_section().get(table, {}).get(key)
+    return value if value is None else str(value)
+
+
 def _u8_paths(config: dict) -> dict:
-    return config.get("u8", {}).get("paths") or config.get("paths", {})
+    return u8_section(config).get("paths", {})
 
 
-def u8_working_archive(working_dir: str, config: dict) -> Optional[Path]:
+def u8_working_archive(
+    working_dir: str, config: Optional[dict] = None
+) -> Optional[Path]:
     """The configured install's archive for a working folder (``"shapes"``), or ``None``.
 
     ``shapes`` comes from ``U8SHAPES.FLX`` and ``globs`` from ``GLOB.FLX``. A
@@ -214,6 +247,7 @@ def u8_save_dir(config: dict) -> Optional[Path]:
     then ``<base>/cloud_saves/SAVEGAME`` (the base itself for flat installs).
     *config* is the loaded config or a U8 section with ``game``/``paths``.
     """
+    config = u8_section(config)
     paths = config.get("paths", {})
     savegame = _str_value(paths, "savegame")
     if savegame:
@@ -245,7 +279,7 @@ def resolve_u8_save(value: Optional[str], config: dict) -> Optional[Path]:
         if not value.isdigit() and (path.is_absolute() or path.exists()):
             return path
     else:
-        value = _str_value(config.get("paths", {}), "nonfixed")
+        value = _str_value(_u8_paths(config), "nonfixed")
         if not value:
             return None
     save_dir = u8_save_dir(config)
@@ -385,6 +419,47 @@ def u8_detected_paths(base: str, lang: str) -> tuple[Path, Path]:
     return static, root / "USECODE" / "EUSECODE.FLX"
 
 
+_U8_PATH_GROUPS = (
+    ("fixed", "palette", "typeflag", "gumpage", "xformpal", "ecredits", "quotes"),
+    ("u8shapes", "glob", "u8fonts", "u8gumps", "usecode"),
+)
+
+
+def u8_config_section(
+    base: str,
+    lang: str,
+    savegame_value: str,
+    usecode_detected: Path,
+    *,
+    manual_static: str = "",
+    manual_usecode: str = "",
+) -> dict:
+    """``[u8.game]`` and ``[u8.paths]`` for an install (see :func:`u8_setup_lines`)."""
+    static_manual = Path(manual_static) if manual_static else None
+    if manual_usecode:
+        usecode = manual_usecode
+    elif static_manual is not None:
+        usecode = str(static_manual.parent / "USECODE" / "EUSECODE.FLX")
+    else:
+        usecode = str(usecode_detected)
+
+    if static_manual is not None:
+        paths = {
+            key: str(static_manual / filename).replace("\\", "/")
+            for key, filename in U8_STATIC_FILES.items()
+        }
+    else:
+        paths = dict(U8_STATIC_FILES)
+    paths["usecode"] = usecode.replace("\\", "/")
+    paths.update({key: f"{key}/" for key in U8_WORKING_DIRS})
+    if savegame_value:
+        paths["savegame"] = savegame_value
+    return {
+        "game": {"base": base.replace("\\", "/"), "language": lang},
+        "paths": paths,
+    }
+
+
 def u8_setup_lines(
     base: str,
     lang: str,
@@ -404,58 +479,33 @@ def u8_setup_lines(
     third-party engine); empty means the base folder. Setup never picks a
     save: ``nonfixed`` is left for the user to set.
     """
-    static_manual = Path(manual_static) if manual_static else None
-    if manual_usecode:
-        usecode = manual_usecode
-    elif static_manual is not None:
-        usecode = str(static_manual.parent / "USECODE" / "EUSECODE.FLX").replace(
-            "\\", "/"
-        )
-    else:
-        usecode = str(usecode_detected).replace("\\", "/")
+    section = u8_config_section(
+        base,
+        lang,
+        savegame_value,
+        usecode_detected,
+        manual_static=manual_static,
+        manual_usecode=manual_usecode,
+    )
+    game, paths = section["game"], section["paths"]
 
-    if static_manual is not None:
-        paths = {
-            key: str(static_manual / filename).replace("\\", "/")
-            for key, filename in U8_STATIC_FILES.items()
-        }
-    else:
-        paths = dict(U8_STATIC_FILES)
+    def _entry(key: str) -> str:
+        return f'{key:<10}= "{paths[key]}"'
 
-    def _entry(key: str, value: str) -> str:
-        return f'{key:<10}= "{value}"'
-
-    base_toml = base.replace("\\", "/")
     lines = [
         "[u8.game]",
-        f'base     = "{base_toml}"',
-        f'language = "{lang}"',
+        f'base     = "{game["base"]}"',
+        f'language = "{game["language"]}"',
         "",
         "[u8.paths]",
-        *(
-            _entry(key, paths[key])
-            for key in (
-                "fixed",
-                "palette",
-                "typeflag",
-                "gumpage",
-                "xformpal",
-                "ecredits",
-                "quotes",
-            )
-        ),
+        *(_entry(key) for key in _U8_PATH_GROUPS[0]),
         "",
-        *(
-            _entry(key, paths[key])
-            for key in ("u8shapes", "glob", "u8fonts", "u8gumps")
-        ),
-        _entry("usecode", usecode),
+        *(_entry(key) for key in _U8_PATH_GROUPS[1]),
         "",
         "# Extracted working folders, relative to titan's data folder (titan config shows it)",
-        'shapes    = "shapes/"',
-        'globs     = "globs/"',
+        *(_entry(key) for key in U8_WORKING_DIRS),
         "",
-        "# Save folder; map commands take --nonfixed as a slot (3), file name or path",
+        "# Save folder; map commands take --save as a slot (3), file name or path",
     ]
     if not savegame_value:
         lines.append("# (flat install: saves are read from the base folder)")
@@ -465,3 +515,38 @@ def u8_setup_lines(
         lines.append(f'savegame  = "{savegame_value}"')
     lines.append('# Optional default save for map commands, e.g. nonfixed = "3"')
     return lines
+
+
+def install_candidates(config: dict) -> list[Path]:
+    """Install protocol: ``[u8.game] base``, then :func:`u8_install_candidates`."""
+    base = u8_section(config).get("game", {}).get("base")
+    configured = [Path(str(base)).expanduser()] if base else []
+    return list(dict.fromkeys([*configured, *u8_install_candidates()]))
+
+
+def discover_installs(path: Path) -> list[Installation]:
+    """Install protocol: the U8 install at *path* (flat, or with a language folder)."""
+    found = []
+    for base, lang in discover_u8_installs([path.expanduser().absolute()]):
+        static, usecode = u8_detected_paths(str(base), lang)
+        resources = {
+            key: static / name
+            for key, name in U8_STATIC_FILES.items()
+            if (static / name).is_file()
+        }
+        if usecode.is_file():
+            resources["usecode"] = usecode
+        save_dir = _default_u8_save_dir(base, lang)
+        if save_dir.is_dir():
+            resources["savegame"] = save_dir
+        found.append(Installation("u8", base, resources, settings={"language": lang}))
+    return found
+
+
+def install_config(install: Installation) -> dict:
+    """Install protocol: ``[u8.game]`` and ``[u8.paths]`` as setup writes them."""
+    lang = install.settings.get("language", "")
+    _, usecode = u8_detected_paths(str(install.root), lang)
+    return u8_config_section(
+        install.root.as_posix(), lang, U8_GAME_SAVE_DIR if lang else "", usecode
+    )

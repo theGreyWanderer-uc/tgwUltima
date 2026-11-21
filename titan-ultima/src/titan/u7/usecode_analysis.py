@@ -15,6 +15,7 @@ from titan.u7.usecode import (
     _u16,
     _u32,
 )
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -38,7 +39,7 @@ def read_usecode_symbol_scope(
 ) -> tuple[tuple[U7UsecodeSymbol, ...], int]:
     """Parse one bounded symbol scope; return the exact function-stream boundary."""
     if depth >= _MAX_SYMBOL_SCOPE_DEPTH:
-        raise ValueError(
+        raise InvalidDataError(
             f"U7 USECODE symbol-table nesting exceeds {_MAX_SYMBOL_SCOPE_DEPTH} scopes"
         )
     _require_bytes(data, pos, 8, "symbol-table scope header")
@@ -49,7 +50,7 @@ def read_usecode_symbol_scope(
         start = pos
         end = data.find(b"\0", pos)
         if end < 0:
-            raise ValueError(
+            raise InvalidDataError(
                 f"Unterminated U7 USECODE symbol name at file offset 0x{pos:X}"
             )
         name = data[pos:end]

@@ -47,11 +47,14 @@ __all__ = [
 import os
 import re
 import struct
-import sys
+import logging
 from pathlib import Path
 from typing import Literal, Optional
 
 from titan._version import TITAN_VERSION
+from titan.errors import InvalidDataError
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Flex file format constants (little-endian throughout)
@@ -128,7 +131,7 @@ def calculate_u8_flex_checksum(data: bytes | bytearray) -> int:
     The header's stored size/checksum words do not affect the calculation.
     """
     if len(data) < FLEX_HEADER_SIZE:
-        raise ValueError("U8 Flex checksum: truncated header")
+        raise InvalidDataError("U8 Flex checksum: truncated header")
     checksum_bytes = memoryview(data)[
         FLEX_HEADER_SIZE : len(data) - FLEX_HEADER_SIZE
     ].cast("b")
@@ -236,10 +239,10 @@ class FlexArchive:
             data = f.read()
 
         if len(data) < FLEX_HEADER_SIZE:
-            raise ValueError(f"File too small to be a Flex archive: {filepath}")
+            raise InvalidDataError(f"File too small to be a Flex archive: {filepath}")
 
         if not cls._validate_header(data[:FLEX_HEADER_SIZE]):
-            raise ValueError(f"Invalid Flex header in: {filepath}")
+            raise InvalidDataError(f"Invalid Flex header in: {filepath}")
 
         archive._source_header = data[:FLEX_HEADER_SIZE]
         archive.archive_format = (
@@ -251,7 +254,7 @@ class FlexArchive:
         count = struct.unpack_from("<I", data, FLEX_COUNT_OFFSET)[0]
         table_end = FLEX_TABLE_OFFSET + count * FLEX_RECORD_ENTRY_SIZE
         if strict and table_end > len(data):
-            raise ValueError("Flex record table is truncated")
+            raise InvalidDataError("Flex record table is truncated")
 
         # Read unknown field
         archive.unknown_field = struct.unpack_from("<I", data, FLEX_UNK_OFFSET)[0]
@@ -262,14 +265,15 @@ class FlexArchive:
             table_pos = FLEX_TABLE_OFFSET + i * FLEX_RECORD_ENTRY_SIZE
             offset, size = struct.unpack_from("<II", data, table_pos)
             if strict and size and (offset < table_end or offset + size > len(data)):
-                raise ValueError(f"Flex record {i} has invalid bounds")
+                raise InvalidDataError(f"Flex record {i} has invalid bounds")
             if size > 0 and offset > 0:
                 record_data = data[offset : offset + size]
                 if len(record_data) != size:
-                    print(
-                        f"  WARNING: Record {i} truncated "
-                        f"(expected {size}, got {len(record_data)})",
-                        file=sys.stderr,
+                    log.warning(
+                        "Record %d truncated (expected %d, got %d)",
+                        i,
+                        size,
+                        len(record_data),
                     )
                 archive.records.append(record_data)
             else:
@@ -284,9 +288,9 @@ class FlexArchive:
         """Load a Flex archive from raw bytes (same logic as from_file)."""
         archive = cls()
         if len(data) < FLEX_HEADER_SIZE:
-            raise ValueError("Data too small to be a Flex archive")
+            raise InvalidDataError("Data too small to be a Flex archive")
         if not cls._validate_header(data[:FLEX_HEADER_SIZE]):
-            raise ValueError("Invalid Flex header in data")
+            raise InvalidDataError("Invalid Flex header in data")
         archive._source_header = data[:FLEX_HEADER_SIZE]
         archive.archive_format = (
             "u7" if struct.unpack_from("<I", data, 0x50)[0] == 0xFFFF1A00 else "u8"
@@ -305,6 +309,20 @@ class FlexArchive:
                 archive.records.append(b"")
         archive._parse_name_table()
         return archive
+
+    @property
+    def entry_count(self) -> int:
+        """Number of slots, used or not (:class:`titan.protocols.IndexedArchive`)."""
+        return len(self.records)
+
+    def read(self, index: int) -> bytes | None:
+        """Slot *index*'s bytes, or ``None`` for an empty slot
+        (:class:`titan.protocols.IndexedArchive`)."""
+        if not 0 <= index < self.entry_count:
+            raise IndexError(
+                f"Flex record index {index} out of range (0..{self.entry_count - 1})"
+            )
+        return self.records[index] or None
 
     def get_record(self, index: int) -> bytes:
         """Return raw bytes for a record by index."""
@@ -586,10 +604,11 @@ class FlexArchive:
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "wb") as f:
             f.write(self.to_bytes())
-        print(
-            f"Wrote Flex archive: {filepath} "
-            f"({len(self.records)} records, "
-            f"{os.path.getsize(filepath):,} bytes)"
+        log.info(
+            "Wrote Flex archive: %s (%d records, %s bytes)",
+            filepath,
+            len(self.records),
+            f"{os.path.getsize(filepath):,}",
         )
 
     @classmethod
@@ -627,10 +646,7 @@ class FlexArchive:
                 continue
 
         if not indexed_files:
-            print(
-                f"WARNING: No numerically named files found in {dirpath_p}",
-                file=sys.stderr,
-            )
+            log.warning("No numerically named files found in %s", dirpath_p)
             return archive
 
         max_index = max(indexed_files.keys())

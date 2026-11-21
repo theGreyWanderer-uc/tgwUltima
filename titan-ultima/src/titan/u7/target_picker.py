@@ -31,6 +31,7 @@ def ask(prompt: Any) -> Any:
 
 def game_targets(game: str) -> tuple[ArchiveTarget, list[ArchiveTarget]]:
     from titan._config import get_config
+    from titan._meta import configured_install
 
     config = get_config()
     cfg_path = find_exult_cfg()
@@ -41,7 +42,8 @@ def game_targets(game: str) -> tuple[ArchiveTarget, list[ArchiveTarget]]:
         except (OSError, ValueError):
             pass
     static = resolve_u7_path(game, "static")
-    return base_target(game, config, static, paths, cfg_path), discover_targets(
+    install = configured_install("u7bg" if game.upper() == "BG" else "u7si")
+    return base_target(game, install, static, paths), discover_targets(
         game, config, static, paths, cfg_path
     )
 

@@ -16,6 +16,7 @@ __all__ = ["U9TypeRecord", "U9TypesDat", "U9TypesDatError", "U9TypesHeader"]
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 HEADER_SIZE = 8
 RECORD_SIZE = 16
@@ -40,7 +41,7 @@ _KNOWN_OBJECT_FLAGS = {
 _KNOWN_OBJECT_FLAG_MASK = sum(_KNOWN_OBJECT_FLAGS)
 
 
-class U9TypesDatError(Exception):
+class U9TypesDatError(InvalidDataError):
     """Raised on malformed ``static/TYPES.DAT`` data."""
 
 

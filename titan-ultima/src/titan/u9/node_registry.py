@@ -6,9 +6,10 @@ __all__ = ["U9NodeName", "U9NodeRegistry", "U9NodeRegistryError"]
 
 import os
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 
-class U9NodeRegistryError(Exception):
+class U9NodeRegistryError(InvalidDataError):
     """Raised when ``static/registry.txt`` contains an invalid node mapping."""
 
 

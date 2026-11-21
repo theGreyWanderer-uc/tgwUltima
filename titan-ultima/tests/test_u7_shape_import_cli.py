@@ -10,8 +10,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from PIL import Image
 import numpy as np
+from PIL import Image
 
 from titan.u7.cli.shapes import cmd_shape_import
 from titan.u7.palette import U7Palette
@@ -221,6 +221,7 @@ class ShapeImportCliTests(unittest.TestCase):
 
     def test_cli_flat_flags_encode_and_insert_into_slot_zero(self) -> None:
         from typer.testing import CliRunner
+
         from titan.cli import app
         from titan.u7.flex import U7FlexArchive
 
@@ -260,6 +261,7 @@ class ShapeImportCliTests(unittest.TestCase):
 
     def test_cli_allow_cycling_flag_selects_the_effect_colour(self) -> None:
         from typer.testing import CliRunner
+
         from titan.cli import app
 
         colors = bytearray(256 * 3)
@@ -291,26 +293,29 @@ class ShapeImportCliTests(unittest.TestCase):
                 Image.new("RGBA", size, (255, 0, 0, 255)).save(
                     self.frames_dir / "frame.png"
                 )
-                stderr = StringIO()
-                with redirect_stderr(stderr):
-                    self.assertEqual(self._run_import(), 0)
+                # The warning is a log record; the CLI prints it as "Warning: ...".
+                logger = "titan.u7.shape_import"
+                if max(size) > 72:
+                    with self.assertLogs(logger, "WARNING") as logs:
+                        self.assertEqual(self._run_import(), 0)
+                    message = " ".join(logs.output)
+                    self.assertIn(f"{size[0]}x{size[1]}", message)
+                    self.assertIn("72x72", message)
+                else:
+                    with self.assertNoLogs(logger, "WARNING"):
+                        self.assertEqual(self._run_import(), 0)
                 frame = U7Shape.from_file(str(self.output_path)).frames[0]
                 self.assertEqual((frame.width, frame.height), size)
-                self.assertEqual("WARNING:" in stderr.getvalue(), max(size) > 72)
-                if max(size) > 72:
-                    self.assertIn(f"{size[0]}x{size[1]}", stderr.getvalue())
-                    self.assertIn("72x72", stderr.getvalue())
 
     def test_accepts_full_screen_size_with_warning_without_resizing(self) -> None:
         Image.new("RGBA", (320, 200), (255, 0, 0, 255)).save(
             self.frames_dir / "frame.png"
         )
-        stderr = StringIO()
-        with redirect_stderr(stderr):
+        with self.assertLogs("titan.u7.shape_import", "WARNING") as logs:
             self.assertEqual(self._run_import(), 0)
         frame = U7Shape.from_file(str(self.output_path)).frames[0]
         self.assertEqual((frame.width, frame.height), (320, 200))
-        self.assertIn("72x72", stderr.getvalue())
+        self.assertIn("72x72", " ".join(logs.output))
 
     def test_rejects_oversized_png_before_conversion_and_preserves_output(self) -> None:
         for size in ((321, 1), (1, 201), (256, 256), (321, 201)):

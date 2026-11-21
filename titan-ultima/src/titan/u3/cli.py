@@ -13,9 +13,12 @@ import typer
 
 from titan.u3.u3_nes_map_create import create_u3_nes_sosaria_map
 from titan._meta import meta
+from titan._cli_aliases import alias_group
+from titan.errors import exit_code
 
 
 u3_app = typer.Typer(
+    cls=alias_group({"--output-root": "--output-dir"}),
     name="u3",
     help="Ultima III NES map conversion commands.",
     no_args_is_help=True,
@@ -93,7 +96,7 @@ def cmd_map_create(args: SimpleNamespace) -> int:
         )
     except (OSError, U7MapJsonError, U7NativeMapCreateError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     if result.json_path is not None:
         print(f"Universal JSON: {result.json_path}")
@@ -137,7 +140,17 @@ def cmd_map_create(args: SimpleNamespace) -> int:
 
 
 @u3_app.command("map-create")
-@meta(params={"palette": "palette"})
+@meta(
+    params={
+        "palette": "palette",
+        "si_source_json": "input-file",
+        "output_root": "output-dir",
+        "json_output": "output-file",
+        "gamedat_root": "input-dir",
+        "static": "install-dir",
+        "render_output": "output-file",
+    }
+)
 def map_create_cmd(
     si_source_json: Annotated[
         str,
@@ -146,7 +159,7 @@ def map_create_cmd(
     output_root: Annotated[
         str,
         typer.Option(
-            "--output-root",
+            "--output-dir",
             help="Required PATCH-like root where mapNN and shared u7chunks are written",
         ),
     ],

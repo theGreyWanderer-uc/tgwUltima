@@ -37,11 +37,14 @@ __all__ = [
 
 import os
 import struct
-import sys
+import logging
 from pathlib import Path
 from typing import Optional
 
 from titan._version import TITAN_VERSION
+from titan.errors import InvalidDataError
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # U7/Exult Flex format constants  (from exult/files/Flex.h)
@@ -133,11 +136,11 @@ class U7FlexArchive:
             data = f.read()
 
         if len(data) < U7_FLEX_HEADER_LEN:
-            raise ValueError(f"File too small for a U7 Flex archive: {filepath}")
+            raise InvalidDataError(f"File too small for a U7 Flex archive: {filepath}")
 
         if not cls._validate_header(data[:U7_FLEX_HEADER_LEN]):
             magic = struct.unpack_from("<I", data, U7_FLEX_TITLE_LEN)[0]
-            raise ValueError(
+            raise InvalidDataError(
                 f"Invalid U7 Flex header in {filepath}: "
                 f"magic1=0x{magic:08X}, expected 0x{U7_FLEX_MAGIC1:08X}"
             )
@@ -153,7 +156,7 @@ class U7FlexArchive:
         count = struct.unpack_from("<I", data, 0x54)[0]
         table_end = U7_FLEX_TABLE_OFFSET + count * U7_FLEX_RECORD_ENTRY_SIZE
         if strict and table_end > len(data):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U7 Flex record table truncated: needs {table_end} bytes, "
                 f"archive has {len(data)}"
             )
@@ -173,10 +176,7 @@ class U7FlexArchive:
         for i in range(count):
             table_pos = U7_FLEX_TABLE_OFFSET + i * U7_FLEX_RECORD_ENTRY_SIZE
             if table_pos + 8 > len(data):
-                print(
-                    f"  WARNING: Record table truncated at entry {i}",
-                    file=sys.stderr,
-                )
+                log.warning("Record table truncated at entry %d", i)
                 break
             offset, size = struct.unpack_from("<II", data, table_pos)
             if (
@@ -184,17 +184,18 @@ class U7FlexArchive:
                 and size > 0
                 and (offset < table_end or offset + size > len(data))
             ):
-                raise ValueError(
+                raise InvalidDataError(
                     f"U7 Flex record {i} has invalid bounds: offset {offset}, "
                     f"size {size}, data starts at {table_end}, archive has {len(data)} bytes"
                 )
             if size > 0 and offset > 0:
                 record_data = data[offset : offset + size]
                 if len(record_data) != size:
-                    print(
-                        f"  WARNING: Record {i} truncated "
-                        f"(expected {size}, got {len(record_data)})",
-                        file=sys.stderr,
+                    log.warning(
+                        "Record %d truncated (expected %d, got %d)",
+                        i,
+                        size,
+                        len(record_data),
                     )
                 archive.records.append(record_data)
             else:
@@ -207,9 +208,9 @@ class U7FlexArchive:
         """Load a U7 Flex archive from raw bytes."""
         archive = cls()
         if len(data) < U7_FLEX_HEADER_LEN:
-            raise ValueError("Data too small for a U7 Flex archive")
+            raise InvalidDataError("Data too small for a U7 Flex archive")
         if not cls._validate_header(data[:U7_FLEX_HEADER_LEN]):
-            raise ValueError("Invalid U7 Flex header in data")
+            raise InvalidDataError("Invalid U7 Flex header in data")
 
         archive.title = (
             data[:U7_FLEX_TITLE_LEN]
@@ -232,6 +233,20 @@ class U7FlexArchive:
                 archive.records.append(b"")
 
         return archive
+
+    @property
+    def entry_count(self) -> int:
+        """Number of slots, used or not (:class:`titan.protocols.IndexedArchive`)."""
+        return len(self.records)
+
+    def read(self, index: int) -> bytes | None:
+        """Slot *index*'s bytes, or ``None`` for an empty slot
+        (:class:`titan.protocols.IndexedArchive`)."""
+        if not 0 <= index < self.entry_count:
+            raise IndexError(
+                f"U7 Flex record index {index} out of range (0..{self.entry_count - 1})"
+            )
+        return self.records[index] or None
 
     def get_record(self, index: int) -> bytes:
         """Return raw bytes for a record by index."""
@@ -311,10 +326,11 @@ class U7FlexArchive:
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
         with open(filepath, "wb") as f:
             f.write(self.to_bytes())
-        print(
-            f"Wrote U7 Flex archive: {filepath} "
-            f"({len(self.records)} records, "
-            f"{os.path.getsize(filepath):,} bytes)"
+        log.info(
+            "Wrote U7 Flex archive: %s (%d records, %s bytes)",
+            filepath,
+            len(self.records),
+            f"{os.path.getsize(filepath):,}",
         )
 
     # ------------------------------------------------------------------
@@ -350,10 +366,7 @@ class U7FlexArchive:
                 continue
 
         if not indexed_files:
-            print(
-                f"WARNING: No numerically named files found in {dirpath_p}",
-                file=sys.stderr,
-            )
+            log.warning("No numerically named files found in %s", dirpath_p)
             return archive
 
         max_index = max(indexed_files.keys())

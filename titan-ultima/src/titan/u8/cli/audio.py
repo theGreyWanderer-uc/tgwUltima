@@ -27,8 +27,7 @@ def cmd_music_export(args: SimpleNamespace) -> int:
     """Extract and convert music from MUSIC.FLX or a standalone XMIDI file."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         magic = f.read(4)
@@ -85,8 +84,7 @@ def cmd_sound_export_all(args: SimpleNamespace) -> int:
     """Extract and decode all sound effects from SOUND.FLX to WAV."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or f"{Path(filepath).stem}_wav"
     os.makedirs(outdir, exist_ok=True)
@@ -124,8 +122,7 @@ def cmd_sound_export(args: SimpleNamespace) -> int:
     """Decode a Sonarc audio file to WAV."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -157,8 +154,7 @@ def cmd_sound_batch(args: SimpleNamespace) -> int:
     """Batch-decode all Sonarc .raw files in a directory to WAV."""
     srcdir = args.directory
     if not os.path.isdir(srcdir):
-        print(f"ERROR: Directory not found: {srcdir}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Directory not found: {srcdir}")
 
     outdir = args.output or os.path.join(srcdir, "wav")
     os.makedirs(outdir, exist_ok=True)
@@ -203,7 +199,7 @@ def cmd_sound_batch(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def music_export_cmd(
     file: Annotated[
         str,
@@ -213,21 +209,21 @@ def music_export_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract and convert music from MUSIC.FLX to MIDI files."""
     raise SystemExit(cmd_music_export(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def sound_export_all_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to SOUND.FLX (Flex archive of Sonarc audio)")
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract and decode all sound effects from SOUND.FLX to WAV."""
@@ -241,24 +237,26 @@ def sound_export_all_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "input-file"})
 def sound_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .raw Sonarc audio file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Decode a Sonarc audio file (.raw) to WAV."""
     raise SystemExit(cmd_sound_export(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "directory": "input-dir"})
 def sound_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .raw files")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <dir>/wav/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <dir>/wav/)"
+        ),
     ] = None,
 ) -> None:
     """Batch-decode all Sonarc .raw files in a directory to WAV."""

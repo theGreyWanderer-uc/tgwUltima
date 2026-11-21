@@ -117,6 +117,7 @@ __all__ = [
 ]
 
 from dataclasses import dataclass, field
+from titan.errors import InvalidDataError
 
 # --- Opcode name tables, ported from ConverseInterpret.cpp's op_str()/evop_str() ---
 
@@ -240,7 +241,7 @@ _OP_SIDENT = 0xFF
 _TEXT_TAIL_OPS = frozenset({0xEF, 0xF8, 0xF1})  # KEYWORDS, ASKC, SLOOK
 
 
-class U6ConverseError(Exception):
+class U6ConverseError(InvalidDataError):
     """Raised when script data is truncated mid-instruction."""
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli import u7_app
 from titan.u7.ireg import U7ObjectFlags, decode_ireg_payload
 from titan.u7.ireg_metadata import U7IregContext
@@ -330,7 +331,7 @@ def test_cli_writes_new_output_and_report_without_changing_source(
     assert report["source_sha256"] == hashlib.sha256(raw).hexdigest()
     assert report["changes"][0]["before_hex"] == raw.hex()
     original_output = output.read_bytes()
-    assert CliRunner().invoke(u7_app, args).exit_code == 1
+    assert CliRunner().invoke(u7_app, args).exit_code == EXIT_CODES["output-exists"]
     assert output.read_bytes() == original_output
     args[-1] = str(source)
     assert (
@@ -357,5 +358,5 @@ def test_cli_stale_plan_writes_nothing(tmp_path: Path) -> None:
             str(output),
         ],
     )
-    assert result.exit_code == 1 and "SHA-256" in result.output
+    assert result.exit_code == EXIT_CODES["invalid-data"] and "SHA-256" in result.output
     assert not output.exists() and not output.parent.exists()

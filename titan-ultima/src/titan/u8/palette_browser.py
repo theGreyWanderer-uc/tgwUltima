@@ -18,10 +18,12 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from titan.u8.palette import U8Palette
+from titan._meta import Installation
 from titan.u8.shape_browser import configured_u8_browser_file, find_u8_browser_file
 from titan.u8.xformpal import U8_XFORM_PALETTE
 
-U8_PALETTE_BROWSER_OUTPUT = Path("titan-out/u8_palette_browse_export")
+U8_PALETTE_BROWSER_OUTPUT = "palette-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 U8_PALETTE_EFFECTS = (
     "Normal",
     "Greyscale",
@@ -34,11 +36,13 @@ U8_PALETTE_EFFECTS = (
 )
 
 
-def resolve_u8_palette_source(static: Path) -> Path:
+def resolve_u8_palette_source(
+    static: Path, install: Installation | None = None
+) -> Path:
     """Resolve only the selected owner's palette, never a different language."""
-    path = configured_u8_browser_file(static, "palette") or find_u8_browser_file(
-        static, "U8PAL.PAL"
-    )
+    path = configured_u8_browser_file(
+        static, "palette", install
+    ) or find_u8_browser_file(static, "U8PAL.PAL")
     if path is None:
         raise FileNotFoundError(f"No U8PAL.PAL in {static}")
     return path

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from titan.errors import InvalidDataError
 
 
 __all__ = [
@@ -13,7 +14,7 @@ __all__ = [
 ]
 
 
-class U7ZoneProfileError(ValueError):
+class U7ZoneProfileError(InvalidDataError):
     """Raised when zone profile data or selection is invalid."""
 
 

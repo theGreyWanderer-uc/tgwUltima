@@ -6,7 +6,7 @@ TYPEFLAG.DAT (physics, flags, footpad dimensions, etc.).
 
 Example::
 
-    from titan.typeflag import U8TypeFlags
+    from titan.u8.typeflag import U8TypeFlags
 
     entries = U8TypeFlags.from_file("TYPEFLAG.DAT")
     for e in entries:

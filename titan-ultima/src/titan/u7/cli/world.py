@@ -11,11 +11,13 @@ from typing import Annotated, Literal, Optional
 
 import typer
 
+from titan._wizard_ui import menus_enabled
 from titan.u7 import install
 from titan._meta import meta
+from titan.errors import exit_code
 
 
-@meta(results=("json",), params={"output": "output-file"})
+@meta(results=("json",), params={"output": "output-file", "file": "input-file"})
 def ireg_dump_cmd(
     file: Annotated[str, typer.Argument(help="Raw U7IREG stream to inspect")],
     static: Annotated[
@@ -85,12 +87,18 @@ def ireg_dump_cmd(
                 print(f"WARNING: {warning}", file=sys.stderr)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1)
+        raise SystemExit(exit_code(error))
 
 
 @meta(
     results=("table", "text"),
-    params={"format": "format", "gamedat": "save", "output": "output-file"},
+    params={
+        "format": "format",
+        "gamedat": "save",
+        "output": "output-file",
+        "config": "recipe",
+        "mod_data": "input-dir",
+    },
     interactive=True,
     batch_with=(
         "config",
@@ -140,7 +148,7 @@ def world_query_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat",
+            "--save",
             help="GAMEDAT folder or Exult save (.sav) for IREG dynamic objects",
         ),
     ] = None,
@@ -222,15 +230,16 @@ def world_query_cmd(
     """Query world object placements from IFIX and IREG.
 
     With no filter flags, launches an interactive wizard (requires questionary).
-    Supply any filter flag to run non-interactively.
+    Supply any filter flag to run non-interactively. Without a terminal (piped
+    or captured output), it runs unfiltered instead of launching the wizard.
 
     \\b
     Non-interactive examples:
-      titan u7 world-query STATIC/ --gamedat gamedat/ --class container --tile-rect 512,512,2048,2048
-      titan u7 world-query STATIC/ --name "locked chest" --ireg --gamedat gamedat/ -f csv -o out.csv
-      titan u7 world-query STATIC/ --shape 522 --ireg --gamedat gamedat/ -f full_text
+      titan u7 world-query STATIC/ --save gamedat/ --class container --tile-rect 512,512,2048,2048
+      titan u7 world-query STATIC/ --name "locked chest" --ireg --save gamedat/ -f csv -o out.csv
+      titan u7 world-query STATIC/ --shape 522 --ireg --save gamedat/ -f full_text
     """
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.world import (
@@ -248,6 +257,9 @@ def world_query_cmd(
     try:
         params = load_recipe(config) if config else WorldQueryParams(static_dir="")
         params.game = game or params.game
+        params.exult_flx_path = params.exult_flx_path or install.resolve_u7_exult_flx(
+            params.game
+        )
         configured_static, _ = install.resolve_u7_static_and_palette(params.game)
         params.static_dir = (
             static or params.static_dir or base_static or configured_static or ""
@@ -300,7 +312,7 @@ def world_query_cmd(
             )
             or force
         )
-        if not non_interactive:
+        if not non_interactive and menus_enabled():
             raise SystemExit(
                 _world_wizard(
                     static_dir=params.static_dir,
@@ -364,12 +376,18 @@ def world_query_cmd(
             typer.echo(format_result(result))
     except (OSError, ValueError) as error:
         typer.echo(f"World query failed: {error}", err=True)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
     results=("table", "text"),
-    params={"format": "format", "gamedat": "save", "output": "output-file"},
+    params={
+        "format": "format",
+        "gamedat": "save",
+        "output": "output-file",
+        "exult_flx": "install-file",
+        "mod_data": "input-dir",
+    },
     interactive=True,
     batch_with=(
         "container_shape",
@@ -402,7 +420,7 @@ def container_browse_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat", help="GAMEDAT folder or Exult save (.sav) (required for IREG)"
+            "--save", help="GAMEDAT folder or Exult save (.sav) (required for IREG)"
         ),
     ] = None,
     text: Annotated[
@@ -484,28 +502,28 @@ def container_browse_cmd(
     """Browse container contents from IREG, with full nesting support.
 
     With no filter flags, launches an interactive wizard (requires questionary).
-    Supply any filter flag to run non-interactively.
+    Supply any filter flag to run non-interactively. Without a terminal (piped
+    or captured output), it runs unfiltered instead of launching the wizard.
 
     \\b
     Non-interactive examples:
-      titan u7 container-browse STATIC/ --gamedat gamedat/
-      titan u7 container-browse STATIC/ --gamedat gamedat/ --container-name chest
-      titan u7 container-browse STATIC/ --gamedat gamedat/ --container-shape 522
-      titan u7 container-browse STATIC/ --gamedat gamedat/ --contains-name sword -f csv -o containers.csv
-      titan u7 container-browse STATIC/ --gamedat gamedat/ --tile-rect 512,512,2048,2048 -f tree
+      titan u7 container-browse STATIC/ --save gamedat/
+      titan u7 container-browse STATIC/ --save gamedat/ --container-name chest
+      titan u7 container-browse STATIC/ --save gamedat/ --container-shape 522
+      titan u7 container-browse STATIC/ --save gamedat/ --contains-name sword -f csv -o containers.csv
+      titan u7 container-browse STATIC/ --save gamedat/ --tile-rect 512,512,2048,2048 -f tree
     """
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.container import (
         browse_containers,
         ContainerQueryParams,
         format_results,
-        run_wizard as _container_wizard,
     )
+    from titan.u7.container_ui import run_wizard as _container_wizard
     from titan.u7.text_names import load_u7_text_names
     from titan.u7.typeflag import U7TypeFlags
-    from titan._config import exult_cfg
 
     static_dir = static
     if not static_dir:
@@ -529,9 +547,9 @@ def container_browse_cmd(
         ]
     )
 
-    _exult_flx = exult_flx or exult_cfg(f"{game}_flx") or None
+    _exult_flx = exult_flx or install.resolve_u7_exult_flx(game)
 
-    if not _non_interactive:
+    if not _non_interactive and menus_enabled():
         raise SystemExit(
             _container_wizard(
                 static_dir=static_dir,
@@ -588,7 +606,7 @@ def container_browse_cmd(
 
     if not gamedat_dir:
         typer.echo(
-            "Error: --gamedat is required for container-browse (containers live in IREG)",
+            "Error: --save is required for container-browse (containers live in IREG)",
             err=True,
         )
         raise SystemExit(1)
@@ -597,7 +615,7 @@ def container_browse_cmd(
         static_dir,
         patch_dirs=[mod_data] if mod_data else (),
         text_flx_path=text,
-        exult_flx_path=_exult_flx or install.resolve_u7_exult_flx(game),
+        exult_flx_path=_exult_flx,
         game=game,
     )
     names, frame_names = selected_names.names, selected_names.frames
@@ -664,9 +682,7 @@ def egg_query_cmd(
     ] = "bg",
     gamedat: Annotated[
         Optional[str],
-        typer.Option(
-            "--gamedat", help="GAMEDAT folder or Exult save (.sav) (required)"
-        ),
+        typer.Option("--save", help="GAMEDAT folder or Exult save (.sav) (required)"),
     ] = None,
     egg_type: Annotated[
         Optional[list[str]],
@@ -702,25 +718,26 @@ def egg_query_cmd(
     """Query egg trigger objects from IREG, showing type, function, and location.
 
     With no filter flags, launches an interactive wizard (requires questionary).
-    Supply any filter flag to run non-interactively.
+    Supply any filter flag to run non-interactively. Without a terminal (piped
+    or captured output), it runs unfiltered instead of launching the wizard.
 
     \\b
     Non-interactive examples:
-      titan u7 egg-query STATIC/ --gamedat gamedat/
-      titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode
-      titan u7 egg-query STATIC/ --gamedat gamedat/ --fn 0x06BC
-      titan u7 egg-query STATIC/ --gamedat gamedat/ --type monster --tile-rect 512,512,2048,2048
-      titan u7 egg-query STATIC/ --gamedat gamedat/ --type usecode -f csv -o eggs.csv
+      titan u7 egg-query STATIC/ --save gamedat/
+      titan u7 egg-query STATIC/ --save gamedat/ --type usecode
+      titan u7 egg-query STATIC/ --save gamedat/ --fn 0x06BC
+      titan u7 egg-query STATIC/ --save gamedat/ --type monster --tile-rect 512,512,2048,2048
+      titan u7 egg-query STATIC/ --save gamedat/ --type usecode -f csv -o eggs.csv
     """
-    from titan.u7.gamedat_source import gamedat_option
+    from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
     from titan.u7.eggs import (
         query_eggs,
         EggQueryParams,
         format_results,
-        run_wizard as _egg_wizard,
     )
+    from titan.u7.eggs_ui import run_wizard as _egg_wizard
 
     static_dir = static
     if not static_dir:
@@ -731,9 +748,11 @@ def egg_query_cmd(
     if not gamedat_dir:
         gamedat_dir = install.resolve_u7_gamedat(game)
 
+    # The wizard needs a terminal; without one (piped or captured, as a front
+    # end runs it) list every egg instead of failing on the first prompt.
     _non_interactive = any([egg_type, fn, tile_rect, sc, format, output])
 
-    if not _non_interactive:
+    if not _non_interactive and menus_enabled():
         raise SystemExit(
             _egg_wizard(
                 static_dir=static_dir,
@@ -789,7 +808,7 @@ def egg_query_cmd(
 
     if not gamedat_dir:
         typer.echo(
-            "Error: --gamedat is required for egg-query (eggs live in IREG)", err=True
+            "Error: --save is required for egg-query (eggs live in IREG)", err=True
         )
         raise SystemExit(1)
 

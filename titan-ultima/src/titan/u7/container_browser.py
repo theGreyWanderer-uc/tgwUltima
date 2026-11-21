@@ -36,6 +36,7 @@ from titan.u7.world import (
     resolve_world_sources,
 )
 from titan.u7.ireg_specials import saved_slot_row
+from titan.errors import InvalidDataError
 
 
 def parse_u7_inventory_id(raw: str) -> str:
@@ -71,12 +72,11 @@ def load_u7_container_session(
     if exult_flx is None:
         exult_flx = world.exult_flx_path
     if exult_flx is None:
-        from titan.u7.install import resolve_u7_exult_flx
+        from titan.u7.install import default_u7_exult_flx
 
-        exult_flx = resolve_u7_exult_flx(world.game)
-    tfa, names, frame_names, _ = load_query_metadata(
-        replace(world, exult_flx_path=exult_flx or world.exult_flx_path)
-    )
+        exult_flx = default_u7_exult_flx(world.game)
+    world = replace(world, exult_flx_path=exult_flx or world.exult_flx_path)
+    tfa, names, frame_names, _ = load_query_metadata(world)
     base, patch = resolve_world_sources(world)
     from titan.u7.ready_metadata import U7ReadyMetadata
 
@@ -227,7 +227,7 @@ def validate_u7_container_output(session: U7ContainerSession, output: Path) -> N
     """Keep browser exports outside the selected world's game and mod input folders."""
     target = output.resolve()
     if target in {path.resolve() for path in session.source_files}:
-        raise ValueError("U7 container browser: output overlaps an input file")
+        raise InvalidDataError("U7 container browser: output overlaps an input file")
     for directory in (
         session.target.static,
         session.target.patch,
@@ -268,7 +268,12 @@ def u7_container_item_sprite(
             path = owner_file(session.target, "SHAPES.VGA")
             if path is None:
                 raise ValueError("SHAPES.VGA unavailable for this world")
-            session.library = load_library(session.target, session.world.game, path)
+            session.library = load_library(
+                session.target,
+                session.world.game,
+                path,
+                exult_flx=session.world.exult_flx_path,
+            )
         except (ValueError, OSError) as error:
             session.library_error = str(error)
             raise
@@ -309,7 +314,12 @@ def u7_container_gump_preview(
         path = owner_file(session.target, "GUMPS.VGA")
         if path is None:
             raise ValueError("U7 container gump: GUMPS.VGA unavailable for this world")
-        session.gump_library = load_library(session.target, session.world.game, path)
+        session.gump_library = load_library(
+            session.target,
+            session.world.game,
+            path,
+            exult_flx=session.world.exult_flx_path,
+        )
     library = session.gump_library
     shape = library.shape(gump)
     if not shape.frames:

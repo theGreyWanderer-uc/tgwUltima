@@ -97,6 +97,7 @@ from titan.u9.texture import (
     mip_dimensions,
     parse_texture_set,
 )
+from titan.errors import TitanError
 
 ENCODING_BC1 = "bc1"
 ENCODING_ALPHA8 = "alpha8"
@@ -110,7 +111,7 @@ ALPHA_CUTOFF = 128
 """BC1 and RGBA5551 carry one alpha bit; this is where it flips."""
 
 
-class U9TextureWriteError(Exception):
+class U9TextureWriteError(TitanError):
     """Raised when image data cannot be encoded into a texture frame."""
 
 

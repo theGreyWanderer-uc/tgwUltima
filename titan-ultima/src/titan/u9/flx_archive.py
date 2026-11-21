@@ -63,6 +63,7 @@ __all__ = [
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 COMMENT_SIZE = 0x4C
 VERSION_OFFSET = 0x54
@@ -91,7 +92,7 @@ MAX_ENTRIES = 1 << 20
 """Sanity ceiling on the directory. The largest shipped archive declares 16,384."""
 
 
-class U9FlxArchiveError(Exception):
+class U9FlxArchiveError(InvalidDataError):
     """Raised on malformed FLX archive data or an out-of-range entry index."""
 
 
@@ -167,6 +168,20 @@ class U9FlxArchive:
         if index < 0 or index >= len(self.entries):
             return None
         return self.entries[index]
+
+    @property
+    def entry_count(self) -> int:
+        """Number of slots, used or not (:class:`titan.protocols.IndexedArchive`)."""
+        return len(self.entries)
+
+    def read(self, index: int) -> bytes | None:
+        """Slot *index*'s bytes, or ``None`` for an empty slot
+        (:class:`titan.protocols.IndexedArchive`)."""
+        if not 0 <= index < self.entry_count:
+            raise IndexError(
+                f"U9 FLX entry index {index} out of range (0..{self.entry_count - 1})"
+            )
+        return self.read_entry(index) or None
 
     def read_entry(self, index: int) -> bytes:
         """Return raw bytes for one entry; ``b""`` if that slot is unused."""

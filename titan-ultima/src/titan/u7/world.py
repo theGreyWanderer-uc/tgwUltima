@@ -48,6 +48,7 @@ from titan.u7.shape_archive import find_archive
 from titan.u7.ireg import object_flag_names
 from titan.u7.ireg_metadata import U7IregContext
 from titan.u7.ireg_specials import U7IregIndexId, U7IregSpecial
+from titan.errors import InvalidDataError
 
 
 # ---------------------------------------------------------------------------
@@ -202,10 +203,10 @@ def parse_numbers(value: str, maximum: int, label: str) -> list[int]:
 def parse_rectangle(value: str) -> tuple[int, int, int, int]:
     parts = value.split(",")
     if len(parts) != 4:
-        raise ValueError("Tile rectangle must contain tx0,ty0,tx1,ty1")
+        raise InvalidDataError("Tile rectangle must contain tx0,ty0,tx1,ty1")
     coords = [parse_numbers(part, TILE_MAX, "Tile coordinate") for part in parts]
     if any(len(part) != 1 for part in coords):
-        raise ValueError("Each tile coordinate must be an integer")
+        raise InvalidDataError("Each tile coordinate must be an integer")
     x0, y0, x1, y1 = (part[0] for part in coords)
     return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
 
@@ -332,7 +333,7 @@ def load_query_metadata(
         else min(len(raw_tfa), 3072) // 3
     )
     if patch_tfa and len(raw_tfa) != 3584 and len(raw_tfa) % 3:
-        raise ValueError(f"Incomplete TFA shape record: {patch_tfa}")
+        raise InvalidDataError(f"Incomplete TFA shape record: {patch_tfa}")
     for index in range(1024, count):
         entry = U7TypeFlags.parse(raw_tfa[index * 3 : index * 3 + 3]).get(0)
         if entry is not None:
@@ -358,9 +359,9 @@ def load_query_metadata(
     )
     bundle = params.exult_flx_path
     if bundle is None:
-        from titan.u7.install import resolve_u7_exult_flx
+        from titan.u7.install import default_u7_exult_flx
 
-        bundle = resolve_u7_exult_flx(params.game)
+        bundle = default_u7_exult_flx(params.game)
     selected = load_u7_text_names(
         base,
         patch_dirs=mod_dirs,
@@ -746,7 +747,7 @@ def run_wizard(
     mod_data_dir: Optional[str] = None,
 ) -> int:
     """Launch the repeatable world-query workflow using the existing CLI context."""
-    from titan.u7.world_workflow import run_wizard as workflow
+    from titan.u7.world_workflow_ui import run_wizard as workflow
 
     return workflow(
         WorldQueryParams(

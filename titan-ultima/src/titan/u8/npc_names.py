@@ -14,6 +14,7 @@ from typing import Any
 
 from titan.u8.avatar import U8AvatarState
 from titan.u8.shape_names import load_u8_shape_names
+from titan.errors import InvalidDataError
 
 
 def load_u8_npc_labels(path: Path) -> dict[int, str]:
@@ -22,13 +23,15 @@ def load_u8_npc_labels(path: Path) -> dict[int, str]:
     with path.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
         if not {"npc_id", "name"}.issubset(reader.fieldnames or []):
-            raise ValueError("NPC animation names: CSV requires npc_id,name columns")
+            raise InvalidDataError(
+                "NPC animation names: CSV requires npc_id,name columns"
+            )
         for row in reader:
             raw = (row.get("npc_id") or "").strip()
             number = int(raw, 16 if raw.lower().startswith("0x") else 10)
             name = (row.get("name") or "").strip()
             if not 0 <= number <= 255 or not name or number in labels:
-                raise ValueError(
+                raise InvalidDataError(
                     "NPC animation names: IDs must be unique 0-255 with nonempty names"
                 )
             labels[number] = name

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from titan.u6.lib import U6Library
 from titan.u6.lzw import U6Lzw
+from titan.errors import InvalidDataError
 
 __all__ = ["U6GameProfile", "U6_PROFILE"]
 
@@ -29,15 +30,17 @@ class U6GameProfile:
         data = path.read_bytes()
         if filename in self.library_resources:
             if len(data) < 8 or int.from_bytes(data[:4], "little") != len(data):
-                raise ValueError(f"Invalid {self.game_id} resource size header: {path}")
+                raise InvalidDataError(
+                    f"Invalid {self.game_id} resource size header: {path}"
+                )
             library = U6Library(data, has_size_header=True)
             if library.num_items != 1:
-                raise ValueError(
+                raise InvalidDataError(
                     f"Expected a single-item {self.game_id} resource: {path}"
                 )
             result = library.get_item(0)
             if not result:
-                raise ValueError(f"Empty {self.game_id} map resource: {path}")
+                raise InvalidDataError(f"Empty {self.game_id} map resource: {path}")
             return result
         if filename in self.compressed_resources:
             return U6Lzw.decompress(data)

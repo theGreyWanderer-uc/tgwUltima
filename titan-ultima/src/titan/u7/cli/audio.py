@@ -20,8 +20,7 @@ def cmd_music_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or f"{Path(filepath).stem}_midi"
     os.makedirs(outdir, exist_ok=True)
@@ -55,8 +54,7 @@ def cmd_voc_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or Path(filepath).stem
     os.makedirs(outdir, exist_ok=True)
@@ -84,8 +82,7 @@ def cmd_speech_export(args: SimpleNamespace) -> int:
 
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     outdir = args.output or f"{Path(filepath).stem}_wav"
 
@@ -144,7 +141,7 @@ def _looks_like_text(data: bytes) -> bool:
     return all((0x20 <= b <= 0x7E) or b in (0x0A, 0x0D, 0x09) for b in sample)
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def music_export_cmd(
     file: Annotated[
         str,
@@ -164,7 +161,7 @@ def music_export_cmd(
     ] = "mt32",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract U7 music tracks from a Flex archive to MIDI files."""
@@ -179,7 +176,7 @@ def music_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def voc_export_cmd(
     file: Annotated[
         str,
@@ -187,7 +184,7 @@ def voc_export_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Decode a Creative Voice (.voc) file to WAV."""
@@ -201,7 +198,7 @@ def voc_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def speech_export_cmd(
     file: Annotated[
         str,
@@ -211,7 +208,7 @@ def speech_export_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract and decode U7 speech from a Flex archive of VOC files to WAV."""

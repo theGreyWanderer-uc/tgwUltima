@@ -27,7 +27,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan.u9.asset_reports import U9AssetReportError, write_dynamic_report
+from titan.u9.asset_reports import write_dynamic_report
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.flx_writer import U9FlxWriteError, repack
 from titan.u9.sound import U9SoundRecord, U9SoundRecordError
@@ -40,7 +40,6 @@ from titan.u9.sound_control import (
 )
 from titan.u9.sound_report import (
     SOUND_REPORT_COLUMNS,
-    U9SoundReportError,
     build_sound_metadata_report,
 )
 from titan.u9.sound_writer import (
@@ -51,6 +50,7 @@ from titan.u9.sound_writer import (
 from titan.u9.typename import U9TypeNameError, U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _load_sound_categories(filepath: str) -> Optional[U9SoundCategories]:
@@ -250,7 +250,7 @@ def cmd_sound_template_csv(args: SimpleNamespace) -> int:
         U9SoundRecordError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     output = args.output or f"{Path(args.file).stem}_templates.csv"
     os.makedirs(os.path.dirname(os.path.abspath(output)), exist_ok=True)
@@ -440,7 +440,7 @@ def cmd_sound_association_csv(args: SimpleNamespace) -> int:
         U9TypeNameError,
     ) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     if args.effective and types is None:
         print("ERROR: --effective requires --types", file=sys.stderr)
@@ -527,14 +527,9 @@ def cmd_sound_list(args: SimpleNamespace) -> int:
     """List sound record headers (id, description, format, encoding) in a sound/*.flx archive."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        archive = U9FlxArchive.from_file(filepath)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(filepath)
 
     print(f"{filepath} — {archive.num_entries} entries")
     print(
@@ -564,14 +559,9 @@ def cmd_sound_extract_pcm(args: SimpleNamespace) -> int:
     """Extract every PCM-encoded entry in a sound/*.flx archive as a playable WAV."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        archive = U9FlxArchive.from_file(filepath)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(filepath)
 
     outdir = args.output or f"{Path(filepath).stem}_wav"
     os.makedirs(outdir, exist_ok=True)
@@ -606,14 +596,9 @@ def cmd_sound_extract(args: SimpleNamespace) -> int:
     """Extract decoded WAV, native payload, or complete record data."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        archive = U9FlxArchive.from_file(filepath)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(filepath)
 
     output_format = getattr(args, "format", "wav")
     if output_format not in {"wav", "payload", "record"}:
@@ -682,19 +667,15 @@ def cmd_sound_extract(args: SimpleNamespace) -> int:
 
 def cmd_sound_report(args: SimpleNamespace) -> int:
     """Write dynamic metadata for one or all U9 audio archives."""
-    try:
-        rows, warnings = build_sound_metadata_report(
-            args.source, entry_id=getattr(args, "entry", None)
-        )
-        output = write_dynamic_report(
-            rows,
-            args.output,
-            args.format,
-            preferred_columns=SOUND_REPORT_COLUMNS,
-        )
-    except (U9SoundReportError, U9AssetReportError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+    rows, warnings = build_sound_metadata_report(
+        args.source, entry_id=getattr(args, "entry", None)
+    )
+    output = write_dynamic_report(
+        rows,
+        args.output,
+        args.format,
+        preferred_columns=SOUND_REPORT_COLUMNS,
+    )
     print(f"Wrote {len(rows)} sound metadata row(s) -> {output}")
     for warning in warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
@@ -717,8 +698,7 @@ def _write_sound_archive(
 def cmd_sound_import(args: SimpleNamespace) -> int:
     """Replace one existing U9 sound record from WAV or native binary data."""
     if not os.path.isfile(args.archive):
-        print(f"ERROR: Archive not found: {args.archive}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Archive not found: {args.archive}")
     try:
         archive = U9FlxArchive.from_file(args.archive)
         if not 0 <= args.entry_id < archive.num_entries:
@@ -739,7 +719,7 @@ def cmd_sound_import(args: SimpleNamespace) -> int:
         )
     except (OSError, U9FlxArchiveError, U9FlxWriteError, U9SoundWriteError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Replaced sound entry {args.entry_id} from {args.audio}")
     print(f"  Record length: {len(current)} -> {len(replacement)} bytes")
@@ -757,8 +737,7 @@ def cmd_sound_import(args: SimpleNamespace) -> int:
 def cmd_sound_import_batch(args: SimpleNamespace) -> int:
     """Validate and replace multiple sound slots, then repack the archive once."""
     if not os.path.isfile(args.archive):
-        print(f"ERROR: Archive not found: {args.archive}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"Archive not found: {args.archive}")
     try:
         archive = U9FlxArchive.from_file(args.archive)
         sources = discover_sound_replacements(args.directory)
@@ -780,7 +759,7 @@ def cmd_sound_import_batch(args: SimpleNamespace) -> int:
         )
     except (OSError, U9FlxArchiveError, U9FlxWriteError, U9SoundWriteError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(f"Replaced {len(replacements)} sound record(s) from {args.directory}")
     print(f"  Entries : {', '.join(str(value) for value in sorted(replacements))}")
@@ -794,6 +773,7 @@ def cmd_sound_import_batch(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def sound_category_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/sfxcat.flx")],
 ) -> None:
@@ -813,6 +793,7 @@ def sound_category_csv_cmd(
     raise SystemExit(cmd_sound_category_csv(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("text",))
 def sound_environment_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/sfxenv.flx")],
 ) -> None:
@@ -905,6 +886,7 @@ def sound_association_csv_cmd(
     )
 
 
+@meta(results=("text",))
 def sound_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
 ) -> None:
@@ -917,7 +899,9 @@ def sound_extract_pcm_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <file>_wav/)"
+        ),
     ] = None,
 ) -> None:
     """Extract every PCM-encoded entry in a sound archive as a playable WAV."""
@@ -929,7 +913,9 @@ def sound_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <file>_wav/)"
+        ),
     ] = None,
     entry: Annotated[
         Optional[int],
@@ -1010,7 +996,7 @@ def sound_import_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "directory": "input-dir"})
 def sound_import_batch_cmd(
     archive: Annotated[str, typer.Argument(help="Target Speech/sfx/music FLX")],
     directory: Annotated[

@@ -32,6 +32,7 @@ from titan.u7.ready_metadata import U7ReadyMetadata
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.usecode import U7UsecodeFile
 from titan.u7.usecode_analysis import U7UsecodeWorld
+from titan.errors import InvalidDataError
 
 READ_ERRORS = (OSError, ValueError, struct.error, zipfile.BadZipFile, EOFError)
 
@@ -78,6 +79,9 @@ class Session:
     avatar_metadata: U7AvatarMetadata | None = None
     usecode_symbols: dict[str, int] | None = None
     usecode_sources: list[str] = field(default_factory=list)
+    exult_flx: str | None = None
+    """Exult's bundle for this game (the UI passes the configured one);
+    ``None`` means a standard Exult install's."""
     have_si_shapes: bool | None = None
     avatar_skin: int | None = None
     avatar_female: bool | None = None
@@ -144,6 +148,7 @@ def load_inventory_metadata(session: Session, tfa: U7TypeFlags | None) -> None:
             patch_dir=target.patch,
             game=session.game,
             custom_game=target.standalone,
+            exult_flx=session.exult_flx,
         )
         session.effective_ready = U7ReadyMetadata.from_dir(
             target.static,
@@ -176,6 +181,7 @@ def _metadata(session: Session, game: str) -> tuple[set[int] | None, int | None]
                     base_static=str(target.static),
                     patch_dir=str(target.patch) if target.patch.is_dir() else None,
                     game=game,
+                    exult_flx_path=session.exult_flx,
                 )
             )
             if count:
@@ -212,6 +218,7 @@ def _metadata(session: Session, game: str) -> tuple[set[int] | None, int | None]
                 patch_dir=target.patch,
                 game=game,
                 custom_game=target.standalone,
+                exult_flx=session.exult_flx,
             )
         )
         session.warnings.extend(session.avatar_metadata.warnings)
@@ -246,10 +253,11 @@ def load_session(
     have_si_shapes: bool | None = None,
     avatar_skin: int | None = None,
     avatar_female: bool | None = None,
+    exult_flx: str | None = None,
 ) -> Session:
     path = existing_path(source.path.expanduser()).absolute()
     source = Source(path, source.kind)
-    session = Session(target, source, game=game)
+    session = Session(target, source, game=game, exult_flx=exult_flx)
     session.have_si_shapes = (
         have_si_shapes
         if have_si_shapes is not None
@@ -261,7 +269,7 @@ def load_session(
     directory = path if path.is_dir() else path.parent
     if path.is_dir() or path.name.casefold() == "npc.dat":
         if not path.exists():
-            raise ValueError(f"Source not found: {path}")
+            raise InvalidDataError(f"Source not found: {path}")
         session.format = "directory" if path.is_dir() else "loose NPC file"
         session.entries = sorted(
             (p.name, p.stat().st_size) for p in directory.iterdir() if p.is_file()

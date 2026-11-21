@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.errors import TitanError
 
 if TYPE_CHECKING:
     from titan.u9.spaces import U9Spaces
@@ -36,7 +37,7 @@ _MAP_PREFIX_SIZE = 12
 _PARTITION_FIXED_SIZE = 32
 
 
-class U9VolumeLookupError(Exception):
+class U9VolumeLookupError(TitanError):
     """Raised when a used ``treedat.flx`` entry cannot be framed safely."""
 
 

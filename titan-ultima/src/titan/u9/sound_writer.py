@@ -32,6 +32,7 @@ from titan.u9.sound import (
     U9SoundRecord,
     U9SoundRecordError,
 )
+from titan.errors import TitanError
 
 MAX_U32 = 0xFFFFFFFF
 _SOURCE_PATTERN = re.compile(
@@ -40,7 +41,7 @@ _SOURCE_PATTERN = re.compile(
 )
 
 
-class U9SoundWriteError(Exception):
+class U9SoundWriteError(TitanError):
     """Raised when source audio cannot safely replace a U9 sound record."""
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from titan.u8.itemcach import ITEM_STATUS_NAMES
 from titan.u8.state_io import parse_u8_state_flex, read_u8_state_bytes
+from titan.errors import InvalidDataError
 
 __all__ = ["U8MapItems", "U8MapItem", "U8MapItemsError"]
 
@@ -20,7 +21,7 @@ MAP_SLOT_COUNT = 256
 ONE_ITEM = struct.Struct("<HHBHBHHBBH")
 
 
-class U8MapItemsError(ValueError):
+class U8MapItemsError(InvalidDataError):
     """The map-item archive or a requested selection is malformed."""
 
 

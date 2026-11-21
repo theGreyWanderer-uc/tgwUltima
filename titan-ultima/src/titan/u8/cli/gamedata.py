@@ -27,14 +27,14 @@ from titan.u8.save import U8SaveArchive
 from titan.u8.typeflag import U8TypeFlags
 from titan.u8.credits import decrypt_credit_text
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_credits_decrypt(args: SimpleNamespace) -> int:
     """Decrypt ECREDITS.DAT or QUOTES.DAT and write plain text."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -57,8 +57,7 @@ def cmd_typeflag_dump(args: SimpleNamespace) -> int:
     """Parse TYPEFLAG.DAT and dump all shape info as a readable table."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     entries = U8TypeFlags.from_file(filepath)
 
@@ -130,8 +129,7 @@ def cmd_gumpinfo_dump(args: SimpleNamespace) -> int:
     """Dump GUMPAGE.DAT container gump UI layout rectangles."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -177,8 +175,7 @@ def cmd_unkcoff_dump(args: SimpleNamespace) -> int:
     """Dump UNKCOFF.DAT code-offset table."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
     with open(filepath, "rb") as f:
         data = f.read()
@@ -230,12 +227,12 @@ def cmd_unkcoff_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def credits_decrypt_cmd(
     file: Annotated[str, typer.Argument(help="Path to encrypted .dat file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Decrypt ECREDITS.DAT or QUOTES.DAT to plain text."""
@@ -244,7 +241,7 @@ def credits_decrypt_cmd(
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={"output_format": "format", "output": "output-file", "file": "install-file"},
 )
 def anim_dump_cmd(
     file: Annotated[Path, typer.Argument(help="Path to U8 ANIM.DAT")],
@@ -309,12 +306,17 @@ def anim_dump_cmd(
             print(f"Animation report written to: {output}")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={
+        "output_format": "format",
+        "output": "output-file",
+        "file": "install-file",
+        "anim": "install-file",
+    },
 )
 def wpnovlay_dump_cmd(
     file: Annotated[Path, typer.Argument(help="Path to U8 WPNOVLAY.DAT")],
@@ -390,12 +392,12 @@ def wpnovlay_dump_cmd(
             print(f"Weapon overlay report written to: {output}")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
 def itemcach_dump_cmd(
     file: Annotated[Path, typer.Argument(help="ITEMCACH.DAT or native U8SAVE archive")],
@@ -431,7 +433,7 @@ def itemcach_dump_cmd(
 ) -> None:
     """Inspect cached item fields, allocation lists, regions and native cache metadata."""
     from titan.u8.itemcach import U8ItemCache
-    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report_ui import write_u8_state_report
     from titan.u8.state_report import format_u8_itemcach_report
 
     try:
@@ -446,12 +448,17 @@ def itemcach_dump_cmd(
         write_u8_state_report(report, output, (file,), "Item cache")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={
+        "output_format": "format",
+        "output": "output-file",
+        "file": "input-file",
+        "itemcach": "input-file",
+    },
 )
 def npcdata_dump_cmd(
     file: Annotated[Path, typer.Argument(help="NPCDATA.DAT or native U8SAVE archive")],
@@ -494,7 +501,7 @@ def npcdata_dump_cmd(
     """Inspect NPC stats, animation, flags and equipment; optionally join cached items."""
     from titan.u8.itemcach import U8ItemCache
     from titan.u8.npcdata import U8NpcData
-    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report_ui import write_u8_state_report
     from titan.u8.state_report import format_u8_npcdata_report
 
     try:
@@ -521,12 +528,12 @@ def npcdata_dump_cmd(
         write_u8_state_report(report, output, sources, "NPC data")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
 def map_items_dump_cmd(
     ctx: typer.Context,
@@ -588,7 +595,7 @@ def map_items_dump_cmd(
     """Inspect full 16-byte map items, container hierarchy and NPC registry records."""
     from titan.u8.map_item_report import format_u8_map_item_report
     from titan.u8.map_items import U8MapItems
-    from titan.u8.state_io import write_u8_state_report
+    from titan.u8.state_report_ui import write_u8_state_report
 
     kind = "nonfixed" if ctx.info_name == "nonfixed-dump" else "fixed"
     try:
@@ -606,40 +613,48 @@ def map_items_dump_cmd(
         write_u8_state_report(report, output, sources, f"{kind.upper()} items")
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        raise SystemExit(exit_code(error)) from error
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "typeflag"},
+)
 def typeflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to TYPEFLAG.DAT")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Parse TYPEFLAG.DAT and dump all shape info."""
     raise SystemExit(cmd_typeflag_dump(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "gumpage"},
+)
 def gumpinfo_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to GUMPAGE.DAT")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Dump GUMPAGE.DAT container gump UI layout data."""
     raise SystemExit(cmd_gumpinfo_dump(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def unkcoff_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to UNKCOFF.DAT")],
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: print to stdout)"
+            "-o", "--output-dir", help="Output directory (default: print to stdout)"
         ),
     ] = None,
 ) -> None:

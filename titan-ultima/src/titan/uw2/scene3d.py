@@ -46,9 +46,10 @@ from titan.uw2.instances import (
 )
 from titan.uw2.map_pipeline import MapRenderAssets, load_levels, load_render_assets
 from titan.uw2.model_render import ITEM_MODEL_NAMES
+from titan.errors import TitanError
 
 
-class UW2SceneError(ValueError):
+class UW2SceneError(TitanError, ValueError):
     """Raised when a UU2 map scene cannot be built or written."""
 
 

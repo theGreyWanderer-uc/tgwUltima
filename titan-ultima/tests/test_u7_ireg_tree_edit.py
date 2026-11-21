@@ -15,17 +15,18 @@ from typing import Literal
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli import u7_app
+from titan.u7.edit_plans import read_ireg_tree_plan
 from titan.u7.ireg_metadata import U7IregContext
 from titan.u7.ireg_tree import read_ireg_tree
 from titan.u7.ireg_tree_edit import (
     U7IregDelete,
     U7IregReparent,
-    edit_ireg_tree,
     edit_ireg_save_member,
+    edit_ireg_tree,
     read_ireg_save_member,
 )
-from titan.u7.ireg_tree_cli import read_ireg_tree_plan
 from titan.u7.save import U7Save
 from titan.u7.typeflag import U7TypeFlags
 
@@ -422,18 +423,26 @@ def saved(raw: bytes, kind: str = "zip", name: str = "u7ireg55") -> bytes:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+
+            def put(member: str, payload: bytes) -> None:
+                # A fixed timestamp keeps the bytes identical between calls; writestr
+                # with a bare name stamps the current time (2-second resolution).
+                info = zipfile.ZipInfo(member, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, payload)
+
             if kind == "grouped":
                 group = b"".join(
                     n.encode().ljust(12, b"\0") + struct.pack("<I", len(p)) + p
                     for n, p in [(name, raw), ("empty", b""), (name, b"untouched")]
                 ) + bytes(12)
-                archive.writestr("GAMEDAT", group)
+                put("GAMEDAT", group)
             elif kind == "nested":
-                archive.writestr("nested.sav", saved(raw, "flex", name))
+                put("nested.sav", saved(raw, "flex", name))
             else:
-                archive.writestr(name, raw)
-                archive.writestr("empty", b"")
-                archive.writestr(name, b"untouched")
+                put(name, raw)
+                put("empty", b"")
+                put(name, b"untouched")
     return stream.getvalue()
 
 
@@ -578,7 +587,7 @@ def test_cli_inspection_plan_dry_run_and_new_file_write(
     output.unlink()
     plan["source_sha256"] = "0" * 64
     plan_path.write_text(json.dumps(plan))
-    assert runner.invoke(u7_app, arguments).exit_code == 1
+    assert runner.invoke(u7_app, arguments).exit_code == EXIT_CODES["invalid-data"]
     assert not output.exists()
 
 

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import logging
 import re
-import sys
 from pathlib import Path
 from typing import Protocol
 
@@ -11,6 +11,8 @@ import numpy as np
 from PIL import Image
 
 from titan.u7.shape import U7Shape
+
+log = logging.getLogger(__name__)
 
 U7_IMPORT_WARNING_SIZE = 72
 U7_IMPORT_MAX_WIDTH = 320
@@ -121,12 +123,14 @@ def create_u7_shape_from_pngs(
                 image.width > U7_IMPORT_WARNING_SIZE
                 or image.height > U7_IMPORT_WARNING_SIZE
             ):
-                print(
-                    f"WARNING: U7 shape frame {png_path.name} is "
-                    f"{image.width}x{image.height}; exceeds the "
-                    f"{U7_IMPORT_WARNING_SIZE}x{U7_IMPORT_WARNING_SIZE} warning threshold. "
+                log.warning(
+                    "U7 shape frame %s is %dx%d; exceeds the %dx%d warning threshold. "
                     "Importing without resizing.",
-                    file=sys.stderr,
+                    png_path.name,
+                    image.width,
+                    image.height,
+                    U7_IMPORT_WARNING_SIZE,
+                    U7_IMPORT_WARNING_SIZE,
                 )
             pixels = quantize_u7_rgba_frame(image, palette, allow_cycling=allow_cycling)
 

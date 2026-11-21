@@ -10,6 +10,7 @@ import struct
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u8 import U8AnimData, U8WeaponOverlayData, U8WeaponOverlayError
 from titan.u8.cli import u8_app
 from titan.u8.wpnovlay import WEAPON_OVERLAY_TYPES
@@ -336,7 +337,11 @@ def test_cli_preserves_both_sources_and_existing_outputs(tmp_path, target):
     result = CliRunner().invoke(
         u8_app, ["wpnovlay-dump", str(source), "-o", str(output)]
     )
-    assert result.exit_code == 1
+    # An existing output needs --force; writing over a source is refused outright.
+    assert (
+        result.exit_code
+        == EXIT_CODES["output-exists" if target == "existing" else "error"]
+    )
     assert output.read_bytes() == original
 
 

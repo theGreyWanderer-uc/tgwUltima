@@ -16,6 +16,7 @@ from titan.u7.ireg_rewrite import (
     rewrite_ireg_stream,
 )
 from titan.u7.ireg_tree import U7IregTreeObject, U7IregTreeScope, read_ireg_tree
+from titan.errors import InvalidDataError
 
 if TYPE_CHECKING:
     from titan.u7.ireg_tree_edit import (
@@ -74,13 +75,15 @@ def _hash(expected: object, raw: bytes, name: str) -> None:
         not isinstance(expected, str)
         or expected.lower() != hashlib.sha256(raw).hexdigest()
     ):
-        raise ValueError(f"IREG authoring: {name} SHA-256 does not match")
+        raise InvalidDataError(f"IREG authoring: {name} SHA-256 does not match")
 
 
 def _record(raw: bytes) -> U7IregWireRecord:
     records = read_ireg_wire_records(raw)
     if len(records) != 1 or records[0].kind != "object":
-        raise ValueError("IREG authoring: expected exactly one complete object record")
+        raise InvalidDataError(
+            "IREG authoring: expected exactly one complete object record"
+        )
     return records[0]
 
 
@@ -93,14 +96,16 @@ def _decoded(record: U7IregWireRecord, context: U7IregContext):
         context=context,
     )
     if result is None or result.context_warnings:
-        raise ValueError("IREG authoring: unresolved class or invalid object layout")
+        raise InvalidDataError(
+            "IREG authoring: unresolved class or invalid object layout"
+        )
     return result
 
 
 def _shape_family(shape: int, context: U7IregContext) -> str:
     info = context.tfa.get(shape) if context.tfa else None
     if info is None:
-        raise ValueError("IREG authoring: target shape class is unavailable")
+        raise InvalidDataError("IREG authoring: target shape class is unavailable")
     if context.bodies.get(shape):
         return "body"
     if context.jawbones.get(shape):
@@ -196,18 +201,18 @@ def _format_record(
             or simple_length not in (6, 10)
             or simple_length < length
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG authoring: simple promotion only supports 6 to 10 bytes"
             )
         payload.extend(bytes(simple_length - length))
     if body_npc is not None:
         if old.kind != "body":
-            raise ValueError("IREG authoring: body_npc requires a body record")
+            raise InvalidDataError("IREG authoring: body_npc requires a body record")
         npc = _number(body_npc, "body_npc", 65535)
         if len(payload) == 12:
             payload.insert(9, 0)
         if len(payload) != 13:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG authoring: body NPC promotion requires a 12/13-byte body"
             )
         payload[7] = 1
@@ -228,7 +233,7 @@ def _format_record(
         or (required == "fe" and chosen != "fe")
         or (required == "fd" and chosen == "ordinary")
     ):
-        raise ValueError(
+        raise InvalidDataError(
             "IREG authoring: requested record format cannot represent the identity/lift"
         )
     if (
@@ -237,9 +242,11 @@ def _format_record(
         or (record.extended_lift or minimum_format == "fd")
         and chosen == "ordinary"
     ):
-        raise ValueError("IREG authoring: implicit record demotion is not supported")
+        raise InvalidDataError(
+            "IREG authoring: implicit record demotion is not supported"
+        )
     if chosen != "ordinary" and ignored_lift_bits and not allow_data_loss:
-        raise ValueError(
+        raise InvalidDataError(
             "IREG authoring: promotion would discard ignored lift bits; explicit allow_data_loss required"
         )
     payload[2:4] = bytes([shape & 255, (shape >> 8 & 3) | (frame & 63) << 2])
@@ -278,7 +285,9 @@ def author_ireg_tree(
         not isinstance(expected_context_sha256, str)
         or expected_context_sha256.lower() != original.context_sha256
     ):
-        raise ValueError("IREG authoring: dispatch context SHA-256 does not match")
+        raise InvalidDataError(
+            "IREG authoring: dispatch context SHA-256 does not match"
+        )
     requests = list(operations)
     conversions: dict[int, U7IregConvert] = {}
     creations: dict[str, U7IregCreate] = {}
@@ -297,7 +306,7 @@ def author_ireg_tree(
         elif isinstance(op, (U7IregConvert, U7IregDelete, U7IregReparent)):
             _number(op.offset, "offset", len(data))
             if op.offset not in original.objects:
-                raise ValueError("IREG authoring: source object not found")
+                raise InvalidDataError("IREG authoring: source object not found")
             _hash(op.expected_sha256, original.owned_bytes(op.offset), "object")
             if isinstance(op, U7IregConvert):
                 if (
@@ -305,7 +314,7 @@ def author_ireg_tree(
                     or not isinstance(op.allow_data_loss, bool)
                     or op.flag_policy not in ("preserve", "inherit")
                 ):
-                    raise ValueError(
+                    raise InvalidDataError(
                         "IREG authoring: duplicate conversion or invalid loss/flag policy"
                     )
                 conversions[op.offset] = op
@@ -314,16 +323,18 @@ def author_ireg_tree(
             if isinstance(op, U7IregReparent) and op.parent_offset is not None:
                 _number(op.parent_offset, "parent_offset", len(data))
                 if op.parent_offset not in original.objects:
-                    raise ValueError("IREG authoring: destination not found")
+                    raise InvalidDataError("IREG authoring: destination not found")
                 _hash(
                     op.parent_sha256,
                     original.objects[op.parent_offset].record.raw,
                     "parent",
                 )
             elif isinstance(op, U7IregReparent) and op.parent_sha256 is not None:
-                raise ValueError("IREG authoring: root destination has no parent hash")
+                raise InvalidDataError(
+                    "IREG authoring: root destination has no parent hash"
+                )
         else:
-            raise ValueError("IREG authoring: unsupported operation")
+            raise InvalidDataError("IREG authoring: unsupported operation")
     replacements: dict[int, bytes] = {}
     for offset, op in conversions.items():
         before = original.objects[offset]
@@ -333,7 +344,7 @@ def author_ireg_tree(
             else before.record
         )
         if op.replacement_record is not None and not op.allow_data_loss:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG authoring: replacement payload requires explicit allow_data_loss"
             )
         raw = _format_record(
@@ -358,7 +369,7 @@ def author_ireg_tree(
             or _shape_family(after.shape, context)
             != _shape_family(before.shape, context)
         ) and op.replacement_record is None:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG authoring: class layout conversion requires an explicit replacement record"
             )
         payload = bytearray(raw)
@@ -366,7 +377,7 @@ def author_ireg_tree(
         payload[target.header_size : target.header_size + 2] = before.record.payload[:2]
         if before.children is not None:
             if after.kind not in ("container", "body"):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG authoring: reparent/delete contents before converting to a non-container"
                 )
             start = target.header_size + 4 + int(target.extended_shape)
@@ -375,7 +386,7 @@ def author_ireg_tree(
                 + int(before.record.extended_shape)
             ]
         elif after.has_children_marker:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG authoring: replacement record cannot introduce an unprovided child list"
             )
         replacements[offset] = bytes(payload)
@@ -429,13 +440,15 @@ def author_ireg_tree(
             policies[offset] == "preserve"
             and converted.objects[offsets[offset]].flags != before.flags
         ):
-            raise ValueError("IREG authoring: preserved flags cannot be represented")
+            raise InvalidDataError(
+                "IREG authoring: preserved flags cannot be represented"
+            )
     created: dict[str, int] = {}
     for name, op in creations.items():
         record = _record(op.record)
         decoded = _decoded(record, context)
         if decoded.has_children_marker:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG authoring: creation record must start empty; use creation IDs to build nested lists"
             )
         _number(op.index_word, "index_word", 65535)
@@ -443,7 +456,9 @@ def author_ireg_tree(
             "preserve",
             "inherit",
         ):
-            raise ValueError("IREG authoring: invalid creation index or flag policy")
+            raise InvalidDataError(
+                "IREG authoring: invalid creation index or flag policy"
+            )
         if op.parent_offset is None:
             x, y = _number(op.x, "world x", 3071), _number(op.y, "world y", 3071)
             if (
@@ -451,7 +466,9 @@ def author_ireg_tree(
                 or y // 256 != superchunk // 12
                 or op.parent_sha256 is not None
             ):
-                raise ValueError("IREG authoring: invalid world creation destination")
+                raise InvalidDataError(
+                    "IREG authoring: invalid world creation destination"
+                )
         else:
             x, y = superchunk % 12 * 256, superchunk // 12 * 256
         raw = _format_record(record, context=context, lift=op.lift)
@@ -500,14 +517,14 @@ def author_ireg_tree(
             continue
         if isinstance(op.parent_offset, str):
             if op.parent_offset not in created or op.parent_sha256 is not None:
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG authoring: unknown creation parent ID or unexpected parent hash"
                 )
             parent = created[op.parent_offset]
         else:
             _number(op.parent_offset, "parent_offset", len(data))
             if op.parent_offset not in original.objects:
-                raise ValueError("IREG authoring: creation destination not found")
+                raise InvalidDataError("IREG authoring: creation destination not found")
             _hash(
                 op.parent_sha256,
                 original.objects[op.parent_offset].record.raw,
@@ -544,11 +561,11 @@ def author_ireg_tree(
     }
     deleted = set(original.objects) - set(mapping)
     if any(offset in deleted for offset in conversions):
-        raise ValueError(
+        raise InvalidDataError(
             "IREG authoring: cannot convert an object deleted by the same transaction"
         )
     if any(value not in result.offset_map for value in created.values()):
-        raise ValueError("IREG authoring: creation destination is deleted")
+        raise InvalidDataError("IREG authoring: creation destination is deleted")
     # Conversion emission retains every non-object event verbatim; the core checks
     # retained special ownership and controls against that staged tree after moves.
     changes = [

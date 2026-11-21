@@ -29,13 +29,14 @@ from titan.u7.map import (
 )
 from titan.u7.names import U7ShapeNames
 from titan.u7.shape import FIRST_OBJ_SHAPE, U7Shape
+from titan.errors import InvalidDataError
 
 
 U7_MAP_JSON_SCHEMA = "titan.u7.map"
 U7_MAP_JSON_VERSION = 1
 
 
-class U7MapJsonError(ValueError):
+class U7MapJsonError(InvalidDataError):
     """Raised when universal U7 map JSON violates its schema contract."""
 
 

@@ -13,7 +13,7 @@ from titan._meta import meta
 
 def cmd_font_create(args: SimpleNamespace) -> int:
     """Create a U7 font shape from a TrueType font."""
-    from titan.fonts.wizard import run_wizard, run_from_config
+    from titan.fonts.wizard_ui import run_wizard, run_from_config
 
     options = dict(
         output_override=args.output,
@@ -28,7 +28,11 @@ def cmd_font_create(args: SimpleNamespace) -> int:
 
 @meta(
     results=("file",),
-    params={"output": "output-file", "config": "recipe"},
+    params={
+        "output": "output-file",
+        "config": "recipe",
+        "base_archive": "install-file",
+    },
     interactive=True,
     batch_with=("config",),
     recipe="titan.fonts.recipe:font_recipe",

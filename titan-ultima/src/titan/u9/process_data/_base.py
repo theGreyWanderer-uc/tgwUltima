@@ -12,6 +12,7 @@ __all__ = [
 import math
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 
 CAMERA_VERSION = 2
@@ -116,7 +117,7 @@ PARTICLE_SLAVE_GENERATION_SLOT_COUNT = 10
 PARTICLE_CHILD_SLOT_COUNT = 10
 
 
-class U9ProcessDataError(Exception):
+class U9ProcessDataError(InvalidDataError):
     """Raised when a deterministic process-data section is malformed."""
 
 

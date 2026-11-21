@@ -8,6 +8,7 @@ import struct
 import zipfile
 import zlib
 from dataclasses import dataclass, field
+from titan.errors import InvalidDataError
 
 FLEX_SAVE_MAGIC = 0xFFFF1A00
 
@@ -49,7 +50,7 @@ class U7SaveContainer:
         if structural:
             self.complete = False
             if strict:
-                raise ValueError(message)
+                raise InvalidDataError(message)
         self.warnings.append(message)
 
     def add_member(
@@ -95,7 +96,7 @@ def _member_name(raw: bytes) -> str:
 
 def _read_named_flex(data: bytes, *, strict: bool) -> U7SaveContainer:
     if len(data) < 128:
-        raise ValueError("U7 save container: truncated Flex header")
+        raise InvalidDataError("U7 save container: truncated Flex header")
     result = U7SaveContainer(
         data, data[:80].split(b"\0", 1)[0].decode("latin-1"), "flex"
     )
@@ -223,7 +224,7 @@ def _read_named_zip(data: bytes, start: int, *, strict: bool) -> U7SaveContainer
     try:
         archive = zipfile.ZipFile(io.BytesIO(data[start:]))
     except (zipfile.BadZipFile, OSError, EOFError, ValueError) as error:
-        raise ValueError(
+        raise InvalidDataError(
             f"U7 save container: invalid or truncated ZIP archive: {error}"
         ) from error
     with archive:
@@ -286,4 +287,4 @@ def read_u7_save_container(data: bytes, *, strict: bool = False) -> U7SaveContai
         return _read_named_zip(data, 0, strict=strict)
     if data[80:84] in signatures:
         return _read_named_zip(data, 80, strict=strict)
-    raise ValueError("Unrecognised U7 savegame format (not FLEX, not ZIP)")
+    raise InvalidDataError("Unrecognised U7 savegame format (not FLEX, not ZIP)")

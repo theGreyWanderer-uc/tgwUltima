@@ -11,17 +11,18 @@ from types import SimpleNamespace
 
 from PIL import Image
 
+from titan.errors import EXIT_CODES
 from titan.u9.cli._common import PALETTE_FILENAME, _find_palette
 from titan.u9.cli.archives import cmd_flx_extract, cmd_flx_extract_all, cmd_flx_list
 from titan.u9.cli.npcs import cmd_npc_csv
 from titan.u9.cli.palettes import cmd_palette_export, cmd_palette_info
 from titan.u9.cli.sound import (
-    cmd_sound_extract_pcm,
     cmd_sound_association_csv,
     cmd_sound_category_csv,
     cmd_sound_category_list,
     cmd_sound_environment_csv,
     cmd_sound_environment_list,
+    cmd_sound_extract_pcm,
     cmd_sound_list,
     cmd_sound_template_csv,
 )
@@ -32,16 +33,27 @@ from titan.u9.cli.textures import (
     cmd_texture_info,
 )
 from titan.u9.cli.typenames import (
-    cmd_types_csv,
     cmd_typename_csv,
     cmd_typename_dump,
     cmd_typename_import,
+    cmd_types_csv,
 )
 from titan.u9.text import U9TextArchive
 from titan.u9.typename import U9TypeNames
 
 DIR_OFFSET = 0x80
 DEFAULT_ICON_ID = 7041
+
+
+def _status(command, args) -> int:
+    """*command*'s exit status as the CLI reports it: a titan error or OSError it
+    raises becomes its category code (``titan.errors.exit_code``)."""
+    from titan.errors import TitanError, exit_code
+
+    try:
+        return command(args)
+    except (TitanError, OSError) as error:
+        return exit_code(error)
 
 
 def _build_flx(comment: bytes, entries_data: list[bytes | None]) -> bytes:
@@ -171,10 +183,11 @@ class FlxCliCommandTests(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     def test_flx_list_missing_file_errors(self) -> None:
-        rc = cmd_flx_list(
-            SimpleNamespace(file=os.path.join(self.tmpdir.name, "nope.flx"))
+        rc = _status(
+            cmd_flx_list,
+            SimpleNamespace(file=os.path.join(self.tmpdir.name, "nope.flx")),
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_flx_extract_writes_entry_payload(self) -> None:
         outdir = os.path.join(self.tmpdir.name, "out")
@@ -225,10 +238,11 @@ class TypeNameDumpCliTests(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     def test_typename_dump_missing_file_errors(self) -> None:
-        rc = cmd_typename_dump(
-            SimpleNamespace(file=os.path.join(self.tmpdir.name, "nope.flx"))
+        rc = _status(
+            cmd_typename_dump,
+            SimpleNamespace(file=os.path.join(self.tmpdir.name, "nope.flx")),
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_typename_csv_exports_all_metadata_fields(self) -> None:
         output = os.path.join(self.tmpdir.name, "typenames.csv")
@@ -378,18 +392,20 @@ class TextImportCliTests(unittest.TestCase):
             file.write("1,,0,new text\r\n")
         output = os.path.join(self.tmp.name, "bad.ns")
         self.assertEqual(
-            cmd_text_import(
-                SimpleNamespace(file=self.archive, csv=self.csv, output=output)
+            _status(
+                cmd_text_import,
+                SimpleNamespace(file=self.archive, csv=self.csv, output=output),
             ),
-            1,
+            EXIT_CODES["invalid-data"],
         )
         with open(self.csv, "w", encoding="utf-8") as file:
             file.write("index,words\n0,x\n")
         self.assertEqual(
-            cmd_text_import(
-                SimpleNamespace(file=self.archive, csv=self.csv, output=output)
+            _status(
+                cmd_text_import,
+                SimpleNamespace(file=self.archive, csv=self.csv, output=output),
             ),
-            1,
+            EXIT_CODES["error"],
         )
         self.assertFalse(os.path.exists(output))
 
@@ -437,10 +453,11 @@ class TypeNameImportCliTests(unittest.TestCase):
                 file.write("type_id,display_name\n0,Лорд\n")
             output = os.path.join(temp_dir, "out.ns")
             self.assertEqual(
-                cmd_typename_import(
-                    SimpleNamespace(file=archive, csv=edited, output=output)
+                _status(
+                    cmd_typename_import,
+                    SimpleNamespace(file=archive, csv=edited, output=output),
                 ),
-                1,
+                EXIT_CODES["invalid-data"],
             )
             self.assertFalse(os.path.exists(output))
 
@@ -672,10 +689,11 @@ class SoundCliCommandTests(unittest.TestCase):
         self.assertEqual(rc, 0)
 
     def test_sound_list_missing_file_errors(self) -> None:
-        rc = cmd_sound_list(
-            SimpleNamespace(file=os.path.join(self.tmpdir.name, "nope.flx"))
+        rc = _status(
+            cmd_sound_list,
+            SimpleNamespace(file=os.path.join(self.tmpdir.name, "nope.flx")),
         )
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, EXIT_CODES["file-not-found"])
 
     def test_sound_extract_pcm_only_writes_pcm_entries(self) -> None:
         outdir = os.path.join(self.tmpdir.name, "wav")
@@ -777,18 +795,19 @@ class PaletteCliCommandTests(unittest.TestCase):
     def test_palette_commands_reject_bad_input(self) -> None:
         missing = os.path.join(self.tmpdir.name, "missing.pal")
         self.assertEqual(
-            cmd_palette_info(SimpleNamespace(file=missing, duplicates=False)),
-            1,
+            _status(cmd_palette_info, SimpleNamespace(file=missing, duplicates=False)),
+            EXIT_CODES["file-not-found"],
         )
         self.assertEqual(
-            cmd_palette_export(
+            _status(
+                cmd_palette_export,
                 SimpleNamespace(
                     file=self.palette_path,
                     output=self.tmpdir.name,
                     swatch_size=0,
-                )
+                ),
             ),
-            1,
+            EXIT_CODES["error"],
         )
 
 
@@ -830,7 +849,8 @@ class TextureCliCommandTests(unittest.TestCase):
         )
 
     def test_texture_export_rejects_missing_mip(self) -> None:
-        result = cmd_texture_export(
+        result = _status(
+            cmd_texture_export,
             SimpleNamespace(
                 textures=self.archive_path,
                 entry_id=0,
@@ -838,9 +858,9 @@ class TextureCliCommandTests(unittest.TestCase):
                 mip_level=2,
                 palette=None,
                 output=self.tmpdir.name,
-            )
+            ),
         )
-        self.assertEqual(result, 1)
+        self.assertEqual(result, EXIT_CODES["invalid-data"])
 
     def test_texture_import_keeps_single_image_workflow(self) -> None:
         image_path = os.path.join(self.tmpdir.name, "replacement.png")

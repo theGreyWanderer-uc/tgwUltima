@@ -15,6 +15,7 @@ from titan import _wizard_ui as ui
 from titan.u7 import install
 from titan.u7.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def cmd_u7_flex_create(args: SimpleNamespace) -> int:
@@ -45,15 +46,15 @@ def cmd_u7_flex_create(args: SimpleNamespace) -> int:
         archive.save(str(output_path))
     except OSError as error:
         print(f"ERROR: U7 Flex create failed: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     return 0
 
 
 def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     """Add a standalone U7 shape to the first permitted free Flex record."""
+    from titan.u7.shape_animation_ui import choose_u7_shape_animation
     from titan.u7.shape_animation_flag import (
-        choose_u7_shape_animation,
         read_u7_shape_animation,
         prepare_u7_archive_animation,
         write_u7_animation_payloads,
@@ -70,16 +71,9 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     archive_path = Path(args.archive)
     shape_path = Path(args.shape)
     if not archive_path.is_file():
-        print(
-            f"ERROR: U7 Flex add-shape archive not found: {archive_path}",
-            file=sys.stderr,
-        )
-        return 1
+        raise FileNotFoundError(f"U7 Flex add-shape archive not found: {archive_path}")
     if not shape_path.is_file():
-        print(
-            f"ERROR: U7 Flex add-shape shape not found: {shape_path}", file=sys.stderr
-        )
-        return 1
+        raise FileNotFoundError(f"U7 Flex add-shape shape not found: {shape_path}")
     if bool(args.output) == bool(args.in_place):
         print(
             "ERROR: U7 Flex add-shape requires exactly one of --output or --in-place",
@@ -212,11 +206,10 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
         save_u7_flex_atomically(archive, output_path)
         write_u7_animation_payloads(metadata)
     except (ui.PromptCancelled, KeyboardInterrupt):
-        print("Cancelled.")
-        return 0
+        return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"ERROR: U7 Flex add-shape failed: {error}", file=sys.stderr)
-        return 1
+        return exit_code(error)
 
     print(
         f"Shape added: {shape_path} -> {output_path} "
@@ -254,7 +247,15 @@ def u7_flex_create_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(
+    results=("file",),
+    params={
+        "output": "output-file",
+        "archive": "install-file",
+        "shape": "input-file",
+        "base_archive": "install-file",
+    },
+)
 def u7_flex_add_shape_cmd(
     archive: Annotated[
         str,

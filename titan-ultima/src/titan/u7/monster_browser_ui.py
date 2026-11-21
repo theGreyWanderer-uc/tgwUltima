@@ -14,6 +14,7 @@ from titan import _wizard_ui as ui
 from titan._terminal_image import play_terminal, terminal_image
 from titan.u7 import npc_browser, npc_browser_ui
 from titan.u7.archive_targets import ArchiveTarget
+from titan.u7.install import resolve_u7_exult_flx
 from titan.u7.monster import live_monsters_csv
 from titan.u7.save import U7NPCData
 from titan.u7.shape_browser import ShapeLibrary, load_library, playback_provider
@@ -44,7 +45,9 @@ def _library(session: Session) -> ShapeLibrary | None:
             path = npc_browser.owner_file(session.target, "SHAPES.VGA")
             if path is None:
                 raise ValueError("SHAPES.VGA not found for the selected world")
-            session.preview_library = load_library(session.target, session.game, path)
+            session.preview_library = load_library(
+                session.target, session.game, path, exult_flx=session.exult_flx
+            )
         except READ_ERRORS as error:
             session.preview_error = str(error)
     if session.preview_library is None:
@@ -251,7 +254,7 @@ def _source(target: ArchiveTarget, default: str = "D") -> npc_browser.Source | N
             default,
         )
         if action == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if action == "W":
             return None
         if action == "D":
@@ -488,7 +491,12 @@ def run_browser(
                         selected = _source(target)
                     if selected is None:
                         break
-                    session = load_session(target, selected, game)
+                    session = load_session(
+                        target,
+                        selected,
+                        game,
+                        exult_flx=resolve_u7_exult_flx(game),
+                    )
                 except READ_ERRORS as error:
                     print(f"  ERROR: {error}")
                     continue
@@ -520,6 +528,7 @@ def run_browser(
                         print(f"  ERROR: {error}")
                 if action == "W":
                     break
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()

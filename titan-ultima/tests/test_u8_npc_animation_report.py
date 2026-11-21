@@ -11,9 +11,11 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests.test_u8_cached_state import item_blocks, save_bytes, state_flex
+from tests.test_u8_shape_browser import anim_bytes, shape_bytes
+from titan.errors import EXIT_CODES
 from titan.u8.cli import u8_app
 from titan.u8.itemcach import U8ItemCache
-from titan.u8.npcdata import U8NpcData
 from titan.u8.npc_animation_report import (
     ANIMATION_FIELDS,
     describe_u8_npc_animations,
@@ -21,9 +23,8 @@ from titan.u8.npc_animation_report import (
     load_u8_npc_labels,
     u8_npc_animation_rows,
 )
+from titan.u8.npcdata import U8NpcData
 from titan.u8.shape_browser import U8ShapeLibrary, load_u8_shape_library
-from tests.test_u8_cached_state import item_blocks, save_bytes, state_flex
-from tests.test_u8_shape_browser import anim_bytes, shape_bytes
 
 
 @pytest.fixture
@@ -352,5 +353,8 @@ def test_missing_state_or_anim_aborts_without_report_outputs(case, tmp_path: Pat
             str(output),
         ],
     )
-    assert result.exit_code == 1 and "paired NPCDATA" in result.output
+    assert (
+        result.exit_code == EXIT_CODES["invalid-data"]
+        and "paired NPCDATA" in result.output
+    )
     assert not output.exists()

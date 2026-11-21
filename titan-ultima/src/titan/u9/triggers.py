@@ -112,6 +112,7 @@ from titan.u9.trigger_operands import (
     parameters,
     target_selection,
 )
+from titan.errors import InvalidDataError
 
 RECORD_SIZE = 6
 RECORD_STRUCT = "<BBHH"
@@ -340,7 +341,7 @@ class U9MapTransition:
     unclassified_parameter_bits: int
 
 
-class U9TriggersError(Exception):
+class U9TriggersError(InvalidDataError):
     """Raised on malformed ``static/triggers.flx`` data."""
 
 

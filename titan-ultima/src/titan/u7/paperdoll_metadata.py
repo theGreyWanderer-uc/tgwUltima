@@ -11,6 +11,7 @@ from typing import Mapping
 
 from titan.u7.gump_metadata import U7GumpSources
 from titan.u7.text import U7TextMessages
+from titan.errors import InvalidDataError
 
 PAPERDOLL_SLOT_NAMES = (
     "head",
@@ -142,7 +143,7 @@ class U7PaperdollMetadata:
                             raise ValueError("decimal shape required")
                         shape = int(shape_text, 10)
                     except ValueError as error:
-                        raise ValueError(
+                        raise InvalidDataError(
                             f"U7 paperdoll metadata: invalid shape in {source}: {value!r}"
                         ) from error
                 try:

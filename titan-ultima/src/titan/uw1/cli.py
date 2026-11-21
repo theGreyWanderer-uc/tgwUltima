@@ -10,15 +10,24 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan._config import get_config
 from titan.uw1.texture import (
     UW1TextureError,
     export_all_textures,
     inspect_texture_archives,
 )
 from titan._meta import meta
+from titan._results import record_output
+from titan.errors import InstallNotFoundError, exit_code
+from titan._cli_aliases import TextOrJson, alias_group
 
 uw1_app = typer.Typer(
+    cls=alias_group(
+        {
+            "--gamedir": "--game-dir",
+            "--output": "--output-dir",
+            "--json": ("--format", "json"),
+        }
+    ),
     name="uw1",
     help="Ultima Underworld: The Stygian Abyss — texture archives.",
     no_args_is_help=True,
@@ -26,36 +35,39 @@ uw1_app = typer.Typer(
 )
 
 
-def _game_directory(explicit: str | None) -> Path | None:
-    configured = get_config().get("uw1", {}).get("game", {}).get("base")
-    value = explicit or configured
+def _game_directory(value: str | None) -> Path | None:
+    """The ``--game-dir`` value; when omitted, the CLI fills it from the configured install (titan._input_fill)."""
     return Path(value).expanduser() if value else None
 
 
 def _require_game_directory(explicit: str | None) -> Path:
     game_directory = _game_directory(explicit)
     if game_directory is None:
-        raise UW1TextureError("provide --gamedir or set [uw1.game] base in titan.toml")
+        raise InstallNotFoundError(
+            "provide --game-dir or set [uw1.game] base in titan.toml"
+        )
     return game_directory
 
 
 @uw1_app.command("texture-info")
-@meta(params={"json_output": "format"}, results=("json", "text"))
+@meta(params={"output_format": "format"}, results=("json", "text"))
 def texture_info_cmd(
     gamedir: Annotated[
         Optional[str],
-        typer.Option("--gamedir", "-g", help="UW1 install root or DATA directory"),
+        typer.Option("--game-dir", "-g", help="UW1 install root or DATA directory"),
     ] = None,
-    json_output: Annotated[
-        bool, typer.Option("--json", help="Emit machine-readable JSON")
-    ] = False,
+    output_format: Annotated[
+        TextOrJson,
+        typer.Option("--format", help="Output format: text (default) or json"),
+    ] = TextOrJson.text,
 ) -> None:
     """Inspect every UW1 floor and wall texture archive."""
+    json_output = output_format is TextOrJson.json
     try:
         summaries = inspect_texture_archives(_require_game_directory(gamedir))
     except (OSError, UW1TextureError) as error:
         typer.echo(f"ERROR: {error}", err=True)
-        raise typer.Exit(1) from error
+        raise typer.Exit(exit_code(error)) from error
 
     if json_output:
         typer.echo(json.dumps(summaries, indent=2))
@@ -77,11 +89,11 @@ def texture_info_cmd(
 @meta(results=("files",), params={"output": "output-dir"})
 def texture_export_cmd(
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Texture export directory")
+        str, typer.Option("-o", "--output-dir", help="Texture export directory")
     ],
     gamedir: Annotated[
         Optional[str],
-        typer.Option("--gamedir", "-g", help="UW1 install root or DATA directory"),
+        typer.Option("--game-dir", "-g", help="UW1 install root or DATA directory"),
     ] = None,
     scale: Annotated[
         int, typer.Option("--scale", min=1, help="Nearest-neighbour scale factor")
@@ -101,11 +113,12 @@ def texture_export_cmd(
         )
     except (OSError, UW1TextureError) as error:
         typer.echo(f"ERROR: {error}", err=True)
-        raise typer.Exit(1) from error
+        raise typer.Exit(exit_code(error)) from error
 
     typer.echo(
         f"Exported {result['texture_count']} UW1 textures from "
         f"{result['archive_count']} archives -> {Path(output)}"
     )
     typer.echo(f"CSV manifest: {Path(output) / 'textures_manifest.csv'}")
+    record_output(output)
     typer.echo(f"JSON manifest: {Path(output) / 'textures_manifest.json'}")

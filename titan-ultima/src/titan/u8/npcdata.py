@@ -14,6 +14,7 @@ from typing import Iterator
 
 from titan.u8.itemcach import NPC_SLOT_COUNT
 from titan.u8.state_io import parse_u8_state_flex, read_u8_state_bytes
+from titan.errors import InvalidDataError
 
 __all__ = ["U8NpcData", "U8NpcState", "U8NpcDataError"]
 
@@ -48,7 +49,7 @@ NPC_STATE_FLAG_NAMES = {
 }
 
 
-class U8NpcDataError(ValueError):
+class U8NpcDataError(InvalidDataError):
     """NPCDATA.DAT has an invalid container or truncated native NPC array."""
 
 

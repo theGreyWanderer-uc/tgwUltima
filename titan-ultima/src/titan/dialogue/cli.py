@@ -86,9 +86,11 @@ def _resolve_usecode_path(usecode: Optional[Path]) -> Path:
     if usecode:
         return usecode
 
-    cfg = get_config()
-    paths = cfg.get("paths", {})
-    game = cfg.get("game", {})
+    from titan.u8.install import u8_section
+
+    section = u8_section(get_config())
+    paths = section.get("paths", {})
+    game = section.get("game", {})
 
     if paths.get("usecode"):
         return Path(str(paths["usecode"]))
@@ -1017,6 +1019,7 @@ def _serve_dialogue(
 
 
 @dialogue_app.command("prepare")
+@meta(results=("files",), params={"workdir": "output-dir"})
 def prepare_cmd(
     usecode: Optional[Path] = typer.Option(
         None, "--usecode", help="Path to EUSECODE.FLX"
@@ -1080,6 +1083,7 @@ def copy_cmd(
 
 
 @dialogue_app.command("validate")
+@meta(results=("text",), params={"workdir": "working-dir"})
 def validate_cmd(
     workdir: Optional[Path] = typer.Option(
         None, "--workdir", help="Runtime output directory"
@@ -1101,6 +1105,7 @@ def validate_cmd(
 
 
 @dialogue_app.command("launch")
+@meta(params={"workdir": "working-dir"})
 def launch_cmd(
     usecode: Optional[Path] = typer.Option(
         None, "--usecode", help="Path to EUSECODE.FLX"

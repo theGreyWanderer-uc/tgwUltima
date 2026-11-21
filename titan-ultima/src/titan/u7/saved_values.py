@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 
 @dataclass
@@ -25,7 +26,7 @@ class U7SavedValueReader:
 
     def take(self, size: int) -> bytes:
         if size < 0 or size > len(self.data) - self.pos:
-            raise ValueError(
+            raise InvalidDataError(
                 f"{self.label} truncated at offset {self.pos}: need {size} bytes"
             )
         result = self.data[self.pos : self.pos + size]
@@ -37,9 +38,9 @@ class U7SavedValueReader:
 
     def values(self, count: int, depth: int = 0) -> list[U7UsecodeValue]:
         if depth > 128:
-            raise ValueError(f"{self.label} nesting exceeds 128 levels")
+            raise InvalidDataError(f"{self.label} nesting exceeds 128 levels")
         if count > len(self.data) - self.pos:
-            raise ValueError(f"{self.label} value count exceeds remaining bytes")
+            raise InvalidDataError(f"{self.label} value count exceeds remaining bytes")
         values = []
         for _ in range(count):
             start = self.pos
@@ -52,7 +53,7 @@ class U7SavedValueReader:
             elif tag in (2, 5):
                 value = tuple(self.values(self.word(2), depth + 1))
             else:
-                raise ValueError(
+                raise InvalidDataError(
                     f"{self.label} unknown value tag {tag} at offset {start}"
                 )
             values.append(U7UsecodeValue(tag, value, start, self.pos))

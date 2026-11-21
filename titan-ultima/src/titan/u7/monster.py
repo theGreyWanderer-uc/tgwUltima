@@ -33,6 +33,7 @@ from titan.u7.names import U7ShapeNames
 from titan.u7.save import U7NPC, U7NPCData, U7Save
 from titan.u7.typeflag import U7TypeFlags
 from titan.u7.world import WorldQueryParams, _format_csv as world_csv, run_query
+from titan.errors import InvalidDataError
 
 
 ALIGNMENT_NAMES = {
@@ -671,7 +672,9 @@ class U7WeaponInfos(U7GameplayMetadata):
     def merge(cls, base: "U7WeaponInfos", patch: "U7WeaponInfos") -> "U7WeaponInfos":
         """Overlay sparse patch records, including explicit deletions."""
         if base.data_format != patch.data_format:
-            raise ValueError("U7 weapon metadata: cannot mix retail and Exult layers")
+            raise InvalidDataError(
+                "U7 weapon metadata: cannot mix retail and Exult layers"
+            )
         records = {**base.records, **patch.records}
         for shape in patch.deleted:
             records.pop(shape, None)
@@ -1149,6 +1152,8 @@ def monster_report(
             WorldQueryParams(
                 static_dir=static_dir,
                 gamedat_dir=gamedat_dir,
+                game=game,
+                exult_flx_path=exult_flx_path,
                 shape_classes=[12],
                 include_ifix=False,
                 include_ireg=True,

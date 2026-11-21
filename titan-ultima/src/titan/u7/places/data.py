@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from titan.errors import InvalidDataError
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 FORMAT = "titan-u7-place-data"
@@ -22,7 +23,7 @@ PLACE_FIELDS = ("id", "name", "type", "town", "number", "keeper", "anchor", "rec
 REGION_FIELDS = ("id", "name", "kind", "anchor", "rects")
 
 
-class PlaceDataError(ValueError):
+class PlaceDataError(InvalidDataError):
     """Raised when bundled place data is missing or malformed."""
 
 

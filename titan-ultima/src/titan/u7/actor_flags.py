@@ -9,6 +9,7 @@ from typing import Sequence
 from titan.u7.flex import U7FlexArchive
 from titan.u7.names import _text_file
 from titan.u7.text import TextEncoding, U7TextMessages, decode_text_source
+from titan.errors import InvalidDataError
 
 ACTOR_FLAG_NAMES = (
     "cold_immune",
@@ -114,11 +115,11 @@ class U7ActorFlags:
                 shape = int(parts[0].strip(), 10)
                 flags = [int(part.strip() or "0", 10) for part in parts[1:9]]
             except ValueError as error:
-                raise ValueError(
+                raise InvalidDataError(
                     f"U7 actor_flags invalid decimal row {index} in {source}: {value!r}"
                 ) from error
             if not 0 <= shape <= 0xFFFF:
-                raise ValueError(
+                raise InvalidDataError(
                     f"U7 actor_flags shape outside u16 in {source}: {shape}"
                 )
             mask = sum(1 << bit for bit, enabled in enumerate(flags) if enabled)
@@ -198,15 +199,15 @@ def load_u7_actor_flags(
     else:
         bundle = str(exult_flx_path) if exult_flx_path is not None else None
         if bundle is None and discover_defaults:
-            from titan.u7.install import resolve_u7_exult_flx
+            from titan.u7.install import default_u7_exult_flx
 
-            bundle = resolve_u7_exult_flx(game)
+            bundle = default_u7_exult_flx(game)
         if bundle is not None:
             path = Path(bundle).expanduser()
             archive = U7FlexArchive.from_file(str(path), strict=True)
             index = 7 if game == "bg" else 4
             if index >= len(archive.records) or not archive.records[index]:
-                raise ValueError(
+                raise InvalidDataError(
                     f"U7 actor_flags missing shape_info resource {index} in {path}"
                 )
             result = U7ActorFlags.from_text(

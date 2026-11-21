@@ -1,30 +1,29 @@
-"""Inspect and structurally edit guarded Exult world IREG streams or explicit save members."""
+"""Guarded U7 edit plans: the JSON plans ``ireg-tree-edit``, ``actor-rewrite`` and
+``save-repack`` read, validated before anything is written, and the exclusive
+output writer they share. No terminal or config access; the commands are in
+``titan.u7.cli.ireg``, ``titan.u7.cli.actors`` and ``titan.u7.cli.saves``.
+"""
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal, Optional, cast
+from typing import Literal, cast
 
-import typer
-
-from titan.u7.ireg_metadata import U7IregContext
-from titan.u7.ireg_authoring import U7IregCreate, U7IregConvert
-from titan.u7.ireg_tree import read_ireg_tree
+from titan.u7.actor_rewrite import (
+    ActorFileKind,
+    ActorSourceFlavor,
+    U7ActorHeaderEdit,
+)
+from titan.u7.ireg_authoring import U7IregConvert, U7IregCreate
 from titan.u7.ireg_tree_edit import (
     U7IregDelete,
     U7IregReparent,
-    U7IregSaveTreeResult,
-    U7IregTreeEditResult,
-    edit_ireg_save_member,
-    edit_ireg_tree,
-    read_ireg_save_member,
 )
-from titan._meta import meta
+from titan.u7.save_repack import U7SaveReplacement, check_u7_save_hash
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -42,7 +41,9 @@ class U7IregTreePlan:
 def parse_u7_plan_hash(value: object) -> str:
     """Validate the complete SHA-256 text used by guarded U7 edit plans."""
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-fA-F]{64}", value) is None:
-        raise ValueError("IREG tree plan: hashes must contain 64 hexadecimal digits")
+        raise InvalidDataError(
+            "IREG tree plan: hashes must contain 64 hexadecimal digits"
+        )
     return value
 
 
@@ -53,7 +54,7 @@ def parse_u7_plan_number(value: object, maximum: int = 0xFFFFFFFF) -> int:
         or not isinstance(value, int)
         or not 0 <= value <= maximum
     ):
-        raise ValueError(f"IREG tree plan: expected integer in 0..{maximum}")
+        raise InvalidDataError(f"IREG tree plan: expected integer in 0..{maximum}")
     return value
 
 
@@ -65,7 +66,7 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
         or not required <= value.keys()
         or set(value) - required - {"save"}
     ):
-        raise ValueError(
+        raise InvalidDataError(
             "IREG tree plan: requires source_sha256, context_sha256, superchunk and operations"
         )
     source_hash, context_hash = (
@@ -74,11 +75,11 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
     )
     superchunk = parse_u7_plan_number(value["superchunk"], 143)
     if not isinstance(value["operations"], list):
-        raise ValueError("IREG tree plan: operations must be an array")
+        raise InvalidDataError("IREG tree plan: operations must be an array")
     operations: list[U7IregDelete | U7IregReparent | U7IregCreate | U7IregConvert] = []
     for row in value["operations"]:
         if not isinstance(row, dict):
-            raise ValueError("IREG tree plan: operation must be an object")
+            raise InvalidDataError("IREG tree plan: operation must be an object")
         if row.get("action") == "delete":
             if set(row) != {
                 "action",
@@ -86,7 +87,7 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
                 "expected_sha256",
                 "cascade",
             } or not isinstance(row["cascade"], bool):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree plan: delete requires offset, expected_sha256 and boolean cascade"
                 )
             operations.append(
@@ -109,7 +110,7 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
                 "index_word",
                 "flag_policy",
             } or row["flag_policy"] not in ("preserve", "inherit"):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree plan: reparent requires explicit parent, placement, index and flag policy"
                 )
             parent = (
@@ -154,7 +155,7 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
                 or not isinstance(row["record_hex"], str)
                 or row["flag_policy"] not in ("preserve", "inherit")
             ):
-                raise ValueError(
+                raise InvalidDataError(
                     "IREG tree plan: creation requires an ID, record hex and explicit placement/policies"
                 )
             creation_parent = row["parent_offset"]
@@ -197,10 +198,14 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
                 not in ("auto", "ordinary", "fd", "fe")
                 or row.get("simple_length") not in (None, 6, 10)
             ):
-                raise ValueError("IREG tree plan: invalid conversion/promotion fields")
+                raise InvalidDataError(
+                    "IREG tree plan: invalid conversion/promotion fields"
+                )
             replacement_hex = row.get("replacement_hex")
             if replacement_hex is not None and not isinstance(replacement_hex, str):
-                raise ValueError("IREG tree plan: replacement_hex must be hex text")
+                raise InvalidDataError(
+                    "IREG tree plan: replacement_hex must be hex text"
+                )
             operations.append(
                 U7IregConvert(
                     parse_u7_plan_number(row["offset"]),
@@ -232,7 +237,7 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
                 )
             )
         else:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG tree plan: action must be delete, reparent, create, convert or promote"
             )
     save_hash: str | None = None
@@ -243,39 +248,19 @@ def read_ireg_tree_plan(value: object) -> U7IregTreePlan:
             "source_sha256",
             "member_path",
         }:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG tree plan: save requires source_sha256 and member_path"
             )
         save_hash = parse_u7_plan_hash(saved["source_sha256"])
         path = saved["member_path"]
         if not isinstance(path, list) or not 1 <= len(path) <= 16:
-            raise ValueError(
+            raise InvalidDataError(
                 "IREG tree plan: member_path must contain 1..16 occurrence indices"
             )
         member_path = tuple(parse_u7_plan_number(index) for index in path)
     return U7IregTreePlan(
         source_hash, context_hash, superchunk, tuple(operations), save_hash, member_path
     )
-
-
-def load_ireg_cli_context(
-    static: str, patch_dir: str | None, game: str, custom_game: bool
-) -> U7IregContext:
-    """Load matching CLI metadata for guarded world/actor writers."""
-    from titan.u7.world import WorldQueryParams, load_ireg_context, load_query_metadata
-
-    if not Path(static).is_dir():
-        raise ValueError(
-            "IREG tree: --static must name an existing matching STATIC directory"
-        )
-    params = WorldQueryParams(
-        static_dir=static,
-        base_static=static,
-        patch_dir=patch_dir,
-        game=game,
-        custom_game=custom_game,
-    )
-    return load_ireg_context(params, load_query_metadata(params)[0])
 
 
 def write_new_u7_output(path: Path, data: bytes) -> None:
@@ -292,161 +277,148 @@ def write_new_u7_output(path: Path, data: bytes) -> None:
         raise
 
 
-@meta(results=("json",), params={"output": "output-file"})
-def ireg_tree_cmd(
-    file: Annotated[
-        str,
-        typer.Argument(
-            help="Exult standalone world IREG, or a save with --member-path"
-        ),
-    ],
-    static: Annotated[
-        str,
-        typer.Option("--static", help="Matching STATIC for unambiguous class dispatch"),
-    ],
-    superchunk: Annotated[int, typer.Option("--superchunk", min=0, max=143)],
-    member_path: Annotated[
-        Optional[str],
-        typer.Option(
-            "--member-path", help="Comma-separated save occurrence indices, e.g. 7,2"
-        ),
-    ] = None,
-    patch_dir: Annotated[Optional[str], typer.Option("--patch-dir")] = None,
-    game: Annotated[Literal["bg", "si"], typer.Option("--game")] = "bg",
-    custom_game: Annotated[bool, typer.Option("--custom-game")] = False,
-    output: Annotated[
-        Optional[str],
-        typer.Option("-o", "--output", help="New JSON file; default stdout"),
-    ] = None,
-) -> None:
-    """Inspect lossless hierarchy, special owners, inherited flags and guarded edit identities."""
-    try:
-        source = Path(file)
-        raw = source.read_bytes()
-        saved: dict[str, object] | None = None
-        if member_path is not None:
-            if re.fullmatch(r"[0-9]+(?:,[0-9]+)*", member_path) is None:
-                raise ValueError(
-                    "IREG tree: --member-path needs comma-separated occurrence indices"
-                )
-            path = tuple(int(index) for index in member_path.split(","))
-            saved = {
-                "source_sha256": hashlib.sha256(raw).hexdigest(),
-                "member_path": list(path),
-            }
-            raw = read_ireg_save_member(raw, path, superchunk=superchunk)
-        context = load_ireg_cli_context(static, patch_dir, game, custom_game)
-        report = read_ireg_tree(raw, context=context, superchunk=superchunk).as_row()
-        if saved is not None:
-            report["save"] = saved
-        content = json.dumps(report, indent=2) + "\n"
-        if output is not None:
-            destination = Path(output)
-            if destination.resolve() == source.resolve():
-                raise ValueError("IREG tree: output must differ from source")
-            write_new_u7_output(destination, content.encode("utf-8"))
-        else:
-            print(content, end="")
-    except (OSError, ValueError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+@dataclass(frozen=True)
+class U7ActorEditPlan:
+    """A flavor-explicit actor edit plan, optionally targeting one save occurrence."""
+
+    source_sha256: str
+    context_sha256: str
+    game: Literal["bg", "si"]
+    kind: ActorFileKind
+    flavor: ActorSourceFlavor
+    edits: tuple[U7ActorHeaderEdit, ...]
+    save_sha256: str | None = None
+    member_path: tuple[int, ...] | None = None
 
 
-@meta(results=("file",), params={"output": "output-file"})
-def ireg_tree_edit_cmd(
-    file: Annotated[
-        str,
-        typer.Argument(
-            help="Source world IREG or save, explicitly selected by the plan"
-        ),
-    ],
-    plan: Annotated[
-        str,
-        typer.Option(
-            "--plan", help="Guarded object authoring plan from ireg-tree identities"
-        ),
-    ],
-    static: Annotated[
-        str,
-        typer.Option(
-            "--static",
-            help="Matching STATIC; dispatch fingerprint must match inspection",
-        ),
-    ],
-    patch_dir: Annotated[Optional[str], typer.Option("--patch-dir")] = None,
-    game: Annotated[Literal["bg", "si"], typer.Option("--game")] = "bg",
-    custom_game: Annotated[bool, typer.Option("--custom-game")] = False,
-    output: Annotated[
-        Optional[str],
-        typer.Option(
-            "-o",
-            "--output",
-            help="New IREG or save archive; never overwrite existing files",
-        ),
-    ] = None,
-    dry_run: Annotated[
-        bool,
-        typer.Option(
-            "--dry-run",
-            help="Validate the hierarchy and save embedding without writing",
-        ),
-    ] = False,
-) -> None:
-    """Create, convert, promote, delete or reparent Exult world objects and optionally repack a save."""
-    try:
-        source = Path(file)
-        destination = Path(output) if output is not None else None
-        if destination is None and not dry_run:
-            raise ValueError(
-                "IREG tree edit: --output is required unless --dry-run is selected"
-            )
-        if destination is not None and (
-            destination.resolve() == source.resolve() or destination.exists()
-        ):
-            raise ValueError(
-                "IREG tree edit: output must be a new path different from source"
-            )
-        instructions = read_ireg_tree_plan(
-            json.loads(Path(plan).read_text(encoding="utf-8"))
+def read_actor_edit_plan(value: object) -> U7ActorEditPlan:
+    """Validate JSON actor edit identities, source flavor, header operations and optional save path."""
+    required = {"source_sha256", "context_sha256", "game", "kind", "flavor", "edits"}
+    if (
+        not isinstance(value, dict)
+        or not required <= value.keys()
+        or set(value) - required - {"save"}
+    ):
+        raise InvalidDataError(
+            "Actor rewrite plan: source/context/game/kind/flavor/edits are required"
         )
-        context = load_ireg_cli_context(static, patch_dir, game, custom_game)
-        raw = source.read_bytes()
-        result: U7IregTreeEditResult | U7IregSaveTreeResult
-        if (
-            instructions.member_path is not None
-            and instructions.save_sha256 is not None
+    if (
+        value["game"] not in ("bg", "si")
+        or value["kind"] not in ("npc", "monsters")
+        or value["flavor"] not in ("runtime", "original-new-game")
+        or not isinstance(value["edits"], list)
+    ):
+        raise InvalidDataError("Actor rewrite plan: invalid game/kind/flavor/edits")
+    edits = []
+    for row in value["edits"]:
+        if not isinstance(row, dict) or set(row) not in (
+            {"index", "expected_sha256", "fields"},
+            {"index", "expected_sha256", "header_hex"},
         ):
-            result = edit_ireg_save_member(
-                raw,
-                instructions.member_path,
-                instructions.operations,
-                context=context,
-                superchunk=instructions.superchunk,
-                expected_save_sha256=instructions.save_sha256,
-                expected_member_sha256=instructions.source_sha256,
-                expected_context_sha256=instructions.context_sha256,
+            raise InvalidDataError(
+                "Actor rewrite plan: each actor needs index, hash and fields or header_hex"
             )
-            mode = "save_member"
-        else:
-            result = edit_ireg_tree(
-                raw,
-                instructions.operations,
-                context=context,
-                superchunk=instructions.superchunk,
-                expected_sha256=instructions.source_sha256,
-                expected_context_sha256=instructions.context_sha256,
+        fields = row.get("fields", {})
+        if not isinstance(fields, dict) or any(
+            not isinstance(key, str)
+            or isinstance(item, bool)
+            or not isinstance(item, (int, str))
+            for key, item in fields.items()
+        ):
+            raise InvalidDataError(
+                "Actor rewrite plan: fields must map names to integers or strings"
             )
-            mode = "world_stream"
-        report = result.as_row() | {
-            "mode": mode,
-            "source": str(source),
-            "output": str(destination) if destination else None,
-            "dry_run": dry_run,
-        }
-        content = json.dumps(report, indent=2) + "\n"
-        if destination is not None and not dry_run:
-            write_new_u7_output(destination, result.data)
-        print(content, end="")
-    except (OSError, ValueError) as error:
-        print(f"ERROR: {error}", file=sys.stderr)
-        raise SystemExit(1) from error
+        if "header_hex" in row and not isinstance(row["header_hex"], str):
+            raise InvalidDataError("Actor rewrite plan: header_hex must be hex text")
+        edits.append(
+            U7ActorHeaderEdit(
+                parse_u7_plan_number(row["index"]),
+                parse_u7_plan_hash(row["expected_sha256"]),
+                fields,
+                bytes.fromhex(row["header_hex"]) if "header_hex" in row else None,
+            )
+        )
+    save_hash = None
+    path = None
+    if "save" in value:
+        saved = value["save"]
+        if (
+            not isinstance(saved, dict)
+            or set(saved) != {"source_sha256", "member_path"}
+            or not isinstance(saved["member_path"], list)
+            or not 1 <= len(saved["member_path"]) <= 16
+        ):
+            raise InvalidDataError(
+                "Actor rewrite plan: save requires archive hash and 1..16 occurrence indices"
+            )
+        save_hash = parse_u7_plan_hash(saved["source_sha256"])
+        path = tuple(parse_u7_plan_number(index) for index in saved["member_path"])
+    return U7ActorEditPlan(
+        parse_u7_plan_hash(value["source_sha256"]),
+        parse_u7_plan_hash(value["context_sha256"]),
+        value["game"],
+        value["kind"],
+        value["flavor"],
+        tuple(edits),
+        save_hash,
+        path,
+    )
+
+
+def read_u7_repack_plan(
+    plan_path: Path, source: bytes
+) -> tuple[U7SaveReplacement, ...]:
+    """Read explicit replacement files relative to the plan; require source and member hashes."""
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    if not isinstance(plan, dict) or set(plan) != {"source_sha256", "replacements"}:
+        raise InvalidDataError(
+            "U7 save repack: plan requires only source_sha256 and replacements"
+        )
+    check_u7_save_hash(plan["source_sha256"], source, "source")
+    rows = plan["replacements"]
+    if not isinstance(rows, list):
+        raise InvalidDataError("U7 save repack: replacements must be an array")
+    replacements: list[U7SaveReplacement] = []
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != {
+            "member_path",
+            "expected_sha256",
+            "file",
+        }:
+            raise InvalidDataError(
+                "U7 save repack: each replacement needs member_path, expected_sha256 and file"
+            )
+        path, expected, filename = (
+            row["member_path"],
+            row["expected_sha256"],
+            row["file"],
+        )
+        if (
+            not isinstance(path, list)
+            or not 1 <= len(path) <= 16
+            or any(
+                isinstance(index, bool) or not isinstance(index, int) or index < 0
+                for index in path
+            )
+        ):
+            raise InvalidDataError(
+                "U7 save repack: member_path needs 1..16 nonnegative integer occurrence indices"
+            )
+        if (
+            not isinstance(expected, str)
+            or re.fullmatch(r"[0-9a-fA-F]{64}", expected) is None
+        ):
+            raise InvalidDataError(
+                "U7 save repack: expected_sha256 must have 64 hexadecimal digits"
+            )
+        if not isinstance(filename, str) or not filename:
+            raise InvalidDataError(
+                "U7 save repack: replacement file must be a nonempty path"
+            )
+        replacement_file = Path(filename)
+        if not replacement_file.is_absolute():
+            replacement_file = plan_path.parent / replacement_file
+        replacements.append(
+            U7SaveReplacement(tuple(path), replacement_file.read_bytes(), expected)
+        )
+    return tuple(replacements)

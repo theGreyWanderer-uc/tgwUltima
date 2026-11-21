@@ -46,6 +46,7 @@ from titan.u9.node_registry import U9NodeRegistry
 from titan.u9.transform import mat4_trs
 from titan._files import sha256_file
 from titan.u9.model import material_alpha
+from titan.errors import TitanError
 
 ANIMATED_MODEL_BUNDLE_SCHEMA = "titan.u9.rigid-animated-model"
 ANIMATED_MODEL_BUNDLE_SCHEMA_VERSION = 1
@@ -60,7 +61,7 @@ Vec3 = tuple[float, float, float]
 Quat = tuple[float, float, float, float]
 
 
-class U9AnimatedModelBundleError(Exception):
+class U9AnimatedModelBundleError(TitanError):
     """Raised when a model and clip cannot form a rigid animation bundle."""
 
 

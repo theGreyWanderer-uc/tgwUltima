@@ -1,9 +1,9 @@
 """Exercise the PNG wizard through conversion, approval and archive insertion."""
 
-import struct
 import re
-from functools import partial
+import struct
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -12,11 +12,12 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from titan.u7 import shape_wizard as wizard
+from titan.u7 import shape_wizard_ui as wizard_ui
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 
-_original_open_preview = wizard._open_preview
+_original_open_preview = wizard_ui._open_preview
 
 
 @pytest.fixture(autouse=True)
@@ -24,9 +25,9 @@ def isolate_profile(monkeypatch, tmp_path):
     monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
     monkeypatch.setattr(wizard, "_exult_paths", lambda game: None)
     monkeypatch.setattr("titan._config.get_config", lambda: {})
-    monkeypatch.setattr(wizard, "get_config", lambda: {})
+    monkeypatch.setattr(wizard_ui, "get_config", lambda: {})
     monkeypatch.setattr(wizard, "find_exult_cfg", lambda: None)
-    monkeypatch.setattr(wizard, "_open_preview", lambda path: True)
+    monkeypatch.setattr(wizard_ui, "_open_preview", lambda path: True)
     monkeypatch.setattr(
         wizard.tempfile,
         "NamedTemporaryFile",
@@ -161,11 +162,12 @@ def test_hard_cap_applies_before_output(artwork, size):
     assert not Path(artwork.output_path).exists()
 
 
-def test_warning_threshold_preserves_size(artwork, capsys):
+def test_warning_threshold_preserves_size(artwork, caplog):
     Image.new("RGB", (73, 72), "red").save(artwork.source)
-    converted = wizard.convert(artwork)
+    with caplog.at_level("WARNING", logger="titan"):
+        converted = wizard.convert(artwork)
     assert converted.shape.frames[0].width == 73
-    assert "72x72 warning" in capsys.readouterr().err
+    assert "72x72 warning" in caplog.text
 
 
 @pytest.mark.parametrize("size,alpha", [((9, 8), 255), ((8, 8), 127)])
@@ -384,7 +386,7 @@ def test_recipe_paths_and_archive_override_are_noninteractive(
     output = tmp_path / "destination.vga"
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
     monkeypatch.setattr(
-        wizard, "_open_preview", lambda path: pytest.fail("recipe opened viewer")
+        wizard_ui, "_open_preview", lambda path: pytest.fail("recipe opened viewer")
     )
     result = CliRunner().invoke(
         u7_app, ["shape-create", "--config", str(path), "-o", str(output)]
@@ -398,7 +400,7 @@ def test_recipe_missing_base_fails_without_prompt(tmp_path, artwork, monkeypatch
     path = tmp_path / "recipe.toml"
     write_recipe(path, output='format="flex"\narchive="patch/shapes.vga"')
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
-    assert wizard.run_from_config(str(path)) == 1
+    assert wizard_ui.run_from_config(str(path)) == 1
     assert not (tmp_path / "patch/shapes.vga").exists()
 
 
@@ -537,10 +539,10 @@ def test_image_preview_shows_large_source_and_quantized_pixels(
     before = Path(artwork.source).read_bytes()
     opened = []
     monkeypatch.setattr(
-        wizard, "_open_preview", lambda path: opened.append(path) or True
+        wizard_ui, "_open_preview", lambda path: opened.append(path) or True
     )
     converted = wizard.convert(artwork)
-    path = wizard.show_preview(converted, open_image=True)
+    path = wizard_ui.show_preview(converted, open_image=True)
     assert opened == [path]
     with Image.open(path) as preview:
         assert preview.size == (800, 408)
@@ -560,8 +562,8 @@ def test_image_preview_shows_large_source_and_quantized_pixels(
 def test_preview_remains_available_when_viewer_cannot_open(
     artwork, monkeypatch, capsys
 ):
-    monkeypatch.setattr(wizard, "_open_preview", lambda path: False)
-    path = wizard.show_preview(wizard.convert(artwork), open_image=True)
+    monkeypatch.setattr(wizard_ui, "_open_preview", lambda path: False)
+    path = wizard_ui.show_preview(wizard.convert(artwork), open_image=True)
     assert path.is_file()
     assert "Could not open the image viewer" in capsys.readouterr().out
 
@@ -599,7 +601,7 @@ def test_interactive_gumps_selection_uses_gumps_base_and_patch_slots(
     if existing_patch:
         write_archive(target, [b"", shape_data(4)])
     before = base.read_bytes()
-    monkeypatch.setattr(wizard, "_static_path", lambda game: str(static))
+    monkeypatch.setattr(wizard, "_static_path", lambda config: str(static))
     paths = wizard.ExultGamePaths(
         game="SI", static_path=str(static), patch_path=str(target.parent)
     )
@@ -683,7 +685,7 @@ def test_interactive_mod_target_uses_own_patch_and_correct_base(
         write_archive(own_static / "GUMPS.VGA", [b"", shape_data(3)])
     write_archive(patch, [shape_data(4)])
     before = patch.read_bytes()
-    monkeypatch.setattr(wizard, "_static_path", lambda game: str(retail))
+    monkeypatch.setattr(wizard, "_static_path", lambda config: str(retail))
     # Select the manual folder; discovery is isolated from the machine profile.
     answers = [
         "2",
@@ -729,7 +731,7 @@ def test_standalone_patch_without_matching_static_does_not_inherit_retail(
     patch = own_static.parent / "patch/GUMPS.VGA"
     write_archive(retail / "GUMPS.VGA", [shape_data(2)] * 5)
     write_archive(patch, [b"", shape_data(3)])
-    monkeypatch.setattr(wizard, "_static_path", lambda game: str(retail))
+    monkeypatch.setattr(wizard, "_static_path", lambda config: str(retail))
     config = replace(
         artwork,
         output_format="flex",
@@ -843,8 +845,8 @@ def test_picker_discovers_registered_exult_game(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(wizard, "find_exult_cfg", lambda: cfg)
     monkeypatch.setattr("builtins.input", lambda prompt: "2")
     config = wizard.ShapeWizardConfig(game="SI")
-    wizard._select_target(config)
+    wizard_ui._select_target(config)
     assert config.target_static == str(custom / "static")
     assert config.target_patch == str(custom / "patch")
     assert config.standalone
-    assert "My Game (Exult game)" in capsys.readouterr().out
+    assert "My Game (custom, Exult game)" in capsys.readouterr().out

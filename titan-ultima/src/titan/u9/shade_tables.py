@@ -40,6 +40,7 @@ __all__ = [
 
 import os
 from pathlib import Path
+from titan.errors import InvalidDataError
 
 PALETTE_SIZE = 256
 SHADE_LEVEL_COUNT = 32
@@ -53,7 +54,7 @@ _RED_TINT_OFFSET = len(RAMP_NAMES) * RAMP_LENGTH
 EDITOR_COLOR_TABLE_SIZE = _RED_TINT_OFFSET + PALETTE_SIZE
 
 
-class U9ShadeTableError(Exception):
+class U9ShadeTableError(InvalidDataError):
     """Raised when a shade table does not have its fixed size."""
 
 

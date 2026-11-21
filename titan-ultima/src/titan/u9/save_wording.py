@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Mapping, cast
 
 from titan.u9.integrity import IntegrityReport, SEVERITY_RANK
+from titan.errors import InvalidDataError
 
 RESOURCE_DIRECTORY = Path(__file__).with_name("resources")
 PLACEHOLDER_RE = re.compile(r"\{([a-z][a-z_0-9]*)\}")
@@ -18,7 +19,7 @@ LOAD_POLICIES = {"try_after_backup", "review_first", "do_not_load", "not_applica
 def validate_u9_save_wording(catalog: Mapping[str, Any]) -> None:
     """Validate portable keys, actions and placeholders before presenting advice."""
     if catalog.get("schema_version") != 1:
-        raise ValueError("U9 save wording: unsupported schema version")
+        raise InvalidDataError("U9 save wording: unsupported schema version")
     actions = catalog["actions"]
     try_load = actions["try_load"]
     if (
@@ -27,7 +28,7 @@ def validate_u9_save_wording(catalog: Mapping[str, Any]) -> None:
         or try_load.get("automatic_launch_allowed") is not False
         or set(try_load.get("allowed_overall_results", [])) != {"PASS", "WARN"}
     ):
-        raise ValueError("U9 save wording: unsafe try_load activation contract")
+        raise InvalidDataError("U9 save wording: unsafe try_load activation contract")
     for key, entry in {
         **catalog["findings"],
         **catalog["summaries"],
@@ -36,13 +37,13 @@ def validate_u9_save_wording(catalog: Mapping[str, Any]) -> None:
         if key in catalog["findings"] and not re.fullmatch(
             r"[A-Z]{3}\d{2}/(?:PASS|INFO|WARN|ERROR|FATAL)", key
         ):
-            raise ValueError(f"U9 save wording: invalid finding key {key}")
+            raise InvalidDataError(f"U9 save wording: invalid finding key {key}")
         if entry["load_policy"] not in LOAD_POLICIES:
-            raise ValueError(f"U9 save wording: invalid loading policy for {key}")
+            raise InvalidDataError(f"U9 save wording: invalid loading policy for {key}")
         if not isinstance(entry.get("affects_verdict", True), bool):
-            raise ValueError(f"U9 save wording: invalid verdict flag for {key}")
+            raise InvalidDataError(f"U9 save wording: invalid verdict flag for {key}")
         if entry.get("display_kind", "finding") not in {"finding", "note"}:
-            raise ValueError(f"U9 save wording: invalid display kind for {key}")
+            raise InvalidDataError(f"U9 save wording: invalid display kind for {key}")
         if any(action not in actions for action in entry["actions"]):
             raise ValueError(f"U9 save wording: unknown action for {key}")
         found: set[str] = set()
@@ -51,11 +52,11 @@ def validate_u9_save_wording(catalog: Mapping[str, Any]) -> None:
             found.update(PLACEHOLDER_RE.findall(value))
             remainder = PLACEHOLDER_RE.sub("", value)
             if "{" in remainder or "}" in remainder:
-                raise ValueError(
+                raise InvalidDataError(
                     f"U9 save wording: only plain placeholders allowed for {key}"
                 )
         if found != set(entry.get("placeholders", [])):
-            raise ValueError(
+            raise InvalidDataError(
                 f"U9 save wording: placeholder declaration mismatch for {key}"
             )
     if set(catalog["summaries"]) != {
@@ -65,7 +66,7 @@ def validate_u9_save_wording(catalog: Mapping[str, Any]) -> None:
         "FATAL",
         "NO_SAVE_SELECTED",
     }:
-        raise ValueError("U9 save wording: incomplete overall summaries")
+        raise InvalidDataError("U9 save wording: incomplete overall summaries")
 
 
 @lru_cache(maxsize=1)
@@ -122,7 +123,7 @@ def fill_u9_save_wording(template: str, details: Mapping[str, Any]) -> str:
     def replacement(match: re.Match[str]) -> str:
         name = match[1]
         if name not in details:
-            raise ValueError(f"U9 save wording: missing detail {name}")
+            raise InvalidDataError(f"U9 save wording: missing detail {name}")
         value = details[name]
         if name == "maps":
             return (

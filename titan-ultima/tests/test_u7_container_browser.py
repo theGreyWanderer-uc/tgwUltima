@@ -6,13 +6,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from tests.test_u7_ireg import _container_payload, _simple_payload
 from titan._inventory_browser import inventory_descendants
 from titan.u7 import container_browser as browser
 from titan.u7 import container_browser_ui as browser_ui
-from titan.u7.container import browse_containers, ContainerQueryParams, format_tree
+from titan.u7.container import ContainerQueryParams, browse_containers, format_tree
 from titan.u7.flex import U7FlexArchive
 from titan.u7.world import WorldQueryParams
-from tests.test_u7_ireg import _container_payload, _simple_payload
 
 
 @pytest.fixture

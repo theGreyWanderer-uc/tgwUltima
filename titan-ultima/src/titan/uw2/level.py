@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 import struct
+from titan.errors import InvalidDataError
 
 
 TILE_TYPE_NAMES = {
@@ -105,7 +106,9 @@ def level_name_for_slot(slot_index: int) -> str | None:
 
 def parse_texture_mapping(block: bytes) -> dict:
     if len(block) < 0x86:
-        raise ValueError(f"texture mapping block is too small: {len(block)} bytes")
+        raise InvalidDataError(
+            f"texture mapping block is too small: {len(block)} bytes"
+        )
     entries = [struct.unpack_from("<H", block, i * 2)[0] for i in range(64)]
     door_raw = list(block[0x80:0x86])
     door_resolved = [value + DOOR_TEXTURE_BASE for value in door_raw]
@@ -129,7 +132,7 @@ def parse_level(
     light_level: int | None = None,
 ) -> dict:
     if len(level_block) < LEVEL_BLOCK_MIN_SIZE:
-        raise ValueError(
+        raise InvalidDataError(
             f"level {slot_index} decoded block is too small: "
             f"{len(level_block)} bytes, expected at least {LEVEL_BLOCK_MIN_SIZE}"
         )
@@ -438,7 +441,7 @@ def parse_animation_overlays(level_block: bytes) -> list[dict]:
 
 def parse_automap(block: bytes) -> dict:
     if len(block) < 0x1000:
-        raise ValueError(f"automap block is too small: {len(block)} bytes")
+        raise InvalidDataError(f"automap block is too small: {len(block)} bytes")
     cells = []
     for y in range(64):
         for x in range(64):

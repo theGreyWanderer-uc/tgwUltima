@@ -51,6 +51,7 @@ from titan.uo.placement import (
 )
 from titan.uo.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _try_load_cliloc(client: Path, language: str) -> UOCliloc | None:
@@ -158,7 +159,7 @@ def cmd_house_footprints(args: SimpleNamespace) -> int:
         entries, source = server.entries, server.entries_source
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "housing"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -459,7 +460,7 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
         cliloc = _try_load_cliloc(client, "enu")
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     outdir = _common._out(args) / "housing" / "capacity" / f"map{args.facet}"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -642,7 +643,9 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",), params={"output": "output-dir", "server_profile": "input-file"}
+)
 def house_footprints_cmd(
     client: Annotated[
         Optional[str],
@@ -654,8 +657,8 @@ def house_footprints_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     server_profile: Annotated[
@@ -688,7 +691,15 @@ def house_footprints_cmd(
     raise SystemExit(cmd_house_footprints(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={
+        "output": "output-dir",
+        "regions": "input-file",
+        "region_scripts": "input-dir",
+        "server_profile": "input-file",
+    },
+)
 def house_capacity_cmd(
     client: Annotated[
         Optional[str],
@@ -700,8 +711,8 @@ def house_capacity_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     facet: Annotated[

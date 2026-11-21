@@ -1,4 +1,4 @@
-"""Let ``--gamedat`` take an Exult save file as well as a GAMEDAT folder.
+"""Let ``--save`` take an Exult save file as well as a GAMEDAT folder.
 
 Exult saves (``exultNN<bg|si>.sav``, Flex or ZIP; see ``save_container``) hold
 the same files Exult writes into GAMEDAT, ``mapNN/`` folders included. A save
@@ -8,24 +8,23 @@ read a GAMEDAT folder can read any save without the user extracting it.
 
 from __future__ import annotations
 
-__all__ = ["gamedat_cache_root", "gamedat_option", "u7_gamedat_folder"]
+__all__ = ["gamedat_cache_root", "u7_gamedat_folder"]
 
 import hashlib
-import os
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Optional
+from titan.errors import InvalidDataError
 
 COMPLETE_MARKER = ".titan-complete"
 
 
 def gamedat_cache_root() -> Path:
-    """Where unpacked saves live: ``%LOCALAPPDATA%/Titan/cache/u7-saves`` on Windows."""
-    local = os.getenv("LOCALAPPDATA") if os.name == "nt" else None
-    if local:
-        return Path(local) / "Titan" / "cache" / "u7-saves"
-    return Path.home() / ".cache" / "titan" / "u7-saves"
+    """Where unpacked saves live: ``u7-saves`` in :func:`titan._config.cache_dir`."""
+    from titan._config import cache_dir
+
+    return cache_dir() / "u7-saves"
 
 
 def u7_gamedat_folder(
@@ -54,11 +53,11 @@ def u7_gamedat_folder(
     try:
         save = U7Save.from_bytes(data)
     except ValueError as error:
-        raise ValueError(
+        raise InvalidDataError(
             f"Not a U7 save or GAMEDAT folder: {path} ({error})"
         ) from error
     if not save.members:
-        raise ValueError(f"Not a U7 save or GAMEDAT folder: {path}")
+        raise InvalidDataError(f"Not a U7 save or GAMEDAT folder: {path}")
     root.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix="unpack-", dir=root))
     try:
@@ -69,13 +68,3 @@ def u7_gamedat_folder(
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return str(target)
-
-
-def gamedat_option(value: Optional[str]) -> Optional[str]:
-    """:func:`u7_gamedat_folder` for a ``--gamedat`` option: bad files are usage errors."""
-    try:
-        return u7_gamedat_folder(value)
-    except (OSError, ValueError) as error:
-        import typer
-
-        raise typer.BadParameter(str(error), param_hint="--gamedat") from error

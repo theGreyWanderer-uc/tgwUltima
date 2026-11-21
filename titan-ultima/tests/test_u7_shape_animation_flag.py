@@ -10,18 +10,20 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from titan.cli import app
+from titan.errors import EXIT_CODES
 from titan.u7 import shape_wizard as wizard
+from titan.u7 import shape_wizard_ui as wizard_ui
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.u7.shape_animation_flag import (
-    choose_u7_shape_animation,
     prepare_u7_archive_animation,
     read_u7_shape_animation,
     u7_animation_sidecar,
     u7_shape_animation_payload,
 )
+from titan.u7.shape_animation_ui import choose_u7_shape_animation
 
 
 def shape_bytes(count=2):
@@ -37,7 +39,7 @@ def shape_bytes(count=2):
 @pytest.fixture
 def assets(tmp_path, monkeypatch):
     monkeypatch.setattr("titan._config.get_config", lambda: {})
-    monkeypatch.setattr(wizard, "get_config", lambda: {})
+    monkeypatch.setattr(wizard_ui, "get_config", lambda: {})
     monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
     source = tmp_path / "source"
     source.mkdir()
@@ -135,13 +137,13 @@ def test_standalone_creation_carries_yes_choice_to_archive_import(
 
 def test_wizard_prompt_for_multiple_frames_and_recipe_setting(assets, monkeypatch):
     _, root, _ = assets
-    monkeypatch.setattr(wizard, "_select_target", lambda config: None)
-    monkeypatch.setattr(wizard, "show_preview", lambda *args, **kwargs: None)
+    monkeypatch.setattr(wizard_ui, "_select_target", lambda config: None)
+    monkeypatch.setattr(wizard_ui, "show_preview", lambda *args, **kwargs: None)
     config = wizard.ShapeWizardConfig(
         source=str(root / "frames"), palette_file=str(root / "palette.pal")
     )
     converted = wizard.convert(config)
-    monkeypatch.setattr(wizard, "_conversion_steps", lambda config: converted)
+    monkeypatch.setattr(wizard_ui, "_conversion_steps", lambda config: converted)
     result = CliRunner().invoke(
         u7_app,
         ["shape-create", str(root / "frames"), "-o", str(root / "created.shp")],
@@ -280,7 +282,7 @@ def test_cancelled_animation_prompt_does_not_write_any_output(assets, monkeypatc
             str(output),
         ],
     )
-    assert result.exit_code == 0 and "Cancelled" in result.output
+    assert result.exit_code == EXIT_CODES["cancelled"] and "Cancelled" in result.output
     assert not output.parent.exists()
 
 
@@ -301,7 +303,10 @@ def test_malformed_tfa_rejected_before_archive_write(assets):
             "--animate",
         ],
     )
-    assert result.exit_code == 1 and "incomplete TFA" in result.output
+    assert (
+        result.exit_code == EXIT_CODES["invalid-data"]
+        and "incomplete TFA" in result.output
+    )
     assert not output.parent.exists()
 
 
@@ -325,3 +330,31 @@ def test_u7_help_animation_options(command):
     result = CliRunner().invoke(u7_app, [command, "--help"])
     assert result.exit_code == 0
     assert "--animate" in result.output and "--no-animate" in result.output
+
+
+def test_flex_import_animation_asks_only_through_the_callback(tmp_path, monkeypatch):
+    from titan.u7.shape_animation_flag import prepare_u7_flex_animation_import
+
+    monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("library prompted"))
+    records = {150: shape_bytes(3), 151: shape_bytes(1), 152: b"not a shape"}
+    output = tmp_path / "SHAPES.VGA"
+    # No explicit choice and no callback: nothing is chosen, nothing asked.
+    assert prepare_u7_flex_animation_import(records, output) == []
+    asked = []
+
+    def choose(number, shape, default):
+        asked.append((number, len(shape.frames), default))
+        return True
+
+    payloads = prepare_u7_flex_animation_import(records, output, choose=choose)
+    assert asked == [(150, 3, None)]  # single-frame and non-shape records skipped
+    shapes = json.loads(payloads[0][1])["shapes"]
+    assert shapes["150"]["animated"] is True
+    # An explicit --animate/--no-animate wins without asking.
+    asked.clear()
+    payloads = prepare_u7_flex_animation_import(
+        records, output, animated=False, choose=choose
+    )
+    assert (
+        asked == [] and json.loads(payloads[0][1])["shapes"]["150"]["animated"] is False
+    )

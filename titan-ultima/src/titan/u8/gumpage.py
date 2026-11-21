@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,7 @@ class U8GumpAreas:
     def from_bytes(cls, data: bytes) -> U8GumpAreas:
         """Reject partial records instead of silently discarding the trailing bytes."""
         if not data or len(data) % 8:
-            raise ValueError("GUMPAGE.DAT: expected complete 8-byte rectangles")
+            raise InvalidDataError("GUMPAGE.DAT: expected complete 8-byte rectangles")
         return cls(
             bytes(data),
             tuple(
@@ -54,7 +55,7 @@ class U8GumpAreas:
     def get_area(self, shape: int) -> U8GumpItemArea:
         """Resolve one-based gump shape IDs, preserving empty and signed rectangles."""
         if not 1 <= shape <= len(self.areas):
-            raise ValueError(
+            raise InvalidDataError(
                 f"GUMPAGE.DAT: no storage rectangle for gump shape {shape}"
             )
         return self.areas[shape - 1]

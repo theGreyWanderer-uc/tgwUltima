@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli import u7_app
 from titan.u7.ireg_specials import (
     U7IregExtras,
@@ -326,7 +327,7 @@ def test_cli_dumps_complete_evidence_and_refuses_to_replace_inputs_or_reports(
     original_report = output.read_bytes()
     assert (
         runner.invoke(u7_app, ["ireg-dump", str(source), "-o", str(output)]).exit_code
-        == 1
+        == EXIT_CODES["output-exists"]
     )
     assert output.read_bytes() == original_report
     assert (

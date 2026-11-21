@@ -15,6 +15,7 @@ from datetime import datetime
 
 from titan.md.actor import MD_ACTOR_LAYOUT
 from titan.u6.gamestate import U6PartyMember
+from titan.errors import InvalidDataError
 
 __all__ = [
     "MD_STATE_REQUIRED_SIZE",
@@ -94,12 +95,12 @@ class MartianGameState:
     def parse(cls, data: bytes) -> MartianGameState:
         """Decode a packaged or DOS-saved MD OBJLIST, rejecting incomplete state."""
         if len(data) < MD_STATE_REQUIRED_SIZE:
-            raise ValueError(
+            raise InvalidDataError(
                 f"Martian Dreams OBJLIST too short: {len(data)} bytes, need {MD_STATE_REQUIRED_SIZE}"
             )
         count = data[0xFF0]
         if count > 16:
-            raise ValueError(f"Invalid Martian Dreams party size: {count}")
+            raise InvalidDataError(f"Invalid Martian Dreams party size: {count}")
         party = [
             U6PartyMember(
                 name=data[0xF00 + i * 14 : 0xF00 + (i + 1) * 14]
@@ -114,7 +115,7 @@ class MartianGameState:
         try:
             clock.iso_string()
         except ValueError as exc:
-            raise ValueError(f"Invalid Martian Dreams game clock: {exc}") from exc
+            raise InvalidDataError(f"Invalid Martian Dreams game clock: {exc}") from exc
         timers = [
             MartianBerryTimer(
                 i,

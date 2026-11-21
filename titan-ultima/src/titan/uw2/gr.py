@@ -10,9 +10,10 @@ import numpy as np
 from PIL import Image
 
 from titan.uw2.palette import UW2Palette
+from titan.errors import InvalidDataError
 
 
-class UW2GRError(ValueError):
+class UW2GRError(InvalidDataError):
     """Raised when a UU2 GR archive or image record is malformed."""
 
 
@@ -34,7 +35,7 @@ class UW2GRImage:
             self.palette_indices, dtype=np.uint8
         ).reshape((self.height, self.width))
         indexed = Image.fromarray(pixels, mode="P")
-        indexed.putpalette(palette.flattened_rgb())
+        indexed.putpalette(palette.to_flat_rgb())
         rgba = indexed.convert("RGBA")
         alpha = np.where(pixels == transparent_index, 0, 255).astype(np.uint8)
         rgba.putalpha(Image.fromarray(alpha, mode="L"))

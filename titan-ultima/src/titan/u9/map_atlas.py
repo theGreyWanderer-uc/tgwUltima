@@ -39,6 +39,7 @@ from titan.u9.object_placement import (
 from titan.u9.region_scene import U9RegionScene, U9RegionSceneError
 from titan.u9.terrain import CHUNK_POINTS, U9Terrain, U9TerrainError
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
+from titan.errors import TitanError
 
 _NUMBERED_FILE = re.compile(r"^(?P<prefix>[a-z]+)\.(?P<region>\d+)$", re.I)
 _ATLAS_FORMAT = "titan-u9-map-atlas-v1"
@@ -49,7 +50,7 @@ _CHUNK_LABEL_RGBA = (255, 216, 64, 255)
 DEFAULT_ATLAS_PIXELS_PER_CELL = TOPDOWN_RESOLUTION_PRESETS["full"]
 
 
-class U9MapAtlasError(Exception):
+class U9MapAtlasError(TitanError):
     """Raised when U9 region discovery or atlas rendering cannot proceed."""
 
 

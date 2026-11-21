@@ -35,13 +35,14 @@ from titan.u7.map import (
     _V2_CHUNKS_MAGIC,
 )
 from titan.u7.map_json import load_u7_map_document, validate_u7_map_document
+from titan.errors import TitanError
 
 
 U7_MAP_BYTES = C_NUM_CHUNKS * C_NUM_CHUNKS * 2
 U7_IFIX_RECORD_COUNT = C_CHUNKS_PER_SCHUNK * C_CHUNKS_PER_SCHUNK
 
 
-class U7NativeMapCreateError(ValueError):
+class U7NativeMapCreateError(TitanError, ValueError):
     """Report a native U7 map creation or overwrite-safety failure."""
 
 

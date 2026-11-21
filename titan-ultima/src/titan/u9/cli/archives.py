@@ -19,8 +19,8 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
-from titan.u9.flx_writer import U9FlxWriteError, repack, repack_equivalent, write_flx
+from titan.u9.flx_archive import U9FlxArchive
+from titan.u9.flx_writer import repack, repack_equivalent, write_flx
 from titan._meta import meta
 
 
@@ -28,14 +28,9 @@ def cmd_flx_list(args: SimpleNamespace) -> int:
     """List an Ultima 9 FLX archive's directory entries."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        archive = U9FlxArchive.from_file(filepath)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(filepath)
 
     used = archive.used_entry_indices()
     print(f"{filepath} — {archive.num_entries} entries ({len(used)} used)")
@@ -53,14 +48,9 @@ def cmd_flx_extract(args: SimpleNamespace) -> int:
     """Extract one entry from an Ultima 9 FLX archive."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        archive = U9FlxArchive.from_file(filepath)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(filepath)
 
     if args.index < 0 or args.index >= archive.num_entries:
         print(
@@ -83,14 +73,9 @@ def cmd_flx_extract_all(args: SimpleNamespace) -> int:
     """Extract every used entry from an Ultima 9 FLX archive."""
     filepath = args.file
     if not os.path.isfile(filepath):
-        print(f"ERROR: File not found: {filepath}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {filepath}")
 
-    try:
-        archive = U9FlxArchive.from_file(filepath)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    archive = U9FlxArchive.from_file(filepath)
 
     outdir = args.output or f"{Path(filepath).stem}_entries"
     os.makedirs(outdir, exist_ok=True)
@@ -139,13 +124,7 @@ def cmd_flx_pack(args: SimpleNamespace) -> int:
     entries = _entries_from_dir(args.directory)
     if entries is None:
         return 1
-    try:
-        written = write_flx(
-            args.output, entries, count=args.count, comment=args.comment
-        )
-    except U9FlxWriteError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    written = write_flx(args.output, entries, count=args.count, comment=args.comment)
     slots = args.count if args.count is not None else max(entries) + 1
     print(
         f"Packed {len(entries)} entr{'y' if len(entries) == 1 else 'ies'} "
@@ -159,13 +138,8 @@ def cmd_flx_pack(args: SimpleNamespace) -> int:
 def cmd_flx_repack(args: SimpleNamespace) -> int:
     """Rebuild an FLX archive, optionally replacing entries, and verify the result."""
     if not os.path.isfile(args.file):
-        print(f"ERROR: File not found: {args.file}", file=sys.stderr)
-        return 1
-    try:
-        archive = U9FlxArchive.from_file(args.file)
-    except U9FlxArchiveError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+        raise FileNotFoundError(f"File not found: {args.file}")
+    archive = U9FlxArchive.from_file(args.file)
 
     replacements: dict = {}
     if args.replace:
@@ -174,11 +148,7 @@ def cmd_flx_repack(args: SimpleNamespace) -> int:
             return 1
         replacements = entries
 
-    try:
-        data = repack(archive, replacements)
-    except U9FlxWriteError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    data = repack(archive, replacements)
 
     with open(args.file, "rb") as f:
         original = f.read()
@@ -213,6 +183,7 @@ def cmd_flx_repack(args: SimpleNamespace) -> int:
     return 0 if (equivalent or replacements) else 1
 
 
+@meta(results=("text",))
 def flx_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
 ) -> None:
@@ -226,7 +197,7 @@ def flx_extract_cmd(
     index: Annotated[int, typer.Argument(help="Entry index to extract")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract one entry from an Ultima 9 FLX archive."""
@@ -241,7 +212,7 @@ def flx_extract_all_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: <file>_entries/)"
+            "-o", "--output-dir", help="Output directory (default: <file>_entries/)"
         ),
     ] = None,
 ) -> None:
@@ -249,7 +220,7 @@ def flx_extract_all_cmd(
     raise SystemExit(cmd_flx_extract_all(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "directory": "input-dir"})
 def flx_pack_cmd(
     directory: Annotated[
         str, typer.Argument(help="Directory of NNNNN.bin entry files")
@@ -276,7 +247,7 @@ def flx_pack_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "replace": "input-dir"})
 def flx_repack_cmd(
     file: Annotated[str, typer.Argument(help="Path to an existing U9 FLX archive")],
     output: Annotated[

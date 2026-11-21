@@ -23,6 +23,7 @@ import struct
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.errors import InvalidDataError
 
 ENVIRONMENT_ARCHIVE_SLOT_COUNT = 512
 ENVIRONMENT_RECORD_SIZE = 80
@@ -62,7 +63,7 @@ STANDARD_ACOUSTIC_PRESETS: tuple[tuple[str, float, float, float], ...] = (
 )
 
 
-class U9AcousticPresetError(Exception):
+class U9AcousticPresetError(InvalidDataError):
     """Raised when an acoustic environment archive or record is malformed."""
 
 

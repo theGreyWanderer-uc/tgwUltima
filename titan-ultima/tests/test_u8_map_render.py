@@ -9,9 +9,9 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
-from titan.u8.palette import U8Palette
 from titan.u8 import U8MapRenderer, U8MapSampler, U8Shape
 from titan.u8.cli import u8_app
+from titan.u8.palette import U8Palette
 
 
 def _item(x=64, y=64, shape=10, status=0, quality=0):
@@ -148,15 +148,20 @@ def test_merge_preserves_distinct_items_metadata_and_source_lists():
 def test_map_help_retains_source_and_selection_options(command):
     result = CliRunner().invoke(u8_app, [command, "--help"])
     assert result.exit_code == 0
-    for option in ("--fixed", "--nonfixed", "--typeflag", "--map"):
+    for option in ("--fixed", "--save", "--typeflag", "--map"):
         assert option in result.output
 
 
 def test_compatibility_imports_share_the_updated_renderer():
-    from titan import U8MapRenderer as root_renderer
-    from titan.map import U8MapRenderer as compatibility_renderer
+    import importlib
+    import sys
 
-    assert root_renderer is compatibility_renderer is U8MapRenderer
+    from titan import U8MapRenderer as root_renderer
+
+    sys.modules.pop("titan.map", None)
+    with pytest.warns(DeprecationWarning, match="titan.u8.map"):
+        compatibility = importlib.import_module("titan.map")
+    assert root_renderer is compatibility.U8MapRenderer is U8MapRenderer
 
 
 @pytest.mark.parametrize("view", ["iso_classic", "birdseye"])

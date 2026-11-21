@@ -9,7 +9,7 @@ Entry points::
     from titan.u7.container import browse_containers, ContainerQueryParams
     results = browse_containers(params)
 
-    from titan.u7.container import run_wizard
+    from titan.u7.container_ui import run_wizard
     exit_code = run_wizard(static_dir, gamedat_dir, text_flx)
 """
 
@@ -19,7 +19,6 @@ __all__ = [
     "ContainerQueryParams",
     "ContainerResult",
     "browse_containers",
-    "run_wizard",
 ]
 
 import csv
@@ -28,7 +27,6 @@ from dataclasses import asdict, dataclass, field
 import json
 from pathlib import Path
 from typing import Any, Optional
-from titan import _wizard_ui as ui
 
 from titan.u7.map import (
     U7MapRenderer,
@@ -583,66 +581,3 @@ def format_results(
 # ---------------------------------------------------------------------------
 # Interactive wizard
 # ---------------------------------------------------------------------------
-
-
-def run_wizard(
-    static_dir: Optional[str] = None,
-    gamedat_dir: Optional[str] = None,
-    text_flx: Optional[str] = None,
-    exult_flx_path: Optional[str] = None,
-    mod_data_dir: Optional[str] = None,
-    map_num: int = 0,
-    game: str = "bg",
-    custom_game: bool = False,
-) -> int:
-    """Interactive questionary container-browse wizard. Returns exit code."""
-    try:
-        import questionary
-    except ImportError:
-        print("questionary is required for the interactive wizard.")
-        print("Install it with: pip install questionary>=2.0")
-        return 1
-
-    _SEP = "─" * 55
-    print()
-    print("  U7 Container Browse")
-    print(f"  {_SEP}")
-
-    from titan.u7.target_picker import SelectionCancelled, select_world
-    from titan.u7.world import WorldQueryParams
-
-    try:
-        world = select_world(
-            questionary,
-            WorldQueryParams(
-                static_dir=static_dir or "",
-                gamedat_dir=gamedat_dir,
-                text_flx_path=text_flx,
-                mod_data_dir=mod_data_dir,
-                game=game,
-                map_num=map_num,
-            ),
-            require_gamedat=True,
-        )
-    except (SelectionCancelled, KeyboardInterrupt, EOFError):
-        return 0
-    from titan.u7.container_browser import load_u7_container_session
-    from titan.u7.container_browser_ui import browse_u7_container_session
-
-    if world.game != game:
-        from titan._config import exult_cfg
-
-        exult_flx_path = exult_cfg(f"{world.game}_flx")
-    try:
-        print("  Capturing containers and nested contents…")
-        session = load_u7_container_session(
-            world, exult_flx=exult_flx_path, custom_game=custom_game
-        )
-        browse_u7_container_session(session)
-        return 0
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
-    except (ValueError, OSError) as error:
-        print(f"  U7 container browser unavailable: {error}")
-        return 1

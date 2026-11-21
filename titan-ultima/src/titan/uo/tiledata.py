@@ -7,6 +7,7 @@ __all__ = ["UOLandTile", "UOStaticTile", "UOTileData"]
 from dataclasses import dataclass
 from pathlib import Path
 import struct
+from titan.errors import InvalidDataError
 
 _LAND_COUNT = 0x4000
 _GROUP_SIZE = 32
@@ -146,7 +147,7 @@ class UOTileData:
         statics: list[UOStaticTile] = []
         static_group_size = 4 + (_GROUP_SIZE * static_record_size)
         if (len(data) - pos) % static_group_size:
-            raise ValueError("tiledata static section has unexpected length")
+            raise InvalidDataError("tiledata static section has unexpected length")
 
         static_groups = (len(data) - pos) // static_group_size
         for group in range(static_groups):
@@ -211,7 +212,7 @@ def _detect_new_format(length: int) -> bool:
         return True
     if length >= old_land_bytes and (length - old_land_bytes) % old_static_group == 0:
         return False
-    raise ValueError("unrecognized tiledata.mul length/layout")
+    raise InvalidDataError("unrecognized tiledata.mul length/layout")
 
 
 def _read_flags(data: bytes, offset: int, size: int) -> int:

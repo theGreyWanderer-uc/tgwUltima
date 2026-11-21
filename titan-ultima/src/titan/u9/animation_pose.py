@@ -18,11 +18,12 @@ from dataclasses import dataclass, replace
 
 from titan.u9.animation import U9Animation, U9AnimationFrame
 from titan.u9.model import U9Model
+from titan.errors import TitanError
 
 Vec3 = tuple[float, float, float]
 
 
-class U9AnimationPoseError(Exception):
+class U9AnimationPoseError(TitanError):
     """Raised when a clip cannot be applied to a model hierarchy."""
 
 

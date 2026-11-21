@@ -16,8 +16,10 @@ populated by the root CLI callback via :func:`load_config`.
 from __future__ import annotations
 
 __all__ = [
+    "cache_dir",
     "config_search_paths",
     "data_dir",
+    "export_dir",
     "find_config",
     "load_config",
     "cfg",
@@ -26,6 +28,7 @@ __all__ = [
 
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -89,6 +92,55 @@ def data_dir(game: Optional[str] = None) -> Path:
     return root / game if game else root
 
 
+def export_dir(game: str, name: str = "") -> Path:
+    """Where a command writes when no output folder is given.
+
+    ``<data_dir(game)>/exports/<name>`` (*name* is usually the command, e.g.
+    ``"map-browse"``). Resolved when the command runs, so ``TITAN_DATA`` and the
+    platform folders apply; the folder may not exist yet. Commands print the
+    folder they used.
+    """
+    root = data_dir(game) / "exports"
+    return root / name if name else root
+
+
+DEFAULT_OUTPUT = " (default: a folder for this command under titan's exports)"
+"""Help-text suffix for output options that default to :func:`export_output`."""
+
+
+def export_output(
+    value: Optional[str], game: str, name: str, filename: str = ""
+) -> str:
+    """An output path: *value* when given, else :func:`export_dir` ``(game,
+    name)`` (with *filename* appended, for a single output file). A default
+    is reported to ``TITAN_RESULTS_FILE`` (:mod:`titan._results`)."""
+    if value:
+        return value
+    from titan import _results
+
+    folder = export_dir(game, name)
+    reporting = bool(os.getenv(_results.RESULTS_ENV))
+    if filename:
+        if reporting:
+            _results.record_output(folder / filename)
+        return str(folder / filename)
+    if reporting:
+        _results.record_output_folder(folder, time.time() - 2)
+    return str(folder)
+
+
+def cache_dir() -> Path:
+    """Return titan's cache folder: files titan can always recreate.
+
+    ``%LOCALAPPDATA%\\Titan\\cache`` on Windows, otherwise
+    ``$XDG_CACHE_HOME/titan`` (``~/.cache/titan``). The folder may not exist yet.
+    """
+    if sys.platform == "win32" and os.getenv("LOCALAPPDATA"):
+        return Path(os.environ["LOCALAPPDATA"]) / "Titan" / "cache"
+    xdg = os.getenv("XDG_CACHE_HOME")
+    return (Path(xdg) if xdg else Path.home() / ".cache") / "titan"
+
+
 def config_search_paths() -> list[Path]:
     """Return every location :func:`find_config` checks, in search order.
 
@@ -111,18 +163,15 @@ def find_config() -> Optional[Path]:
 def load_config(config_path: Optional[str] = None) -> dict:
     """Load *titan.toml* and auto-expand relative paths.
 
-    Supports both the legacy flat format (``[game]`` / ``[paths]``) and
-    the new multi-game format (``[u8.game]`` / ``[u8.paths]``, etc.).
-
-    If a legacy ``[game]`` section exists it is treated as ``[u8]``.
+    Each game has its own section (``[u8.game]`` / ``[u8.paths]``, ...).
+    titan's original U8-only layout, top-level ``[game]`` / ``[paths]``, is
+    read as ``[u8]`` (:func:`migrate_legacy_u8`); the loaded config has no
+    top-level ``game``/``paths``.
     """
     global _config
 
-    # Imported here: the U8 package itself reads this module at import time.
-    from titan.u8.install import expand_u8_paths
-
     if _tomllib is None:
-        _config = {"paths": {}}
+        _config = {}
         return _config
 
     path: Optional[Path]
@@ -132,51 +181,61 @@ def load_config(config_path: Optional[str] = None) -> dict:
         path = find_config()
 
     if not path or not path.exists():
-        _config = {"paths": {}}
+        _config = {}
         return _config
 
-    with open(path, "rb") as f:
-        data = _tomllib.load(f)
+    try:
+        with open(path, "rb") as f:
+            data = _tomllib.load(f)
+    except _tomllib.TOMLDecodeError as error:
+        from titan.errors import ConfigFileError
 
-    # ── Legacy format: [game] + [paths] → treat as U8 ─────────────
-    if "game" in data and "u8" not in data:
-        expand_u8_paths(data)
-        _config = data
-        return _config
+        raise ConfigFileError(f"{path} is not valid TOML: {error}") from error
 
-    # ── New multi-game format ──────────────────────────────────────
-    # [u8] → expand paths using U8 rules
+    # titan's original U8-only layout ([game]/[paths]) is read as [u8].
+    migrate_legacy_u8(data)
     if "u8" in data:
-        u8_section = data["u8"]
-        # Merge legacy fallback values before expanding the effective U8 paths.
-        for section in ("game", "paths"):
-            if section in data or section in u8_section:
-                u8_section[section] = {
-                    **data.get(section, {}),
-                    **u8_section.get(section, {}),
-                }
-        expand_u8_paths(u8_section)
-        # Promote u8.game/u8.paths to top-level game/paths for compat
-        if "game" in u8_section:
-            data["game"] = u8_section["game"]
-        if "paths" in u8_section:
-            data["paths"] = u8_section["paths"]
+        # Only U8 settings need U8's path rules; other games' configs load
+        # without importing the U8 package.
+        from titan.u8.install import expand_u8_paths
+
+        expand_u8_paths(data["u8"])
 
     _config = data
     return _config
 
 
-def cfg(key: str, section: str = "paths") -> Optional[str]:
-    """Get a path value from the loaded config.
+LEGACY_U8_TABLES = ("game", "paths")
+"""Top-level tables of titan's original U8-only ``titan.toml``; now ``[u8.*]``."""
 
-    Parameters
-    ----------
-    key : str
-        The key to look up (e.g. ``"fixed"``, ``"palette"``).
-    section : str
-        Top-level section (default ``"paths"``).
+
+def has_legacy_u8_tables(data: dict) -> bool:
+    """Whether raw TOML *data* still has top-level ``[game]``/``[paths]``."""
+    return any(isinstance(data.get(table), dict) for table in LEGACY_U8_TABLES)
+
+
+def migrate_legacy_u8(data: dict) -> bool:
+    """Move top-level ``[game]``/``[paths]`` under ``[u8]`` in raw TOML *data*.
+
+    A value ``[u8]`` already sets wins. Returns ``True`` when anything moved.
+    :func:`load_config` does this in memory; ``titan setup`` writes it back.
     """
-    return _config.get(section, {}).get(key)
+    moved = False
+    for table in LEGACY_U8_TABLES:
+        legacy = data.pop(table, None)
+        if isinstance(legacy, dict):
+            u8 = data.setdefault("u8", {})
+            u8[table] = {**legacy, **u8.get(table, {})}
+            moved = True
+    return moved
+
+
+def cfg(key: str, section: str = "paths") -> Optional[str]:
+    """A ``[u8.<section>]`` value from the loaded config (``cfg("fixed")``).
+
+    Older readers used this for top-level ``[paths]``, which is now ``[u8.paths]``.
+    """
+    return _config.get("u8", {}).get(section, {}).get(key)
 
 
 def exult_cfg(key: str) -> Optional[str]:

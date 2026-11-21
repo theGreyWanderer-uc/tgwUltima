@@ -28,6 +28,7 @@ from titan.u6.object import U6Object, U6WorldObjects, read_basetile
 from titan.u6.palette import U6Palette
 from titan.u6.tile import U6AnimData, U6Tiles
 from titan.u6.tileflag import U6TileFlags
+from titan.errors import InvalidDataError
 
 __all__ = ["MartianMapRenderer"]
 
@@ -59,7 +60,7 @@ class MartianMapRenderer:
             len(animation_bytes) != 194
             or int.from_bytes(animation_bytes[:2], "little") > 32
         ):
-            raise ValueError(
+            raise InvalidDataError(
                 f"Invalid Martian Dreams ANIMDATA: {directory / 'ANIMDATA'}"
             )
         raw_anim = U6AnimData.parse(animation_bytes)

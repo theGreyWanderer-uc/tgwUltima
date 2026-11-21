@@ -26,6 +26,7 @@ from titan.u8.itemcach import U8ItemCache
 from titan.u8.map_items import U8MapItems
 from titan.u8.npcdata import U8NpcData
 from titan.u8.save import U8SaveArchive
+from titan.errors import InvalidDataError
 
 NATIVE_STATE_ENTRIES = (
     "AVATAR.DAT",
@@ -72,13 +73,15 @@ class U8SaveSnapshot:
                     continue
                 name = candidate.name.upper()
                 if name in entries:
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"U8 save snapshot: duplicate directory entry {name}"
                     )
                 entries[name] = candidate.read_bytes()
                 sources.append(candidate)
             if not entries:
-                raise ValueError("U8 save snapshot: directory contains no DAT files")
+                raise InvalidDataError(
+                    "U8 save snapshot: directory contains no DAT files"
+                )
             source_kind = "gamedat_directory"
         else:
             archive = U8SaveArchive.from_file(path)

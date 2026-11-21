@@ -111,12 +111,13 @@ def test_owner_palette_config_does_not_mix_languages(tmp_path, monkeypatch):
     configured.write_bytes(bytes(772))
     local = french / "u8pal.pal"
     local.write_bytes(bytes(772))
-    monkeypatch.setattr(
-        "titan.u8.shape_browser.cfg",
-        lambda key: str(configured) if key == "palette" else None,
-    )
-    assert resolve_u8_palette_source(english) == configured.resolve()
-    assert resolve_u8_palette_source(french) == local
+    from titan._meta import Installation
+
+    install = Installation("u8", tmp_path, {"palette": configured})
+    assert resolve_u8_palette_source(english, install) == configured.resolve()
+    assert resolve_u8_palette_source(french, install) == local
+    with pytest.raises(FileNotFoundError):  # not configured, and no U8PAL.PAL
+        resolve_u8_palette_source(english)
     local.unlink()
     with pytest.raises(FileNotFoundError):
         resolve_u8_palette_source(french)

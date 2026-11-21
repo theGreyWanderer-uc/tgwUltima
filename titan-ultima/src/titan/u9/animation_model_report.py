@@ -31,9 +31,10 @@ from titan.u9.node_registry import U9NodeRegistry, U9NodeRegistryError
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypeRecord, U9TypesDat, U9TypesDatError
 from titan._files import case_insensitive_child
+from titan.errors import TitanError
 
 
-class U9AnimationModelReportError(Exception):
+class U9AnimationModelReportError(TitanError):
     """Raised when animation/model report inputs cannot be read or validated."""
 
 

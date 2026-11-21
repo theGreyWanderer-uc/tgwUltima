@@ -34,6 +34,7 @@ from titan.uo.definfo import UOBodyConvDefEntry, UODefFile, UOEquipConvDefEntry
 from titan.uo.indexed import UOIndexedFile
 from titan.uo.cli import _common
 from titan._meta import meta
+from titan.errors import exit_code
 
 
 def _load_animations(client: Path, set_name: str) -> UOIndexedFile:
@@ -251,7 +252,7 @@ def cmd_animation_export(args: SimpleNamespace) -> int:
         resolver = _animation_resolver(client, defs)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     # Temporarily disable body-name-based naming for animation exports.
     body_names: UOAnimationBodyNames | None = None
@@ -368,7 +369,7 @@ def cmd_animation_resolution_export(args: SimpleNamespace) -> int:
         sequence = _try_load_animation_sequence(client)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
-        return 1
+        return exit_code(exc)
 
     # Temporarily disable body-name-based naming/metadata for resolution export.
     body_names: UOAnimationBodyNames | None = None
@@ -502,8 +503,8 @@ def animation_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     set_name: Annotated[
@@ -543,8 +544,8 @@ def animation_resolution_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     body_start: Annotated[
@@ -584,8 +585,8 @@ def animation_body_names_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
 ) -> None:

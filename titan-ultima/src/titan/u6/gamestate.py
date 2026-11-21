@@ -75,6 +75,7 @@ __all__ = [
 
 import struct
 from dataclasses import dataclass, field
+from titan.errors import InvalidDataError
 
 NUM_TIMERS = 16
 PARTY_NAME_MAX_LENGTH = 13
@@ -117,7 +118,7 @@ MONTH_NAMES = (
 )
 
 
-class U6GameStateError(Exception):
+class U6GameStateError(InvalidDataError):
     """Raised when objlist data is too short to contain these fields."""
 
 

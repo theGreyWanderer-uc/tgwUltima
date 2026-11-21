@@ -10,6 +10,7 @@ from typing import Annotated
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan._palette_browser_ui import show_palette_colour_grid
@@ -26,7 +27,8 @@ from titan.u8.palette_browser import (
     u8_palette_sheet,
 )
 from titan.u8.shape_browser_ui import choose_u8_shape_target
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 
 _menu = ui.menu
@@ -119,10 +121,12 @@ def run_u8_palette_browser(
     game_dir: Path | None = None,
     index: int = 0,
     effect: int = 0,
-    output: Path = U8_PALETTE_BROWSER_OUTPUT,
+    output: Path | None = None,
     export: bool = False,
 ) -> int:
     """Inspect one native palette, retaining its selected owner on source changes."""
+    if output is None:
+        output = export_dir("u8", U8_PALETTE_BROWSER_OUTPUT)
     print("Titan U8 Palette Browser")
     if not 0 <= index <= 255 or not 0 <= effect <= 7:
         print("  ERROR: index must be 0-255 and effect 0-7")
@@ -133,7 +137,7 @@ def run_u8_palette_browser(
             target = choose_u8_shape_target(game_dir)
             if target is None:
                 return 0
-            source = resolve_u8_palette_source(target.static)
+            source = resolve_u8_palette_source(target.static, configured_install("u8"))
             protected = (*protected, target.static)
         loaded = U8PaletteSource.load(source, protected=protected)
         if export:
@@ -235,20 +239,27 @@ def run_u8_palette_browser(
                         target = choose_u8_shape_target(game_dir)
                         if target:
                             loaded = U8PaletteSource.load(
-                                resolve_u8_palette_source(target.static),
+                                resolve_u8_palette_source(
+                                    target.static, configured_install("u8")
+                                ),
                                 protected=(*protected, target.static),
                             )
                             page, index, effect = 0, 0, 0
                 except (OSError, ValueError) as error:
                     print(f"  ERROR: {error}")
-    except ui.PromptCancelled:
-        return 0
+    except ui.CANCELLED_EXCEPTIONS:
+        return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
-@meta(results=("files",), params={"output": "output-dir"}, interactive=True)
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "source": "palette"},
+    interactive=True,
+    resources={"source": "palette"},
+)
 def palette_browse_cmd(
     source: Annotated[
         Path | None,
@@ -272,10 +283,14 @@ def palette_browse_cmd(
     ] = False,
     output: Annotated[
         Path,
-        typer.Option("-o", "--output", help="Export root; older reports are preserved"),
-    ] = U8_PALETTE_BROWSER_OUTPUT,
+        typer.Option(
+            "-o", "--output-dir", help="Export root; older reports are preserved"
+        ),
+    ] = None,
 ) -> None:
     """Browse U8 palette swatches, stored RGB, sprite roles and native effects."""
+    if output is None:
+        output = export_dir("u8", U8_PALETTE_BROWSER_OUTPUT)
     raise SystemExit(
         run_u8_palette_browser(
             source,

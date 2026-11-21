@@ -24,8 +24,10 @@ from titan.u9.region_scene import U9RegionScene, U9WorldPosition
 from titan.u9.terrain import HEADER_SIZE, POINTS_PER_CHUNK, U9Terrain, U9TerrainPoint
 from titan.u9.types_dat import (
     EXPECTED_SIZE,
-    HEADER_SIZE as TYPES_HEADER_SIZE,
     U9TypesDat,
+)
+from titan.u9.types_dat import (
+    HEADER_SIZE as TYPES_HEADER_SIZE,
 )
 
 

@@ -87,6 +87,7 @@ from titan.u9.microtalk import (
     MicroTalkDecodeError,
     decode_mono as decode_microtalk_mono,
 )
+from titan.errors import InvalidDataError
 
 HEADER_SIZE = 0x3C
 DESCRIPTION_OFFSET = 0x04
@@ -108,7 +109,7 @@ ENCODING_NAMES = {
 }
 
 
-class U9SoundRecordError(Exception):
+class U9SoundRecordError(InvalidDataError):
     """Raised when a sound record's header doesn't fit, or an unsupported op is requested."""
 
 

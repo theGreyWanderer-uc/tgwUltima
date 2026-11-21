@@ -10,6 +10,7 @@ from typing import Annotated, Any
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan.u8.map import U8MapRenderer
@@ -33,7 +34,8 @@ from titan.u8.npc_browser_ui import browse_u8_npc_session
 from titan.u8.save_browser_ui import choose_u8_save_browser_source
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
 from titan.u8.shape_browser_ui import browse_u8_npc_shape, choose_u8_shape_target
-from titan._meta import meta
+from titan._meta import configured_install, meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 25
 
@@ -377,11 +379,13 @@ def run_u8_map_browser(
     globs: Path | None = None,
     map_id: int | None = None,
     names: Path | None = None,
-    output: Path = U8_MAP_BROWSER_OUTPUT,
+    output: Path | None = None,
     static_only: bool = False,
     export: bool = False,
 ) -> int:
     """Browse one matching STATIC/save pair; --export provides a reproducible report run."""
+    if output is None:
+        output = export_dir("u8", U8_MAP_BROWSER_OUTPUT)
     print("\nTitan U8 Map Browser")
     try:
         if map_id is not None and not 0 <= map_id <= 255:
@@ -399,7 +403,9 @@ def run_u8_map_browser(
             shapes = find_u8_browser_file(target.static, "U8SHAPES.FLX")
             if shapes is None:
                 raise ValueError("U8 map browser: selected STATIC has no U8SHAPES.FLX")
-        library = load_u8_shape_library(shapes, palette=palette)
+        library = load_u8_shape_library(
+            shapes, palette=palette, install=configured_install("u8")
+        )
         if source is None and not static_only:
             selected = _map_menu(
                 "Map state:",
@@ -433,20 +439,21 @@ def run_u8_map_browser(
             _browse_map_session(session, map_id, output)
         return 0
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
-        return 1
+        return exit_code(error)
 
 
 def browse_u8_map_session(
     session: U8MapBrowserSession,
     *,
     map_id: int | None = None,
-    output: Path = U8_MAP_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> None:
     """Embed a captured map session; Q returns to the calling browser."""
+    if output is None:
+        output = export_dir("u8", U8_MAP_BROWSER_OUTPUT)
     if map_id is not None and not 0 <= map_id <= 255:
         raise ValueError("U8 map browser: map ID must be 0-255")
     _browse_map_session(session, map_id, output, embedded=True)
@@ -454,8 +461,16 @@ def browse_u8_map_session(
 
 @meta(
     results=("files",),
-    params={"output": "output-dir", "palette": "palette"},
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "source": "input-file",
+        "names": "input-file",
+        "shapes": "install-file",
+        "globs": "install-file",
+    },
     interactive=True,
+    resources={"shapes": "u8shapes", "globs": "glob"},
 )
 def map_browse_cmd(
     source: Annotated[
@@ -510,9 +525,11 @@ def map_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Export folder; every report uses a fresh directory"
+            "-o",
+            "--output-dir",
+            help="Export folder; every report uses a fresh directory",
         ),
-    ] = U8_MAP_BROWSER_OUTPUT,
+    ] = None,
     static_only: Annotated[
         bool, typer.Option("--static-only", help="Browse FIXED without a snapshot")
     ] = False,
@@ -521,6 +538,8 @@ def map_browse_cmd(
     ] = False,
 ) -> None:
     """Browse U8 maps, native objects/containers, named NPCs and PNG/data exports."""
+    if output is None:
+        output = export_dir("u8", U8_MAP_BROWSER_OUTPUT)
     raise SystemExit(
         run_u8_map_browser(
             source=source,

@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import struct
 import tempfile
 import unittest
-import struct
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli.archives import cmd_u7_flex_add_shape
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
@@ -160,7 +161,10 @@ class U7FlexAddShapeCliTests(unittest.TestCase):
     def test_specific_index_refuses_to_replace_occupied_record(self) -> None:
         self._write_archive([b"occupied zero"])
 
-        self.assertEqual(self._run(output=str(self.output_path), index=0), 1)
+        self.assertEqual(
+            self._run(output=str(self.output_path), index=0),
+            EXIT_CODES["output-exists"],
+        )
         self.assertFalse(self.output_path.exists())
 
     def test_specific_index_replaces_occupied_record_when_explicit(self) -> None:
@@ -242,7 +246,7 @@ class U7FlexAddShapeCliTests(unittest.TestCase):
                 self._write_archive([b"occupied"])
                 source = self.archive_path.read_bytes()
                 self.shape_path.write_bytes(data)
-                self.assertEqual(self._run(in_place=True), 1)
+                self.assertEqual(self._run(in_place=True), EXIT_CODES["invalid-data"])
                 self.assertEqual(self.archive_path.read_bytes(), source)
                 self.assertFalse(self.output_path.exists())
 

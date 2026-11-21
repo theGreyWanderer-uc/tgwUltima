@@ -1,13 +1,14 @@
 """Sparse patch inheritance must agree across reading and shape insertion."""
 
-from pathlib import Path
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
@@ -146,7 +147,7 @@ def test_inherited_slots_require_replace_even_beyond_patch_count(
     ]
     runner = CliRunner()
     denied = runner.invoke(u7_app, args)
-    assert denied.exit_code == 1
+    assert denied.exit_code == EXIT_CODES["output-exists"]
     assert "occupied" in denied.output
     assert not output.exists()
     allowed = runner.invoke(u7_app, args + ["--replace"])

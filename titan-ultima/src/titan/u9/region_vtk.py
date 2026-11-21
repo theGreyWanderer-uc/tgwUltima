@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import numpy as np
+from titan.errors import TitanError, UnsupportedError
 
 SOUTH_HIGH_CAMERA_OFFSET = (0.0, 1.1, 1.0)
 """South camera offset in GLB X/elevation/presentation-Z axes.
@@ -53,11 +54,11 @@ ANTI_ALIASING_MODES = ("none", "fxaa", "ssaa")
 TEXTURE_FILTERS = ("nearest", "linear")
 
 
-class U9VtkRenderError(Exception):
+class U9VtkRenderError(TitanError):
     """Raised when a U9 GLB cannot be rendered as requested."""
 
 
-class U9VtkUnavailableError(U9VtkRenderError):
+class U9VtkUnavailableError(U9VtkRenderError, UnsupportedError):
     """Raised when optional PyVista/VTK rendering packages are unavailable."""
 
 

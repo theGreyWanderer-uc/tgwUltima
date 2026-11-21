@@ -40,6 +40,7 @@ from titan.u9.save_wording import (
 )
 from tests.test_u9_integrity import _archive, _fixed, _nonfixed, _processes
 from tests.test_u9_process_sections import _sections
+from titan.errors import EXIT_CODES
 
 
 @pytest.fixture
@@ -644,5 +645,8 @@ def test_browser_cancellation_is_clean(save_install, tmp_path, monkeypatch, erro
         raise error()
 
     monkeypatch.setattr(browser, "_menu", cancel)
-    assert browser.run_u9_save_browser(source=root, output=tmp_path / "out") == 0
+    assert (
+        browser.run_u9_save_browser(source=root, output=tmp_path / "out")
+        == EXIT_CODES["cancelled"]
+    )
     assert not (tmp_path / "out").exists()

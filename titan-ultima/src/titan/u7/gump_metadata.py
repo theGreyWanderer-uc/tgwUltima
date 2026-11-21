@@ -12,6 +12,7 @@ from pathlib import Path
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape_archive import find_archive
 from titan.u7.text import U7TextMessages
+from titan.errors import InvalidDataError
 
 
 @dataclass(frozen=True)
@@ -70,9 +71,9 @@ def load_u7_gump_sources(
                 )
     else:
         if exult_flx is None and discover_defaults:
-            from titan.u7.install import resolve_u7_exult_flx
+            from titan.u7.install import default_u7_exult_flx
 
-            exult_flx = resolve_u7_exult_flx(game)
+            exult_flx = default_u7_exult_flx(game)
         if exult_flx is None:
             result.warnings.append(
                 f"U7 gump metadata: {game.upper()} default bundle unavailable; default mappings and text are unknown."
@@ -158,7 +159,7 @@ class U7GumpMetadata:
                     re.fullmatch(r"[+-]?[0-9]+", part.strip()) is None
                     for part in fields
                 ):
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"U7 gump metadata: malformed {section} in {source}: {value!r}; decimal integers required"
                     )
                 values = [int(part, 10) for part in fields]
@@ -269,7 +270,7 @@ class U7GumpMetadata:
                 parts = value.split("#", 1)[0].split("/")
                 required = 5 if section == "dynamic_texts" else len(fields) + 1
                 if not required <= len(parts) <= len(fields) + 1:
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"U7 gump metadata: malformed {section} in {source}: {value!r}"
                     )
                 values: dict[str, object] = {}
@@ -292,7 +293,7 @@ class U7GumpMetadata:
                                 raise ValueError("decimal integer required")
                             values[field_name] = int(part, 10)
                 except ValueError as error:
-                    raise ValueError(
+                    raise InvalidDataError(
                         f"U7 gump metadata: malformed {section} in {source}: {value!r}"
                     ) from error
                 if not 0 <= number <= 65535:

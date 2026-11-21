@@ -15,10 +15,11 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from titan.errors import EXIT_CODES
 from titan.u7.cli import u7_app
+from titan.u7.ireg_rewrite import U7IregEdit, rewrite_ireg_stream
 from titan.u7.save import U7Save
 from titan.u7.save_repack import U7SaveReplacement, repack_u7_save
-from titan.u7.ireg_rewrite import U7IregEdit, rewrite_ireg_stream
 
 
 def _flex_save(entries: Sequence[tuple[str, bytes] | None]) -> bytes:
@@ -407,7 +408,8 @@ def test_cli_list_json_dry_run_and_new_output_preserve_source(tmp_path: Path) ->
     ]
     saved = output.read_bytes()
     assert (
-        CliRunner().invoke(u7_app, args).exit_code == 1 and output.read_bytes() == saved
+        CliRunner().invoke(u7_app, args).exit_code == EXIT_CODES["output-exists"]
+        and output.read_bytes() == saved
     )
     args[-1] = str(source)
     assert (
@@ -426,7 +428,7 @@ def test_cli_stale_member_plan_creates_no_output(tmp_path: Path) -> None:
     result = CliRunner().invoke(
         u7_app, ["save-repack", str(source), "--plan", str(plan), "-o", str(output)]
     )
-    assert result.exit_code == 1 and "SHA-256" in result.output
+    assert result.exit_code == EXIT_CODES["invalid-data"] and "SHA-256" in result.output
     assert not output.exists() and not output.parent.exists()
 
 
@@ -515,7 +517,7 @@ def test_cli_invalid_plan_does_not_create_files(
     result = CliRunner().invoke(
         u7_app, ["save-repack", str(source), "--plan", str(plan), "-o", str(output)]
     )
-    assert result.exit_code == 1 and not output.parent.exists()
+    assert result.exit_code == EXIT_CODES["invalid-data"] and not output.parent.exists()
 
 
 def test_cli_removes_new_partial_output_if_writing_fails(
@@ -551,5 +553,8 @@ def test_cli_removes_new_partial_output_if_writing_fails(
     result = CliRunner().invoke(
         u7_app, ["save-repack", str(source), "--plan", str(plan), "-o", str(output)]
     )
-    assert result.exit_code == 1 and "injected write failure" in result.output
+    assert (
+        result.exit_code == EXIT_CODES["io"]
+        and "injected write failure" in result.output
+    )
     assert not output.exists() and source.read_bytes() == raw

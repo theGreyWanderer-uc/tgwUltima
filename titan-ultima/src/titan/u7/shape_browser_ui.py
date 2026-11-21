@@ -12,7 +12,7 @@ from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan._terminal_image import play_terminal, terminal_image
 from titan.u7.archive_targets import ArchiveTarget
-from titan.u7.install import existing_path
+from titan.u7.install import existing_path, resolve_u7_exult_flx
 from titan.u7.shape import U7Shape
 from titan.u7.shape_animation import TICK_MS, save_gif
 from titan.u7.target_picker import game_targets, select_target
@@ -98,7 +98,7 @@ def choose_shape(library: ShapeLibrary, current: int | None = None) -> int | Non
         if selected == "Q":
             return None
         if selected == "O":
-            from titan.u7.shape_properties import choose_filter
+            from titan.u7.shape_properties_ui import choose_filter
 
             choose_filter(library)
             page = 0
@@ -363,7 +363,7 @@ def _choose_archive(target: ArchiveTarget, supplied: Path | None = None) -> Path
         else:
             selection = _menu("Shape library:", labels, "1")
             if selection == "Q":
-                raise ui.PromptCancelled
+                raise ui.WizardQuit
             if selection == "W":
                 return None
             path = (
@@ -414,6 +414,7 @@ def run_browser(
                         target,
                         game,
                         path,
+                        exult_flx=resolve_u7_exult_flx(game),
                         palette_index=palette_index,
                         palette_file=existing_path(Path(palette).expanduser())
                         if palette
@@ -504,11 +505,11 @@ def run_browser(
                             elif action == "G":
                                 _animation(library, decoded, current, frame, previews)
                             elif action == "T":
-                                from titan.u7.shape_properties import show_properties
+                                from titan.u7.shape_properties_ui import show_properties
 
                                 show_properties(library, decoded, current, frame)
                             elif action == "O":
-                                from titan.u7.shape_properties import choose_filter
+                                from titan.u7.shape_properties_ui import choose_filter
 
                                 choose_filter(library)
                                 if current not in matching_shapes(library, ""):
@@ -553,6 +554,7 @@ def run_browser(
                         break
             # Palette and archive selections must never leak into another owner.
             palette, base_archive, shape, palette_index = None, None, None, 0
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()

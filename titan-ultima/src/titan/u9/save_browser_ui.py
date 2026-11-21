@@ -8,6 +8,7 @@ from typing import Annotated, Any
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
 from titan.u9.integrity import render_integrity_report
 from titan.u9.save_backup import (
@@ -35,6 +36,7 @@ from titan.u9.save_wording import (
     render_u9_plain_integrity,
 )
 from titan._meta import meta
+from titan.errors import exit_code
 
 PAGE_SIZE = 25
 ACTION_KEYS = {
@@ -312,16 +314,20 @@ def run_u9_save_browser(
     slot: int | None = None,
     static_directory: Path | None = None,
     fixed_reference_directory: Path | None = None,
-    output: Path = U9_SAVE_BROWSER_OUTPUT,
+    output: Path | None = None,
     report_only: bool = False,
 ) -> int:
     """Browse without modifying saves; redirected input uses shared line menus."""
+    if output is None:
+        output = export_dir("u9", U9_SAVE_BROWSER_OUTPUT)
     if source is None and game_dir is None:
-        from titan.u9.install import configured_u9_path
+        from titan._meta import configured_install
 
-        game_dir = configured_u9_path("base")
-        if game_dir is not None and static_directory is None:
-            static_directory = configured_u9_path("static")
+        install = configured_install("u9")
+        if install is not None and install.settings.get("base"):
+            game_dir = install.root
+            if static_directory is None:
+                static_directory = install.resources.get("static")
     print("\nTitan U9 Save Browser")
     try:
         if source is None and slot is not None:
@@ -363,11 +369,10 @@ def run_u9_save_browser(
             if _browse_u9_save_session(session) == "Q":
                 return 0
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {clean_u9_browser_text(error)}")
-        return 1
+        return exit_code(error)
 
 
 @meta(results=("files",), params={"output": "output-dir"}, interactive=True)
@@ -399,9 +404,11 @@ def save_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Exports and backups; earlier files are preserved"
+            "-o",
+            "--output-dir",
+            help="Exports and backups; earlier files are preserved",
         ),
-    ] = U9_SAVE_BROWSER_OUTPUT,
+    ] = None,
     report_only: Annotated[
         bool,
         typer.Option(
@@ -410,6 +417,8 @@ def save_browse_cmd(
     ] = False,
 ) -> None:
     """Browse U9 saves, plain integrity findings, maps, NPCs and separate backups."""
+    if output is None:
+        output = export_dir("u9", U9_SAVE_BROWSER_OUTPUT)
     raise SystemExit(
         run_u9_save_browser(
             source=source,

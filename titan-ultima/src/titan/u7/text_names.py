@@ -15,6 +15,7 @@ from titan.u7.text import (
     U7TextMessages,
     decode_text_source,
 )
+from titan.errors import InvalidDataError
 
 
 @dataclass
@@ -91,13 +92,13 @@ def load_u7_text_names(
     Unicode authoring text is retained for inspection, without simulating fonts.
     """
     if game.lower() not in ("bg", "si"):
-        raise ValueError(f"U7 text requires BG or SI: {game}")
+        raise InvalidDataError(f"U7 text requires BG or SI: {game}")
     game = game.lower()
     root = Path(static_dir) if static_dir is not None else None
     patches = list(dict.fromkeys(Path(path) for path in patch_dirs))
     bundle = Path(exult_flx_path) if exult_flx_path else None
     if bundle is not None and not bundle.is_file():
-        raise ValueError(f"Exult naming resource not found: {bundle}")
+        raise InvalidDataError(f"Exult naming resource not found: {bundle}")
     result = U7TextNames()
     search = [*reversed(patches), *([root] if root is not None else [])]
     selected_textmsg = next(
@@ -111,7 +112,7 @@ def load_u7_text_names(
     if text_flx_path is not None:
         selected_textmsg = None
         if selected_flex is None or not selected_flex.is_file():
-            raise ValueError(f"TEXT.FLX not found: {text_flx_path}")
+            raise InvalidDataError(f"TEXT.FLX not found: {text_flx_path}")
     if selected_textmsg is None and selected_flex is None:
         return result
     engine, warnings = _engine_messages(bundle, patches, language, encoding)
@@ -150,7 +151,7 @@ def load_u7_text_names(
         archive = U7FlexArchive.from_file(str(bundle), strict=True)
         index = 7 if game == "bg" else 4
         if index >= len(archive.records) or not archive.records[index]:
-            raise ValueError(f"Exult naming resource {index} is absent: {bundle}")
+            raise InvalidDataError(f"Exult naming resource {index} is absent: {bundle}")
         text = archive.records[index].decode("latin-1")
         frames = U7FrameNames.from_text(
             text, banks.misc, game=game, source=str(bundle), si_variant=si_variant

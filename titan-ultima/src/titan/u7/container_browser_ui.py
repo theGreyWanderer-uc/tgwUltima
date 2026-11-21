@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from titan._config import export_dir
 from titan._image_preview import open_preview
 from titan._inventory_browser import InventoryBrowser, InventoryFilters
 from titan._terminal_image import terminal_image
@@ -18,13 +19,16 @@ from titan.u7.container_browser import (
 )
 
 
-U7_CONTAINER_BROWSER_OUTPUT = Path("titan-out/u7_container_browse_export")
+U7_CONTAINER_BROWSER_OUTPUT = "container-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u7")."""
 
 
 def browse_u7_container_session(
-    session: U7ContainerSession, *, output: Path = U7_CONTAINER_BROWSER_OUTPUT
+    session: U7ContainerSession, *, output: Path = None
 ) -> None:
     """Use the same result/filter/detail/tree/export flow as U8 on the selected U7 map."""
+    if output is None:
+        output = export_dir("u7", U7_CONTAINER_BROWSER_OUTPUT)
     validate_u7_container_output(session, output)
 
     def perform(action: str, number: int | str, counter: int) -> None:
