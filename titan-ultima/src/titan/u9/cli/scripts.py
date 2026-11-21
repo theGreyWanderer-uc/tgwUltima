@@ -330,6 +330,7 @@ def cmd_script_research_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def trigger_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     all: Annotated[
@@ -345,6 +346,7 @@ def trigger_list_cmd(
     raise SystemExit(cmd_trigger_list(SimpleNamespace(file=file, all=all, limit=limit)))
 
 
+@meta(results=("text",))
 def trigger_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     id: Annotated[
@@ -355,6 +357,7 @@ def trigger_show_cmd(
     raise SystemExit(cmd_trigger_show(SimpleNamespace(file=file, id=id)))
 
 
+@meta(results=("text",))
 def trigger_opcodes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/triggers.flx")],
     limit: Annotated[
@@ -366,6 +369,7 @@ def trigger_opcodes_cmd(
     raise SystemExit(cmd_trigger_opcodes(SimpleNamespace(file=file, limit=limit)))
 
 
+@meta(results=("text",))
 def activity_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     limit: Annotated[
@@ -377,6 +381,7 @@ def activity_list_cmd(
     raise SystemExit(cmd_activity_list(SimpleNamespace(file=file, limit=limit)))
 
 
+@meta(results=("text",))
 def activity_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     id: Annotated[int, typer.Argument(help="Activity set ID (the FLX entry index)")],
@@ -385,6 +390,7 @@ def activity_show_cmd(
     raise SystemExit(cmd_activity_show(SimpleNamespace(file=file, id=id)))
 
 
+@meta(results=("text",))
 def activity_opcodes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/activity.flx")],
     limit: Annotated[
@@ -403,7 +409,7 @@ def script_research_export_cmd(
     output: Annotated[
         str,
         typer.Option(
-            "-o", "--output", help="Directory for CSV and JSON evidence tables"
+            "-o", "--output-dir", help="Directory for CSV and JSON evidence tables"
         ),
     ] = "u9-script-research",
 ) -> None:

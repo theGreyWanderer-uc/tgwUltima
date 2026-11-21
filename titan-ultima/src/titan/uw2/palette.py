@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
+from titan.errors import InvalidDataError
 
 PALETTE_COLOR_COUNT = 256
 PALETTE_BYTE_SIZE = PALETTE_COLOR_COUNT * 3
 
 
-class UW2PaletteError(ValueError):
+class UW2PaletteError(InvalidDataError):
     """Raised when PALS.DAT cannot provide one complete 256-color palette."""
 
 

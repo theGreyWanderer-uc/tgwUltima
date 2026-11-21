@@ -10,6 +10,7 @@ from typing import Annotated
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan._palette_browser_ui import show_palette_colour_grid
@@ -119,10 +120,12 @@ def run_u8_palette_browser(
     game_dir: Path | None = None,
     index: int = 0,
     effect: int = 0,
-    output: Path = U8_PALETTE_BROWSER_OUTPUT,
+    output: Path | None = None,
     export: bool = False,
 ) -> int:
     """Inspect one native palette, retaining its selected owner on source changes."""
+    if output is None:
+        output = export_dir("u8", U8_PALETTE_BROWSER_OUTPUT)
     print("Titan U8 Palette Browser")
     if not 0 <= index <= 255 or not 0 <= effect <= 7:
         print("  ERROR: index must be 0-255 and effect 0-7")
@@ -272,10 +275,14 @@ def palette_browse_cmd(
     ] = False,
     output: Annotated[
         Path,
-        typer.Option("-o", "--output", help="Export root; older reports are preserved"),
-    ] = U8_PALETTE_BROWSER_OUTPUT,
+        typer.Option(
+            "-o", "--output-dir", help="Export root; older reports are preserved"
+        ),
+    ] = None,
 ) -> None:
     """Browse U8 palette swatches, stored RGB, sprite roles and native effects."""
+    if output is None:
+        output = export_dir("u8", U8_PALETTE_BROWSER_OUTPUT)
     raise SystemExit(
         run_u8_palette_browser(
             source,

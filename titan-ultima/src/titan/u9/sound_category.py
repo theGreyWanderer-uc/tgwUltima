@@ -19,6 +19,7 @@ import struct
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive
+from titan.errors import InvalidDataError
 
 CATEGORY_RECORD_SIZE = 40
 MASTER_CATEGORY_REPRESENTATION = "master_category_record"
@@ -28,7 +29,7 @@ _ALIGNMENT_OFFSET = 34
 _REFERENCE_COUNT_OFFSET = 36
 
 
-class U9SoundCategoryError(Exception):
+class U9SoundCategoryError(InvalidDataError):
     """Raised when a ``sfxcat.flx`` category record is malformed."""
 
 

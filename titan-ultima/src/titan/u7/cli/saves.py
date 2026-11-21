@@ -26,6 +26,7 @@ import typer
 
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan._cli_aliases import TextOrJson
 from titan._meta import meta
 
 
@@ -753,7 +754,7 @@ def gamedat_info_cmd(
     )
 
 
-@meta(params={"json_output": "format"}, results=("json", "text"))
+@meta(params={"output_format": "format"}, results=("json", "text"))
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     strict: Annotated[
@@ -762,14 +763,16 @@ def save_list_cmd(
             "--strict/--permissive", help="Reject structural container errors"
         ),
     ] = False,
-    json_output: Annotated[
-        bool,
+    output_format: Annotated[
+        TextOrJson,
         typer.Option(
-            "--json", help="JSON occurrence paths and member hashes for repack plans"
+            "--format",
+            help="Output format: text (default) or json (occurrence paths and member hashes for repack plans)",
         ),
-    ] = False,
+    ] = TextOrJson.text,
 ) -> None:
     """List contents of an Exult U7 savegame file (ZIP or FLEX)."""
+    json_output = output_format is TextOrJson.json
     raise SystemExit(
         cmd_save_list(
             SimpleNamespace(file=file, strict=strict, json_output=json_output)
@@ -783,7 +786,7 @@ def save_extract_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: save filename stem)"
+            "-o", "--output-dir", help="Output directory (default: save filename stem)"
         ),
     ] = None,
     entry: Annotated[

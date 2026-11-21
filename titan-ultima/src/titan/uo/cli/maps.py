@@ -381,8 +381,8 @@ def radar_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     columns: Annotated[
@@ -410,8 +410,8 @@ def map_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     facet: Annotated[
@@ -475,8 +475,8 @@ def map_render_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     facet: Annotated[
@@ -544,8 +544,8 @@ def map_tiles_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     facet: Annotated[
@@ -621,7 +621,7 @@ def map_inventory_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output directory; each facet goes in mapN/ inside it. Default: <install output>/map-inventory.",
         ),
     ] = None,
@@ -681,8 +681,8 @@ def multi_export_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
-            help="Output directory. Default: the install's configured output, else uodata.",
+            "--output-dir",
+            help="Output directory. Default: the install's configured output, else titan's data folder (uo/exports).",
         ),
     ] = None,
     limit: Annotated[

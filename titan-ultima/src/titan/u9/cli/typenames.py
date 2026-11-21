@@ -232,6 +232,7 @@ def cmd_types_csv(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def typename_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/TYPENAME.FLX")],
 ) -> None:

@@ -164,7 +164,7 @@ def music_export_cmd(
     ] = "mt32",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract U7 music tracks from a Flex archive to MIDI files."""
@@ -187,7 +187,7 @@ def voc_export_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Decode a Creative Voice (.voc) file to WAV."""
@@ -211,7 +211,7 @@ def speech_export_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract and decode U7 speech from a Flex archive of VOC files to WAV."""

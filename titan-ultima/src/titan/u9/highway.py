@@ -71,6 +71,7 @@ __all__ = [
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 HEADER_SIZE = 8
 POINT_SIZE = 12
@@ -79,7 +80,7 @@ ROUTE_HEADER_SIZE = 0x0A
 ROUTE_HEADER_STRUCT = "<5H"
 
 
-class U9HighwayError(Exception):
+class U9HighwayError(InvalidDataError):
     """Raised on malformed ``static/highway.dat`` data."""
 
 

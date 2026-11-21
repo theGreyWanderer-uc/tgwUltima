@@ -31,6 +31,9 @@ __all__ = [
     "UOInstall",
     "configured_installs",
     "detect_uo_install",
+    "discover_installs",
+    "install_candidates",
+    "install_config",
     "looks_like_uo_root",
     "resolve_install",
     "uo_install_candidates",
@@ -40,6 +43,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from titan._config import get_config
+from titan.errors import InstallNotFoundError
+from titan._meta import Installation
+
+_CORE_FILES = {
+    "art": "artLegacyMUL.uop",
+    "gumps": "gumpartLegacyMUL.uop",
+    "tiledata": "tiledata.mul",
+    "hues": "hues.mul",
+}
+"""Core Classic Client files; any one of them identifies a client folder."""
 
 _SOURCE_CHOICES = ("auto", "uop", "mul")
 # Emulator references an install may override from [uo.reference].
@@ -91,8 +104,8 @@ def resolve_install(
 ) -> tuple[Path, UOInstall | None]:
     """Resolve a CLIENT argument to ``(directory, install or None)``.
 
-    Raises ``FileNotFoundError`` when nothing is configured or the directory
-    does not exist.
+    Raises :class:`~titan.errors.InstallNotFoundError` (a ``FileNotFoundError``)
+    when nothing is configured or the directory does not exist.
     """
     config = get_config() if config is None else config
     installs = configured_installs(config)
@@ -104,14 +117,14 @@ def resolve_install(
         if default_name:
             install = installs.get(str(default_name).lower())
             if install is None:
-                raise FileNotFoundError(
+                raise InstallNotFoundError(
                     f"[uo.game] install = {default_name!r} is not a configured "
                     f"[uo.installs.*] entry"
                 )
         elif game.get("base"):
             client = str(game["base"])
         else:
-            raise FileNotFoundError(
+            raise InstallNotFoundError(
                 "UO client directory not configured; pass CLIENT (a directory or "
                 "install name), or set [uo.game] install/base in titan.toml"
             )
@@ -125,7 +138,7 @@ def resolve_install(
         install = _install_for_path(path, installs)
 
     if not path.is_dir():
-        raise FileNotFoundError(f"client directory not found: {path}")
+        raise InstallNotFoundError(f"client directory not found: {path}")
     return path, install
 
 
@@ -154,15 +167,7 @@ def _source_choice(value: object, name: str, key: str) -> str:
 
 def looks_like_uo_root(path: Path) -> bool:
     """Recognize a Classic Client folder by its core art and tile data files."""
-    return any(
-        (path / name).is_file()
-        for name in (
-            "artLegacyMUL.uop",
-            "gumpartLegacyMUL.uop",
-            "tiledata.mul",
-            "hues.mul",
-        )
-    )
+    return any((path / name).is_file() for name in _CORE_FILES.values())
 
 
 def uo_install_candidates() -> list[Path]:
@@ -187,3 +192,35 @@ def detect_uo_install() -> Path | None:
         if candidate.exists() and looks_like_uo_root(candidate):
             return candidate
     return None
+
+
+def install_candidates(config: dict) -> list[Path]:
+    """Install protocol: ``[uo.game] base``, ``[uo.installs.*]`` paths, then the
+    standard Classic Client folders."""
+    candidates: list[Path] = []
+    base = config.get("uo", {}).get("game", {}).get("base")
+    if base:
+        candidates.append(Path(str(base)).expanduser())
+    for entry in config.get("uo", {}).get("installs", {}).values():
+        if isinstance(entry, dict) and entry.get("path"):
+            candidates.append(Path(str(entry["path"])).expanduser())
+    return list(dict.fromkeys([*candidates, *uo_install_candidates()]))
+
+
+def discover_installs(path: Path) -> list[Installation]:
+    """Install protocol: the client folder at *path*, if it is one."""
+    try:
+        if not looks_like_uo_root(path):
+            return []
+    except OSError:
+        return []
+    resources = {
+        key: path / name for key, name in _CORE_FILES.items() if (path / name).is_file()
+    }
+    return [Installation("uo", path.absolute(), resources)]
+
+
+def install_config(install: Installation) -> dict:
+    """Install protocol: ``[uo.game] base``. Named ``[uo.installs.*]`` entries
+    are for several clients side by side; add those by hand."""
+    return {"game": {"base": install.root.as_posix()}}

@@ -79,6 +79,7 @@ __all__ = [
 ]
 
 import struct
+from titan.errors import InvalidDataError
 
 BLOCK_SIZE_IN = 30
 BLOCK_SIZE_OUT_SAMPLES = 56  # 28 stereo frames per block
@@ -90,7 +91,7 @@ COEFF_A = (0, 240, 460, 392)
 COEFF_B = (0, 0, -208, -220)
 
 
-class AdpcmDecodeError(Exception):
+class AdpcmDecodeError(InvalidDataError):
     """Raised when a block's coefficient index is out of the valid 0-3 range."""
 
 

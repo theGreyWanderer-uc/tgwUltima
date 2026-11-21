@@ -23,6 +23,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive
+from titan.errors import InvalidDataError
 
 RECORD_HEADER_SIZE = 6
 RECORD_HEADER_STRUCT = "<iH"
@@ -33,7 +34,7 @@ DEFAULT_OBJECT_ICON_ID = 7041
 CURRENT_TYPE_NAME_REPRESENTATION = "six_byte_header"
 
 
-class U9TypeNameError(Exception):
+class U9TypeNameError(InvalidDataError):
     """Raised when a ``TYPENAME.FLX`` entry is structurally malformed."""
 
 

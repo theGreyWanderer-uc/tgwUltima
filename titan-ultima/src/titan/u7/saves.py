@@ -5,7 +5,7 @@ Exult writes ``<SAVEGAME>/exult%02d%s.sav`` (``fnames.h``), the suffix ``bg`` or
 ZIP comment. Saves are looked for in ``[u7xx.paths] savegame``, the folder
 holding GAMEDAT, and the game folder: Exult's usual save locations.
 
-``slot`` is the save's full path, which every U7 ``--gamedat`` accepts.
+``slot`` is the save's full path, which every U7 ``--save`` accepts.
 """
 
 from __future__ import annotations

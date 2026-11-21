@@ -148,6 +148,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.errors import InvalidDataError
 
 HEADER_SIZE = 8
 NAME_FIELD_SIZE = 15
@@ -551,7 +552,7 @@ def activity_opcode_info(opcode: int) -> U9ActivityOpcodeInfo | None:
     return _ACTIVITY_OPCODE_BY_VALUE.get(opcode)
 
 
-class U9ActivityError(Exception):
+class U9ActivityError(InvalidDataError):
     """Raised on malformed ``static/activity.flx`` data."""
 
 

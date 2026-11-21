@@ -746,7 +746,7 @@ def run_wizard(
     mod_data_dir: Optional[str] = None,
 ) -> int:
     """Launch the repeatable world-query workflow using the existing CLI context."""
-    from titan.u7.world_workflow import run_wizard as workflow
+    from titan.u7.world_workflow_ui import run_wizard as workflow
 
     return workflow(
         WorldQueryParams(

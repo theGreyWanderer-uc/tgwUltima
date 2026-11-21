@@ -10,9 +10,10 @@ import numpy as np
 from PIL import Image
 
 from titan.uw2.palette import UW2Palette
+from titan.errors import InvalidDataError
 
 
-class UW2GRError(ValueError):
+class UW2GRError(InvalidDataError):
     """Raised when a UU2 GR archive or image record is malformed."""
 
 

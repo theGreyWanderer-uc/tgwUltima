@@ -1,4 +1,4 @@
-"""Let ``--gamedat`` take an Exult save file as well as a GAMEDAT folder.
+"""Let ``--save`` take an Exult save file as well as a GAMEDAT folder.
 
 Exult saves (``exultNN<bg|si>.sav``, Flex or ZIP; see ``save_container``) hold
 the same files Exult writes into GAMEDAT, ``mapNN/`` folders included. A save
@@ -70,10 +70,10 @@ def u7_gamedat_folder(
 
 
 def gamedat_option(value: Optional[str]) -> Optional[str]:
-    """:func:`u7_gamedat_folder` for a ``--gamedat`` option: bad files are usage errors."""
+    """:func:`u7_gamedat_folder` for a ``--save`` option: bad files are usage errors."""
     try:
         return u7_gamedat_folder(value)
     except (OSError, ValueError) as error:
         import typer
 
-        raise typer.BadParameter(str(error), param_hint="--gamedat") from error
+        raise typer.BadParameter(str(error), param_hint="--save") from error

@@ -31,8 +31,10 @@ from titan.u9.cli import (
     saves,
     maps,
 )
+from titan._cli_aliases import alias_group
 
 u9_app = ConfiguredU9App(
+    cls=alias_group({"--output": "--output-dir"}),
     name="u9",
     help="Ultima 9: Ascension — archive, palette, texture, sound, model, world, script, and navigation commands.",
     no_args_is_help=True,

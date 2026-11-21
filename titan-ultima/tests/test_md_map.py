@@ -338,7 +338,7 @@ def test_md_cli_reports_missing_resources_without_traceback(md_game: Path) -> No
     result = CliRunner().invoke(
         md_app, ["map-render", "-g", str(md_game), "--region", "0,0,1,1"]
     )
-    assert result.exit_code == 1
+    assert result.exit_code == 66  # titan.errors.EXIT_CODES["file-not-found"]
     assert "MAPTILES.VGA" in result.output
     assert "Traceback" not in result.output
 

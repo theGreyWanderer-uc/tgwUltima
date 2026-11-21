@@ -101,13 +101,14 @@ from titan.u9.transform import (
     transform_normal,
     transform_point,
 )
+from titan.errors import TitanError
 
 Vec3 = tuple[float, float, float]
 TextureResolver = Callable[[int, int], Optional[U9TextureFrame]]
 """``(texture_id, frame) -> U9TextureFrame | None``."""
 
 
-class MeshExportError(Exception):
+class MeshExportError(TitanError):
     """Raised when a model has no geometry at the requested LOD, or another export precondition fails."""
 
 

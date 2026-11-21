@@ -54,6 +54,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 from PIL import Image
+from titan.errors import InvalidDataError
 
 PALETTE_SIZE = 768  # 256 * 3
 
@@ -90,7 +91,7 @@ def _slot_bounds_error(
     return None
 
 
-class PaletteRecordEmptyError(ValueError):
+class PaletteRecordEmptyError(InvalidDataError):
     """Raised when a specifically requested Flex palette slot has no data.
 
     Subclasses :class:`ValueError` so existing ``except ValueError`` call
@@ -98,7 +99,7 @@ class PaletteRecordEmptyError(ValueError):
     """
 
 
-class PaletteRecordInvalidError(ValueError):
+class PaletteRecordInvalidError(InvalidDataError):
     """Raised for malformed, truncated, or out-of-bounds palette records
     or Flex record tables — as opposed to :class:`PaletteRecordEmptyError`,
     which means the slot is simply unused.

@@ -82,6 +82,7 @@ import numpy as np
 from PIL import Image
 
 from titan.u6.tile import TILE_DIM, TRANSPARENT, U6Tiles
+from titan.errors import InvalidDataError
 
 CHUNK_DIM = 8
 CHUNK_SIZE = CHUNK_DIM * CHUNK_DIM  # 64
@@ -98,11 +99,11 @@ SURFACE_WORLD_TILES = (
 DUNGEON_WORLD_TILES = DUNGEON_CHUNKS_PER_SIDE * CHUNK_DIM  # 256
 
 
-class U6ChunksError(Exception):
+class U6ChunksError(InvalidDataError):
     """Raised when CHUNKS data isn't a whole number of 64-byte chunks."""
 
 
-class U6MapError(Exception):
+class U6MapError(InvalidDataError):
     """Raised when MAP data doesn't match the expected superchunk layout."""
 
 

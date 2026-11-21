@@ -73,6 +73,7 @@ import struct
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.errors import InvalidDataError
 
 ENTRY_HEADER_STRUCT = "<7i"
 ENTRY_HEADER_SIZE = struct.calcsize(ENTRY_HEADER_STRUCT)
@@ -95,7 +96,7 @@ EVENT_TYPE_NAMES = {
 }
 
 
-class U9AnimationError(Exception):
+class U9AnimationError(InvalidDataError):
     """Raised on malformed ``static/anim.flx`` data."""
 
 

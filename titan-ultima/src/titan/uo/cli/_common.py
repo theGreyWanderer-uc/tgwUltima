@@ -32,6 +32,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
 
+from titan._config import export_dir
 from titan.uo.installs import resolve_install
 from titan.uo.animdata import UOAnimData, UOAnimDataEntry
 from titan.uo.artdef import UOArtDef
@@ -52,7 +53,8 @@ def _client_path(client: str | None = None) -> Path:
 
 
 def _out(args: SimpleNamespace) -> Path:
-    """Output root: ``-o`` if given, else the install's output, else ``uodata``."""
+    """Output root: ``-o`` if given, else the install's output, else
+    :func:`titan._config.export_dir` for ``uo``."""
     if getattr(args, "output", None):
         return Path(args.output)
     try:
@@ -61,7 +63,7 @@ def _out(args: SimpleNamespace) -> Path:
         install = None
     if install is not None and install.output is not None:
         return install.output
-    return Path("uodata")
+    return export_dir("uo")
 
 
 def _source(args: SimpleNamespace, key: str) -> str:

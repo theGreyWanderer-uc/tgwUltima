@@ -3,11 +3,11 @@ Ultima 6: The False Prophet — CLI sub-app.
 
 Registered as ``titan u6 <command>`` in the root CLI.
 
-Most commands accept ``-g/--gamedir`` (a directory containing the
+Most commands accept ``-g/--game-dir`` (a directory containing the
 standard, fixed U6 filenames: MASKTYPE.VGA, MAPTILES.VGA, OBJTILES.VGA,
 U6PAL, ANIMDATA, MAP, CHUNKS) rather than per-file paths, since -- unlike
 U7/U8 -- a real U6 install has no path variability to account for.
-Falls back to ``[u6.game] base`` in ``titan.toml`` if ``--gamedir`` is
+Falls back to ``[u6.game] base`` in ``titan.toml`` if ``--game-dir`` is
 omitted.
 """
 
@@ -48,12 +48,15 @@ from titan.u6.schedule import U6Schedules
 from titan.u6.tile import U6AnimData, U6Tiles
 from titan.u6.tileflag import U6TileFlags
 from titan._meta import meta
+from titan.errors import InstallNotFoundError
+from titan._cli_aliases import alias_group
 
 # ============================================================================
 # Typer sub-app
 # ============================================================================
 
 u6_app = typer.Typer(
+    cls=alias_group({"--gamedir": "--game-dir", "--output": "--output-dir"}),
     name="u6",
     help="Ultima 6: The False Prophet — tile, map, library, and data commands.",
     no_args_is_help=True,
@@ -76,12 +79,10 @@ def _u6_gamedir(explicit: Optional[str]) -> Optional[str]:
 def _require_gamedir(explicit: Optional[str]) -> str:
     gamedir = _u6_gamedir(explicit)
     if not gamedir or not os.path.isdir(gamedir):
-        print(
-            "ERROR: No U6 game directory found. Pass --gamedir, or set "
-            '[u6.game] base = "..." in titan.toml.',
-            file=sys.stderr,
+        raise InstallNotFoundError(
+            "No U6 game directory found. Pass --game-dir, or set "
+            '[u6.game] base = "..." in titan.toml.'
         )
-        raise SystemExit(1)
     return gamedir
 
 
@@ -1153,7 +1154,7 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
 def lzw_decompress_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 LZW-compressed file")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Decompress a single U6 LZW file to raw bytes."""
@@ -1161,6 +1162,7 @@ def lzw_decompress_cmd(
 
 
 @u6_app.command("lib-list")
+@meta(results=("text",))
 def lib_list_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a U6 library file (e.g. CONVERSE.A)")
@@ -1196,7 +1198,7 @@ def lib_extract_cmd(
         typer.Option("--size-header", help="File has a leading 4-byte size header"),
     ] = False,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Extract one item from a U6 library file."""
@@ -1227,7 +1229,7 @@ def lib_extract_all_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: <file>_items/)"
+            "-o", "--output-dir", help="Output directory (default: <file>_items/)"
         ),
     ] = None,
 ) -> None:
@@ -1249,7 +1251,7 @@ def lib_extract_all_cmd(
 def tileflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to TILEFLAG")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Parse TILEFLAG and dump all entries as a readable table."""
@@ -1261,7 +1263,7 @@ def tileflag_dump_cmd(
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to U6PAL")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Export U6PAL as a PNG swatch + text dump."""
@@ -1276,13 +1278,13 @@ def tile_export_cmd(
     ],
     gamedir: Annotated[
         Optional[str],
-        typer.Option("-g", "--gamedir", help="U6 game directory"),
+        typer.Option("-g", "--game-dir", help="U6 game directory"),
     ] = None,
     palette: Annotated[
         Optional[str], typer.Option("-p", "--palette", help="Path to U6PAL")
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Export one U6 tile to PNG."""
@@ -1302,7 +1304,7 @@ def tile_export_cmd(
 @meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
 def tile_export_all_cmd(
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+        Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
     ] = None,
     palette: Annotated[
         Optional[str], typer.Option("-p", "--palette", help="Path to U6PAL")
@@ -1316,7 +1318,9 @@ def tile_export_all_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: tiles_png/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: tiles_png/)"
+        ),
     ] = None,
 ) -> None:
     """Batch-export a range of U6 tiles to PNG."""
@@ -1337,7 +1341,7 @@ def tile_export_all_cmd(
 @meta(results=("image",), params={"output": "output-file", "palette": "palette"})
 def map_render_cmd(
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+        Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
     ] = None,
     palette: Annotated[
         Optional[str], typer.Option("-p", "--palette", help="Path to U6PAL")
@@ -1399,9 +1403,10 @@ def map_render_cmd(
 
 
 @u6_app.command("map-audit-zorder")
+@meta(results=("text",))
 def map_audit_zorder_cmd(
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+        Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
     ] = None,
     min_winner_opacity: Annotated[
         float,
@@ -1451,9 +1456,10 @@ def map_audit_zorder_cmd(
 
 
 @u6_app.command("object-list")
+@meta(results=("text",))
 def object_list_cmd(
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+        Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
     ] = None,
     block: Annotated[
         Optional[int],
@@ -1476,9 +1482,10 @@ def object_list_cmd(
 
 
 @u6_app.command("egg-list")
+@meta(results=("text",))
 def egg_list_cmd(
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+        Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
     ] = None,
     block: Annotated[
         Optional[int],
@@ -1501,9 +1508,10 @@ def egg_list_cmd(
 
 
 @u6_app.command("actor-list")
+@meta(results=("text",))
 def actor_list_cmd(
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+        Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
     ] = None,
     all: Annotated[
         bool,
@@ -1517,9 +1525,10 @@ def actor_list_cmd(
 
 
 @u6_app.command("gamestate-dump")
+@meta(results=("text",))
 def gamestate_dump_cmd(
     gamedir: Annotated[
-        Optional[str], typer.Option("-g", "--gamedir", help="U6 game directory")
+        Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
     ] = None,
 ) -> None:
     """Show party roster, player state, and game clock/weather from objlist."""
@@ -1527,6 +1536,7 @@ def gamestate_dump_cmd(
 
 
 @u6_app.command("flags-dump")
+@meta(results=("text",))
 def flags_dump_cmd(
     source: Annotated[
         str,
@@ -1544,6 +1554,7 @@ def flags_dump_cmd(
 
 
 @u6_app.command("flags-compare")
+@meta(results=("text",))
 def flags_compare_cmd(
     source_a: Annotated[str, typer.Argument(help="First gamedir or SAVEGAME folder")],
     source_b: Annotated[str, typer.Argument(help="Second gamedir or SAVEGAME folder")],
@@ -1639,7 +1650,7 @@ def converse_dump_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory; omit to print to stdout"
+            "-o", "--output-dir", help="Output directory; omit to print to stdout"
         ),
     ] = None,
 ) -> None:
@@ -1671,7 +1682,7 @@ def font_export_cmd(
         int, typer.Option("--scale", help="Pixel scale factor for the exported images")
     ] = 3,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Export the English and runic/gargoyle fonts from U6.CH as contact sheets."""
@@ -1687,7 +1698,7 @@ def font_export_cmd(
 def look_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to LOOK.LZD")],
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Dump LOOK.LZD's tile-number -> object-name table."""
@@ -1705,7 +1716,7 @@ def book_dump_cmd(
         ),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
 ) -> None:
     """Dump one or all book/sign texts from BOOK.DAT."""
@@ -1728,7 +1739,7 @@ def schedule_dump_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory; omit to print to stdout"
+            "-o", "--output-dir", help="Output directory; omit to print to stdout"
         ),
     ] = None,
 ) -> None:

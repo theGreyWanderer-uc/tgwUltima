@@ -33,7 +33,8 @@ from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
 from titan.u8.shape_browser import U8ShapeLibrary, find_u8_browser_file
 from titan.u8.state_report import format_u8_npcdata_report
 
-U8_MAP_BROWSER_OUTPUT = Path("titan-out/u8_map_browse_export")
+U8_MAP_BROWSER_OUTPUT = "map-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 @dataclass(frozen=True)

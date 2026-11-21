@@ -9,11 +9,12 @@ from typer.testing import CliRunner
 
 from titan.fonts import wizard as fonts
 from titan.u7 import shape_wizard as shapes
+from titan.u7 import shape_wizard_ui as shapes_ui
 from titan import _wizard_ui as ui
 from titan.u7.cli import u7_app
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
-from titan.u7 import container, eggs, target_picker
+from titan.u7 import container, container_ui, eggs_ui, target_picker
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapObject
@@ -51,7 +52,7 @@ def isolate_profile(monkeypatch, tmp_path):
     monkeypatch.setattr("titan.u7.target_picker.find_exult_cfg", lambda: None)
     monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
     monkeypatch.setattr(fonts, "find_exult_cfg", lambda: None)
-    monkeypatch.setattr(shapes, "get_config", lambda: {})
+    monkeypatch.setattr(shapes_ui, "get_config", lambda: {})
     monkeypatch.setattr(shapes, "find_exult_cfg", lambda: None)
     monkeypatch.setattr(shapes, "_exult_paths", lambda game: None)
     monkeypatch.setattr(fonts, "open_preview", lambda path: True)
@@ -175,7 +176,7 @@ def test_shape_wizard_menu_flow_converts_and_saves(tmp_path, monkeypatch):
     monkeypatch.setattr(
         shapes, "_palette", lambda config: U7Palette.from_file(str(palette))
     )
-    monkeypatch.setattr(shapes, "_open_preview", lambda path: True)
+    monkeypatch.setattr(shapes_ui, "_open_preview", lambda path: True)
     monkeypatch.setattr(
         shapes.tempfile,
         "NamedTemporaryFile",
@@ -221,7 +222,7 @@ def test_shape_menu_accepts_automatic_custom_game_palette(
     palette.records = [b""]
     (patch / "PALETTES.FLX").write_bytes(palette.to_bytes())
     target = ArchiveTarget("Custom SI game", static, patch, True, root)
-    monkeypatch.setattr(shapes, "discover_targets", lambda *args: [target])
+    monkeypatch.setattr(shapes_ui, "discover_targets", lambda *args: [target])
     monkeypatch.setattr(
         shapes,
         "resolve_game_palette",
@@ -231,7 +232,9 @@ def test_shape_menu_accepts_automatic_custom_game_palette(
     Image.new("RGBA", (8, 8), (40, 40, 40, 255)).save(source)
     reviewed = []
     monkeypatch.setattr(
-        shapes, "show_preview", lambda converted, **kwargs: reviewed.append(converted)
+        shapes_ui,
+        "show_preview",
+        lambda converted, **kwargs: reviewed.append(converted),
     )
     prompts = scripted_menus(
         monkeypatch,
@@ -257,7 +260,7 @@ def test_shape_menu_accepts_automatic_custom_game_palette(
         assert "record numbers such as 0 belong in the next prompt" in result.output
 
 
-@pytest.mark.parametrize("wizard", [fonts.run_wizard, shapes.run_wizard])
+@pytest.mark.parametrize("wizard", [fonts.run_wizard, shapes_ui.run_wizard])
 def test_menu_cancel_is_clean_and_writes_nothing(monkeypatch, tmp_path, wizard):
     scripted_menus(monkeypatch, [None])
     assert wizard(output_override=str(tmp_path / "out.shp")) == 0
@@ -266,7 +269,7 @@ def test_menu_cancel_is_clean_and_writes_nothing(monkeypatch, tmp_path, wizard):
 
 def test_numeric_menu_prompt_retries_invalid_and_out_of_range(monkeypatch):
     prompts = scripted_menus(monkeypatch, ["oops", "300", "12"])
-    assert shapes._integer("Palette record [0]:", 0, 0, 20) == 12
+    assert shapes_ui._integer("Palette record [0]:", 0, 0, 20) == 12
     assert len(prompts) == 3
     assert prompts[0][1]["default"] == "0"
 
@@ -589,7 +592,7 @@ def test_container_wizard_uses_selected_mod_metadata_gamedat_and_map(
         monkeypatch,
         ["si", target, str(target.gamedat), 1, "I", "IREG:1:0:0:root", "T", "B", "Q"],
     )
-    assert container.run_wizard() == 0
+    assert container_ui.run_wizard() == 0
     assert parsed == [str(target.gamedat / "MAP01/U7IREG00")]
     assert "custom chest" in capsys.readouterr().out
 
@@ -602,7 +605,7 @@ def test_egg_wizard_uses_selected_mod_metadata_gamedat_and_map(
         monkeypatch,
         ["si", target, str(target.gamedat), 1, [], "", True, "table", False],
     )
-    assert eggs.run_wizard() == 0
+    assert eggs_ui.run_wizard() == 0
     assert parsed == [str(target.gamedat / "MAP01/U7IREG00")]
 
 

@@ -12,6 +12,7 @@ from titan.uw2.exe_models import ITEM_MODEL_INDEX, ModelTriangle, UW2ModelArchiv
 from titan.uw2.gr import UW2GRArchive
 from titan.uw2.instances import TMOBJ, object_material
 from titan.uw2.palette import UW2Palette
+from titan.errors import TitanError, UnsupportedError
 
 
 ITEM_MODEL_NAMES = {
@@ -39,11 +40,11 @@ ITEM_MODEL_NAMES = {
 }
 
 
-class UW2ModelRenderError(ValueError):
+class UW2ModelRenderError(TitanError, ValueError):
     """Raised when a standalone model cannot be rendered."""
 
 
-class UW2ModelRenderUnavailableError(UW2ModelRenderError):
+class UW2ModelRenderUnavailableError(UW2ModelRenderError, UnsupportedError):
     """Raised when optional PyVista/VTK rendering packages are absent."""
 
 

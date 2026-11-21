@@ -50,13 +50,14 @@ import struct
 from dataclasses import dataclass
 
 from titan.u6.object import unpack_position
+from titan.errors import InvalidDataError
 
 NUM_ACTORS = 256
 ENTRY_SIZE = 5
 HEADER_SIZE = NUM_ACTORS * 2 + 2  # offset table + total_count
 
 
-class U6ScheduleError(Exception):
+class U6ScheduleError(InvalidDataError):
     """Raised when SCHEDULE data is too short or internally inconsistent."""
 
 

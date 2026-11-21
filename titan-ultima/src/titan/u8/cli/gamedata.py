@@ -235,7 +235,7 @@ def credits_decrypt_cmd(
     file: Annotated[str, typer.Argument(help="Path to encrypted .dat file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Decrypt ECREDITS.DAT or QUOTES.DAT to plain text."""
@@ -614,7 +614,7 @@ def typeflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to TYPEFLAG.DAT")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Parse TYPEFLAG.DAT and dump all shape info."""
@@ -626,7 +626,7 @@ def gumpinfo_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to GUMPAGE.DAT")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Dump GUMPAGE.DAT container gump UI layout data."""
@@ -639,7 +639,7 @@ def unkcoff_dump_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: print to stdout)"
+            "-o", "--output-dir", help="Output directory (default: print to stdout)"
         ),
     ] = None,
 ) -> None:

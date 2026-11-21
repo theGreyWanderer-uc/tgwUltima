@@ -11,7 +11,7 @@ from PIL import Image
 
 from titan import _meta
 from titan.fonts import wizard as font_wizard
-from titan.u7 import shape_wizard
+from titan.u7 import shape_wizard_ui as shape_wizard_ui
 
 try:
     import tomllib
@@ -20,7 +20,7 @@ except ImportError:
 
 WIZARDS = {
     ("u7", "font-create"): font_wizard,
-    ("u7", "shape-create"): shape_wizard,
+    ("u7", "shape-create"): shape_wizard_ui,
 }
 
 
@@ -164,7 +164,7 @@ def test_generated_font_recipe_runs(tmp_path: Path, monkeypatch) -> None:
 
 def test_generated_shape_recipe_runs(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("recipe prompted"))
-    monkeypatch.setattr(shape_wizard, "_open_preview", lambda path: None)
+    monkeypatch.setattr(shape_wizard_ui, "_open_preview", lambda path: None)
     palette = tmp_path / "palette.pal"
     colors = np.zeros((256, 3), dtype=np.uint8)
     colors[1] = (255, 0, 0)
@@ -184,5 +184,5 @@ def test_generated_shape_recipe_runs(tmp_path: Path, monkeypatch) -> None:
         ),
         encoding="utf-8",
     )
-    assert shape_wizard.run_from_config(str(recipe)) == 0
+    assert shape_wizard_ui.run_from_config(str(recipe)) == 0
     assert output.is_file()

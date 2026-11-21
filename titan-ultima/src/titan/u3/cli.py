@@ -13,9 +13,11 @@ import typer
 
 from titan.u3.u3_nes_map_create import create_u3_nes_sosaria_map
 from titan._meta import meta
+from titan._cli_aliases import alias_group
 
 
 u3_app = typer.Typer(
+    cls=alias_group({"--output-root": "--output-dir"}),
     name="u3",
     help="Ultima III NES map conversion commands.",
     no_args_is_help=True,
@@ -146,7 +148,7 @@ def map_create_cmd(
     output_root: Annotated[
         str,
         typer.Option(
-            "--output-root",
+            "--output-dir",
             help="Required PATCH-like root where mapNN and shared u7chunks are written",
         ),
     ],

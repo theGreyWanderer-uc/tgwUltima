@@ -22,9 +22,10 @@ import re
 from dataclasses import dataclass
 
 from titan.u9.animation_labels import U9AnimationLabels
+from titan.errors import TitanError
 
 
-class U9AnimationSelectionError(Exception):
+class U9AnimationSelectionError(TitanError):
     """Raised when an animation selector is unknown, inconsistent, or ambiguous."""
 
 

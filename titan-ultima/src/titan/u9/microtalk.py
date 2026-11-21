@@ -71,6 +71,7 @@ __all__ = ["decode_mono", "MicroTalkDecodeError"]
 import struct
 
 import numpy as np
+from titan.errors import InvalidDataError
 
 F32 = np.float32
 
@@ -705,7 +706,7 @@ UTK_COMMANDS = (
 FRAME_SAMPLES = 432  # 4 subframes * 108 samples
 
 
-class MicroTalkDecodeError(Exception):
+class MicroTalkDecodeError(InvalidDataError):
     """Raised on malformed MicroTalk data (e.g. an out-of-range reflection-coefficient index)."""
 
 

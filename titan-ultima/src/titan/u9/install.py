@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import struct
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
 from titan import _config
+from titan._meta import Installation
 from titan.u9.flx_archive import (
     COUNT_OFFSET,
     DIR_ENTRY_SIZE,
@@ -298,17 +298,43 @@ def configured_u9_path(key: str) -> Path | None:
     return existing_u9_path(path) if path is not None else None
 
 
+def _relative(path: Path, root: Path) -> str:
+    return (path.relative_to(root) if path.is_relative_to(root) else path).as_posix()
+
+
+def as_installation(selected: U9Installation) -> Installation:
+    """The :class:`~titan._meta.Installation` for a :class:`U9Installation`."""
+    return Installation(
+        "u9",
+        selected.root,
+        dict(selected.paths),
+        {key: status for key, status in selected.checks.items() if status != "OK"},
+    )
+
+
+def install_candidates(config: dict) -> list[Path]:
+    """Install protocol (see :func:`titan._meta.install_candidates`)."""
+    return u9_install_candidates(config)
+
+
+def discover_installs(path: Path) -> list[Installation]:
+    """Install protocol: U9 roots within three levels of *path*."""
+    return [as_installation(item) for item in discover_u9_installs(path)]
+
+
+def install_config(install: Installation) -> dict:
+    """Install protocol: ``[u9.game]`` base and ``[u9.paths]`` relative to it."""
+    return {
+        "game": {"base": install.root.as_posix()},
+        "paths": {
+            key: _relative(path, install.root)
+            for key, path in install.resources.items()
+        },
+    }
+
+
 def u9_setup_lines(selected: U9Installation) -> list[str]:
     """Render ``[u9.game]`` and ``[u9.paths]`` for a new ``titan.toml``."""
-    lines = [
-        "",
-        "[u9.game]",
-        f"base = {json.dumps(selected.root.as_posix())}",
-        "",
-        "[u9.paths]",
-    ]
-    for key, resource in selected.paths.items():
-        lines.append(
-            f"{key} = {json.dumps(resource.relative_to(selected.root).as_posix())}"
-        )
-    return lines
+    from titan._setup_config import section_lines
+
+    return section_lines({"u9": install_config(as_installation(selected))})

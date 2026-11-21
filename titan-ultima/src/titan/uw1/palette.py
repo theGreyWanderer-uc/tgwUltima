@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
+from titan.errors import InvalidDataError
 
 PALETTE_COLOR_COUNT = 256
 PALETTE_BYTE_SIZE = PALETTE_COLOR_COUNT * 3
 
 
-class UW1PaletteError(ValueError):
+class UW1PaletteError(InvalidDataError):
     """Raised when a complete UW1 palette cannot be decoded."""
 
 

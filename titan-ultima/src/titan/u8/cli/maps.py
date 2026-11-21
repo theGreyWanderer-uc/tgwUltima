@@ -17,7 +17,7 @@ from typing import Annotated, Optional
 
 import typer
 
-from titan._config import cfg as _cfg
+from titan.u8.install import u8_cfg as _cfg
 from titan._config import get_config
 from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
@@ -780,7 +780,9 @@ def map_render_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
+    nonfixed: Annotated[
+        Optional[str], typer.Option("--save", help=_NONFIXED_HELP)
+    ] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,
@@ -874,7 +876,7 @@ def map_render_all_cmd(
         Optional[str], typer.Option("--palette", "-p", help="Path to .pal palette file")
     ] = None,
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Output directory")
+        str, typer.Option("-o", "--output-dir", help="Output directory")
     ] = "map_renders",
     views: Annotated[
         Optional[list[str]],
@@ -886,7 +888,9 @@ def map_render_all_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
+    nonfixed: Annotated[
+        Optional[str], typer.Option("--save", help=_NONFIXED_HELP)
+    ] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,
@@ -991,7 +995,9 @@ def map_sample_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
+    nonfixed: Annotated[
+        Optional[str], typer.Option("--save", help=_NONFIXED_HELP)
+    ] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,
@@ -1085,7 +1091,7 @@ def map_sample_all_cmd(
         Optional[str], typer.Option("--palette", "-p", help="Path to .pal palette file")
     ] = None,
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Output directory")
+        str, typer.Option("-o", "--output-dir", help="Output directory")
     ] = "map_samples",
     scale: Annotated[
         int, typer.Option("--scale", "-s", help="Default scale when --scales not given")
@@ -1099,7 +1105,9 @@ def map_sample_all_cmd(
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
     ] = None,
-    nonfixed: Annotated[Optional[str], typer.Option(help=_NONFIXED_HELP)] = None,
+    nonfixed: Annotated[
+        Optional[str], typer.Option("--save", help=_NONFIXED_HELP)
+    ] = None,
     no_fixed: Annotated[
         bool, typer.Option("--no-fixed", help="Exclude SI_FIXED")
     ] = False,

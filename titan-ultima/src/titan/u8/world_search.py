@@ -21,8 +21,10 @@ from titan.u8.map_browser import (
 from titan.u8.save_browser import next_u8_save_browser_export
 from titan.u8.shape_browser import find_u8_browser_file, load_u8_shape_library
 
-U8_WORLD_SEARCH_OUTPUT = Path("titan-out/u8_world_query_export")
-U8_EGG_SEARCH_OUTPUT = Path("titan-out/u8_egg_query_export")
+U8_WORLD_SEARCH_OUTPUT = "world-query"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
+U8_EGG_SEARCH_OUTPUT = "egg-query"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 @dataclass(frozen=True)

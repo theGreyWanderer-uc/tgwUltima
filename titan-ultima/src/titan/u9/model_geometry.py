@@ -32,6 +32,7 @@ import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from titan.errors import InvalidDataError
 
 MODEL_SLOT_COUNT = 8_000
 _FLOAT_SIZE = 4
@@ -52,7 +53,7 @@ Vec3 = tuple[float, float, float]
 OptionalVec3 = tuple[float | None, float | None, float | None]
 
 
-class U9ModelGeometryTableError(Exception):
+class U9ModelGeometryTableError(InvalidDataError):
     """Raised when ``dimension.dat`` does not have its fixed retail extent."""
 
 

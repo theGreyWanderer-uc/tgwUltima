@@ -397,6 +397,7 @@ def cmd_color_cube_csv(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def palette_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/ankh.pal")],
     duplicates: Annotated[
@@ -418,7 +419,7 @@ def palette_export_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: current directory)"
+            "-o", "--output-dir", help="Output directory (default: current directory)"
         ),
     ] = None,
     swatch_size: Annotated[
@@ -492,6 +493,7 @@ def color_cube_info_cmd(
     raise SystemExit(cmd_color_cube_info(SimpleNamespace(file=file, palette=palette)))
 
 
+@meta(results=("text",))
 def color_cube_lookup_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")

@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from titan.u9.flx_archive import U9FlxArchive
+from titan.errors import InvalidDataError
 
 if TYPE_CHECKING:
     from titan.u9.types_dat import U9TypesDat
@@ -51,7 +52,7 @@ SFX_ASSOCIATION_SLOT_COUNT = 8192
 SFX_ASSOCIATION_REPRESENTATION = "direct_object_sound_template_link"
 
 
-class U9SoundControlError(Exception):
+class U9SoundControlError(InvalidDataError):
     """Raised when a sound-control record is structurally invalid."""
 
 

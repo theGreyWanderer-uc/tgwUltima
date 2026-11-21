@@ -77,6 +77,7 @@ from titan.u9.flx_archive import (
     U9FlxArchive,
     U9FlxArchiveError,
 )
+from titan.errors import TitanError
 
 COMMENT_FILL = 0x20
 """Shipped archives pad the comment field with spaces, not NULs."""
@@ -95,7 +96,7 @@ MAX_ENTRIES = 65536
 """Sanity ceiling; the largest shipped archive declares 10,000 slots."""
 
 
-class U9FlxWriteError(Exception):
+class U9FlxWriteError(TitanError):
     """Raised when archive contents cannot be packed into a valid FLX."""
 
 

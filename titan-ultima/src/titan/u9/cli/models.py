@@ -574,6 +574,7 @@ def cmd_dimension_csv(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def model_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     model_id: Annotated[int, typer.Argument(help="Model ID (0-7999) to inspect")],
@@ -701,7 +702,9 @@ def model_export_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: model_<id>[_<name>]/)"
+            "-o",
+            "--output-dir",
+            help="Output directory (default: model_<id>[_<name>]/)",
         ),
     ] = None,
     preview: Annotated[
@@ -772,7 +775,7 @@ def model_export_all_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: model_export/)"
+            "-o", "--output-dir", help="Output directory (default: model_export/)"
         ),
     ] = None,
     preview: Annotated[
@@ -801,6 +804,7 @@ def model_export_all_cmd(
     )
 
 
+@meta(results=("text",))
 def dimension_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
     models: Annotated[
@@ -812,6 +816,7 @@ def dimension_info_cmd(
     raise SystemExit(cmd_dimension_info(SimpleNamespace(file=file, models=models)))
 
 
+@meta(results=("text",))
 def dimension_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
     id: Annotated[int, typer.Argument(help="Model ID")],
@@ -831,7 +836,7 @@ def dimension_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory for the CSV file"),
+        typer.Option("-o", "--output-dir", help="Output directory for the CSV file"),
     ] = None,
     models: Annotated[
         Optional[str],

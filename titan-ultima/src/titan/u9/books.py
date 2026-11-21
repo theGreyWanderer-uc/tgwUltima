@@ -66,6 +66,7 @@ import struct
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.errors import InvalidDataError
 
 ENCODING = "latin-1"
 MARKUP_PREFIX = "`"
@@ -81,7 +82,7 @@ _LENGTH_SIZE = 4
 MAX_FIELD = 1 << 24
 
 
-class U9BooksError(Exception):
+class U9BooksError(InvalidDataError):
     """Raised on malformed ``BOOKS-EN.FLX`` data."""
 
 

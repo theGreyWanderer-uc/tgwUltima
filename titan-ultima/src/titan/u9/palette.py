@@ -24,6 +24,7 @@ import os
 from collections.abc import Iterable, Sequence
 
 from PIL import Image
+from titan.errors import InvalidDataError
 
 PALETTE_ENTRY_COUNT = 256
 ENTRY_SIZE = 4
@@ -35,7 +36,7 @@ RGB = tuple[int, int, int]
 RGBA = tuple[int, int, int, int]
 
 
-class U9PaletteError(ValueError):
+class U9PaletteError(InvalidDataError):
     """Raised when data cannot represent a complete U9 palette."""
 
 

@@ -62,9 +62,10 @@ from dataclasses import dataclass
 
 from titan.u6.actor import NUM_ACTORS, OFFSET_TALK_FLAGS, U6Actors
 from titan.u6.gamestate import OFFSET_GARGISH_LANG, OFFSET_QUEST_FLAG, U6GameState
+from titan.errors import InvalidDataError
 
 
-class U6FlagsError(Exception):
+class U6FlagsError(InvalidDataError):
     """Raised for an out-of-range actor/flag index, or objlist data too short to reach it."""
 
 

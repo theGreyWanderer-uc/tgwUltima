@@ -13,6 +13,12 @@ except ImportError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 
+def section_lines(config: dict[str, Any]) -> list[str]:
+    """Render ``{section: {...}}`` (see :func:`titan._meta.install_config`) as
+    TOML lines, preceded by a blank line, for setup to append."""
+    return ["", *tomli_w.dumps(config).splitlines()]
+
+
 def _merge_missing_config(existing: dict[str, Any], generated: dict[str, Any]) -> None:
     """Add missing setup entries without replacing custom settings."""
     for key, value in generated.items():

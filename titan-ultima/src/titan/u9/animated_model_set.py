@@ -25,12 +25,13 @@ from titan.u9.animated_model_bundle import (
 from titan.u9.mesh_export import TextureResolver
 from titan.u9.model import U9Model
 from titan.u9.node_registry import U9NodeRegistry
+from titan.errors import TitanError
 
 ANIMATED_MODEL_SET_SCHEMA = "titan.u9.rigid-animated-model-set"
 ANIMATED_MODEL_SET_SCHEMA_VERSION = 1
 
 
-class U9AnimatedModelSetError(Exception):
+class U9AnimatedModelSetError(TitanError):
     """Raised when independent clips cannot form one actor animation set."""
 
 

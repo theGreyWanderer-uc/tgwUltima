@@ -28,6 +28,7 @@ from titan.u6.look import U6LookError
 from titan.u6.lzw import U6LzwError
 from titan.u6.object import U6ObjectError
 from titan._meta import meta
+from titan.errors import InstallNotFoundError, exit_code
 
 __all__ = ["register_martian_inspection_commands"]
 
@@ -35,7 +36,9 @@ __all__ = ["register_martian_inspection_commands"]
 def _directory(explicit: str | None) -> Path:
     path = explicit or get_config().get("md", {}).get("game", {}).get("base")
     if not path:
-        raise typer.BadParameter("Pass --gamedir or set [md.game] base in titan.toml")
+        raise InstallNotFoundError(
+            "Pass --game-dir or set [md.game] base in titan.toml"
+        )
     return resolve_martian_directory(path)
 
 
@@ -64,7 +67,7 @@ def _inspection_errors() -> Iterator[None]:
         U6ObjectError,
     ) as exc:
         typer.echo(f"ERROR: Martian Dreams inspection: {exc}", err=True)
-        raise typer.Exit(1) from exc
+        raise typer.Exit(exit_code(exc)) from exc
 
 
 def register_martian_inspection_commands(app: typer.Typer) -> None:
@@ -76,14 +79,12 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
         gamedir: Annotated[
             Optional[str],
             typer.Option(
-                "-g", "--gamedir", help="MARTIAN directory or installation parent"
+                "-g", "--game-dir", help="MARTIAN directory or installation parent"
             ),
         ] = None,
         savegame: Annotated[
             Optional[str],
-            typer.Option(
-                "--savegame", help="Read actor state from DOS SAVEGAME/OBJLIST"
-            ),
+            typer.Option("--save", help="Read actor state from DOS SAVEGAME/OBJLIST"),
         ] = None,
         actor: Annotated[
             Optional[int],
@@ -130,13 +131,13 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
         gamedir: Annotated[
             Optional[str],
             typer.Option(
-                "-g", "--gamedir", help="MARTIAN directory or installation parent"
+                "-g", "--game-dir", help="MARTIAN directory or installation parent"
             ),
         ] = None,
         savegame: Annotated[
             Optional[str],
             typer.Option(
-                "--savegame", help="Read DOS SAVEGAME/OBJLIST instead of initial state"
+                "--save", help="Read DOS SAVEGAME/OBJLIST instead of initial state"
             ),
         ] = None,
         output: Annotated[
@@ -161,7 +162,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
         gamedir: Annotated[
             Optional[str],
             typer.Option(
-                "-g", "--gamedir", help="MARTIAN directory or installation parent"
+                "-g", "--game-dir", help="MARTIAN directory or installation parent"
             ),
         ] = None,
         item: Annotated[
@@ -194,7 +195,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
         gamedir: Annotated[
             Optional[str],
             typer.Option(
-                "-g", "--gamedir", help="MARTIAN directory or installation parent"
+                "-g", "--game-dir", help="MARTIAN directory or installation parent"
             ),
         ] = None,
         output: Annotated[
@@ -217,7 +218,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
         gamedir: Annotated[
             Optional[str],
             typer.Option(
-                "-g", "--gamedir", help="MARTIAN directory or installation parent"
+                "-g", "--game-dir", help="MARTIAN directory or installation parent"
             ),
         ] = None,
         tile: Annotated[
@@ -262,7 +263,7 @@ def register_martian_inspection_commands(app: typer.Typer) -> None:
         gamedir: Annotated[
             Optional[str],
             typer.Option(
-                "-g", "--gamedir", help="MARTIAN directory or installation parent"
+                "-g", "--game-dir", help="MARTIAN directory or installation parent"
             ),
         ] = None,
         book: Annotated[

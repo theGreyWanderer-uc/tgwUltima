@@ -36,9 +36,10 @@ from titan.u9.texture_writer import U9TextureWriteError, frame_encoding
 from titan.u9.typename import U9TypeNames
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan._files import case_insensitive_child
+from titan.errors import TitanError
 
 
-class U9AssetReportError(Exception):
+class U9AssetReportError(TitanError):
     """Raised when report inputs or output options are invalid."""
 
 

@@ -13,6 +13,7 @@ __all__ = [
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 START_MAGIC = b"U9.008"
 SAVE_MAGIC = b"U9:008"
@@ -21,7 +22,7 @@ MAX_MAP_NUMBER = 255  # the game archives, deletes and restores nonfixed.0-255
 MAX_SHIPPED_MAP_NUMBER = 239  # the highest region number with shipped files
 
 
-class U9SaveError(Exception):
+class U9SaveError(InvalidDataError):
     """Raised when a U9 save selector or archive is malformed."""
 
 

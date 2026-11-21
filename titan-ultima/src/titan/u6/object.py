@@ -120,6 +120,7 @@ from dataclasses import dataclass, field
 
 from titan.u6.game_profile import U6GameProfile, U6_PROFILE
 from titan.u6.map import DUNGEON_LEVELS, SURFACE_SIDE_SUPERCHUNKS, SURFACE_SUPERCHUNKS
+from titan.errors import InvalidDataError
 
 # Location (mutually exclusive; status & STATUS_LOCATION_MASK == one of these)
 STATUS_ON_MAP = 0x00
@@ -143,7 +144,7 @@ RECORD_SIZE = 8
 EGG_OBJ_N = 335
 
 
-class U6ObjectError(Exception):
+class U6ObjectError(InvalidDataError):
     """Raised on malformed object-block data."""
 
 

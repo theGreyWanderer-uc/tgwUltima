@@ -42,6 +42,7 @@ from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
 from titan.u9.mesh_export import TextureResolver
 from titan.u9.model import U9Model, U9ModelError
 from titan.u9.node_registry import U9NodeRegistry
+from titan.errors import TitanError
 
 ANIMATION_LIBRARY_CATALOGUE_SCHEMA = "titan.u9.animation-library-catalogue"
 ANIMATION_LIBRARY_CATALOGUE_SCHEMA_VERSION = 1
@@ -49,7 +50,7 @@ ANIMATION_LIBRARY_EXPORT_SCHEMA = "titan.u9.animation-library-export"
 ANIMATION_LIBRARY_EXPORT_SCHEMA_VERSION = 1
 
 
-class U9PlannedAnimationLibraryExportError(Exception):
+class U9PlannedAnimationLibraryExportError(TitanError):
     """Raised when an approved animation plan cannot be exported safely."""
 
 

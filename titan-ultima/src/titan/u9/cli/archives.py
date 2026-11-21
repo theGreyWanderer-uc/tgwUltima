@@ -213,6 +213,7 @@ def cmd_flx_repack(args: SimpleNamespace) -> int:
     return 0 if (equivalent or replacements) else 1
 
 
+@meta(results=("text",))
 def flx_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
 ) -> None:
@@ -226,7 +227,7 @@ def flx_extract_cmd(
     index: Annotated[int, typer.Argument(help="Entry index to extract")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract one entry from an Ultima 9 FLX archive."""
@@ -241,7 +242,7 @@ def flx_extract_all_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: <file>_entries/)"
+            "-o", "--output-dir", help="Output directory (default: <file>_entries/)"
         ),
     ] = None,
 ) -> None:

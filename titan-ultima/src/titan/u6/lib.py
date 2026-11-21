@@ -63,6 +63,7 @@ import os
 from dataclasses import dataclass
 
 from titan.u6.lzw import U6Lzw
+from titan.errors import InvalidDataError
 
 HEADER_SIZE = 4
 FLAG_COMPRESSED = 0x01
@@ -70,7 +71,7 @@ FLAG_COMPRESSED_MD_FONTS = 0x20
 FLAG_DEFER_TO_NEXT = 0xFF
 
 
-class U6LibraryError(Exception):
+class U6LibraryError(InvalidDataError):
     """Raised on malformed library data or an out-of-range item index."""
 
 

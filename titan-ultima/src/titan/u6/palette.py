@@ -28,13 +28,14 @@ __all__ = ["U6Palette", "U6PaletteError"]
 import os
 
 from PIL import Image
+from titan.errors import InvalidDataError
 
 PALETTE_DATA_SIZE = 768  # 256 * 3
 TRAILING_SIZE = 256
 TOTAL_SIZE = PALETTE_DATA_SIZE + TRAILING_SIZE
 
 
-class U6PaletteError(Exception):
+class U6PaletteError(InvalidDataError):
     """Raised when palette data is too short."""
 
 

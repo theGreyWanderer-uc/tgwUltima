@@ -24,9 +24,10 @@ from titan.u9.object_placement import (
 from titan.u9.region_scene import TERRAIN_POINT_WORLD_XY, U9RegionScene
 from titan.u9.transform import mat4_trs
 from titan.u9.model import material_alpha
+from titan.errors import TitanError
 
 
-class U9ObjectRasterError(Exception):
+class U9ObjectRasterError(TitanError):
     """Raised when placed model meshes cannot be rasterized faithfully."""
 
 

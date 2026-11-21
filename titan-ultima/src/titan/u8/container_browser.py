@@ -42,7 +42,8 @@ from titan.u8.save_browser import (
 from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
 from titan.u8.shape_browser import U8ShapeLibrary, find_u8_browser_file
 
-U8_CONTAINER_BROWSER_OUTPUT = Path("titan-out/u8_container_browse_export")
+U8_CONTAINER_BROWSER_OUTPUT = "container-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 @dataclass

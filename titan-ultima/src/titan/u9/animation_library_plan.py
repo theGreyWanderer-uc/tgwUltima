@@ -23,6 +23,7 @@ from titan.u9.animation_model_report import (
     U9AnimationModelReportError,
     build_animation_model_report,
 )
+from titan.errors import TitanError
 
 ANIMATION_LIBRARY_PLAN_SCHEMA = "titan.u9.animation-library-plan"
 ANIMATION_LIBRARY_PLAN_SCHEMA_VERSION = 1
@@ -30,7 +31,7 @@ ANIMATION_LIBRARY_PLAN_SCHEMA_VERSION = 1
 _GENERIC_ACTOR_HINTS = {"", "humanoid", "npc", "magic", "ui"}
 
 
-class U9AnimationLibraryPlanError(Exception):
+class U9AnimationLibraryPlanError(TitanError):
     """Raised when animation discovery cannot produce a usable library plan."""
 
 

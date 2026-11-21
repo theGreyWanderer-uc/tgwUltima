@@ -35,6 +35,8 @@ from typing import Annotated, Literal, Optional
 
 import typer
 
+from titan._cli_aliases import root_group
+from titan._results import record_output
 from titan._version import TITAN_VERSION
 from titan import _wizard_ui as ui
 from titan._config import (
@@ -59,6 +61,7 @@ from titan._meta import meta
 # ============================================================================
 
 app = typer.Typer(
+    cls=root_group({"--output": "--output-dir"}),
     name="titan",
     help=(
         "TITAN \u2013 Tool for Interpreting and Transforming Archival Nodes.\n"
@@ -222,6 +225,7 @@ def cmd_flex_extract(args: SimpleNamespace) -> int:
         extracted += 1
 
     outdir_display = outdir.rstrip("/\\") + "/"
+    record_output(outdir)
     print(f"Extracted {extracted} records from {flex_name} -> {outdir_display}")
     if skipped > 0:
         print(f"  ({skipped} empty records skipped)")
@@ -643,6 +647,7 @@ def cmd_config(args: SimpleNamespace) -> int:
     print(f"Data folder:   {data_dir()}  (working data; {DATA_ENV} moves it)")
 
     u8 = config.get("u8", {})
+    uw1 = config.get("uw1", {})
     uw2 = config.get("uw2", {})
     u7bg = config.get("u7bg", {})
     u7si = config.get("u7si", {})
@@ -651,7 +656,7 @@ def cmd_config(args: SimpleNamespace) -> int:
     md = config.get("md", {})
     u6 = config.get("u6", {})
     exult = config.get("exult", {})
-    if any((u8, uw2, u7bg, u7si, uo, u9, md, u6, exult)):
+    if any((u8, uw1, uw2, u7bg, u7si, uo, u9, md, u6, exult)):
         _print_kv_section("[u8.game]", u8.get("game", {}))
         _print_kv_section(
             "[u8.paths]",
@@ -659,6 +664,7 @@ def cmd_config(args: SimpleNamespace) -> int:
             check_exists=True,
             kinds="u8",
         )
+        _print_kv_section("[uw1.game]", uw1.get("game", {}), check_exists=True)
         _print_kv_section("[uw2.game]", uw2.get("game", {}), check_exists=True)
         _print_kv_section("[u6.game]", u6.get("game", {}), check_exists=True)
         _print_kv_section(
@@ -754,6 +760,70 @@ def cmd_config(args: SimpleNamespace) -> int:
     return 0
 
 
+def _setup_detect_install(
+    game_id: str,
+    label: str,
+    prompt: str,
+    existing_config: dict,
+    setup_updates: dict,
+    *,
+    rejected: str,
+):
+    """Find, report and prompt for one game's install through the install protocol.
+
+    Returns the chosen valid :class:`~titan._meta.Installation`, or ``None``.
+    A chosen root that differs from the configured base becomes a base
+    correction in *setup_updates*.
+    """
+    from titan._meta import find_installs, get_game
+
+    section = get_game(game_id).config_section  # type: ignore[union-attr]
+    print(f"\nSearching for {label} installations...")
+    found = find_installs(game_id, existing_config)
+    for install in found:
+        if install.valid:
+            print(f"  Found {label}: {install.root}")
+            continue
+        print(f"  Incomplete or damaged {label} installation: {install.root}")
+        for key, status in install.problems.items():
+            print(f"    {install.resources.get(key, key)} [{status}]")
+    previous = existing_config.get(section, {}).get("game", {}).get("base")
+    detected = next((item for item in found if item.valid), None)
+    default = str(previous or (detected.root if detected else ""))
+    value = (
+        ui.path(f"{prompt} [{default or 'optional'}]: ", default).strip().strip('"')
+    ) or default
+    return _setup_select_install(
+        game_id, value, previous, setup_updates, rejected=rejected
+    )
+
+
+def _setup_select_install(
+    game_id: str,
+    value: str,
+    previous: Optional[str],
+    setup_updates: dict,
+    *,
+    rejected: str,
+):
+    """The valid install at *value* (or ``None``), recording a base correction."""
+    from titan._meta import discover_installs, get_game
+
+    if not value:
+        return None
+    section = get_game(game_id).config_section  # type: ignore[union-attr]
+    selected = next(
+        (item for item in discover_installs(game_id, Path(value)) if item.valid),
+        None,
+    )
+    if selected is None:
+        print(f"  {rejected}; existing settings kept.")
+    elif previous and selected.root != Path(previous).expanduser().absolute():
+        print(f"  Proposed {section} base correction: {previous} -> {selected.root}")
+        setup_updates[section] = {"game": {"base": selected.root.as_posix()}}
+    return selected
+
+
 def cmd_setup(args: SimpleNamespace) -> int:
     """Interactive first-time setup wizard \u2014 creates titan.toml."""
     import titan._config as _config_mod
@@ -781,33 +851,22 @@ def cmd_setup(args: SimpleNamespace) -> int:
         u8_install_candidates,
         u8_setup_lines,
     )
-    from titan.u9.install import (
-        discover_u9_installs,
-        u9_install_candidates,
-        u9_setup_lines,
-    )
-    from titan.u6.install import (
-        inspect_u6_install,
-        u6_install_candidates,
-        u6_resource_paths,
-        u6_setup_lines,
-    )
-    from titan.md.install import (
-        inspect_martian_install,
-        martian_install_candidates,
-        martian_resource_paths,
-        martian_setup_lines,
-    )
+    from titan._meta import find_installs, install_config
+    from titan._setup_config import section_lines
+    from titan.md.install import inspect_martian_install, martian_installation
     from titan.uo.installs import detect_uo_install
 
     explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
     toml_path = Path(explicit).expanduser() if explicit else Path.cwd() / "titan.toml"
     existing_config = load_config(str(toml_path)) if toml_path.is_file() else {}
-    existing_u8_game = existing_config.get("game", {})
+    from titan.u8.install import u8_section
+
+    existing_u8_game = u8_section(existing_config).get("game", {})
     print("TITAN Setup Wizard")
     print("=" * 55)
     print(
-        "This will create titan.toml for Ultima 6, Ultima 7, Ultima 8, Ultima 9, Martian Dreams, and UO installs.\n"
+        "This will create titan.toml for Ultima 6, Ultima 7, Ultima 8, Ultima 9, Martian Dreams,\n"
+        "Ultima Underworld I and II, and UO installs.\n"
     )
     if toml_path.exists():
         print(f"Existing config: {toml_path}")
@@ -920,87 +979,39 @@ def cmd_setup(args: SimpleNamespace) -> int:
         if correction:
             setup_updates[section_key] = correction
 
-    # -- U9 install detection -------------------------------------
-    print("\nSearching for Ultima 9 installations...")
-    found_u9 = {}
-    for candidate in u9_install_candidates(existing_config):
-        for u9_installation in discover_u9_installs(candidate):
-            if u9_installation.root in found_u9:
-                continue
-            found_u9[u9_installation.root] = u9_installation
-            if u9_installation.valid:
-                print(f"  Found Ultima 9: {u9_installation.root}")
-            else:
-                print(
-                    f"  Incomplete or damaged Ultima 9 installation: {u9_installation.root}"
-                )
-                for key, status in u9_installation.checks.items():
-                    if status != "OK":
-                        print(f"    {u9_installation.paths[key]} [{status}]")
-    previous_u9_base = existing_config.get("u9", {}).get("game", {}).get("base")
-    detected_u9 = next((item for item in found_u9.values() if item.valid), None)
-    u9_default = str(previous_u9_base or (detected_u9.root if detected_u9 else ""))
-    u9_input = (
-        ui.path(f"Ultima IX base [{u9_default or 'optional'}]: ", u9_default)
-        .strip()
-        .strip('"')
+    # -- U9, U6, UW1 and UW2 install detection ---------------------
+    simple_games = (
+        # game id, label, prompt, what a rejected path lacks
+        (
+            "u9",
+            "Ultima 9",
+            "Ultima IX base",
+            "No valid U9 bitmap installation at that path",
+        ),
+        ("u6", "Ultima 6", "Ultima VI base", "No Ultima VI map data at that path"),
+        (
+            "uw1",
+            "Ultima Underworld",
+            "Ultima Underworld base",
+            "No Ultima Underworld data at that path",
+        ),
+        (
+            "uw2",
+            "Ultima Underworld II",
+            "Ultima Underworld II base",
+            "No Ultima Underworld II data at that path",
+        ),
     )
-    u9_value = u9_input or u9_default
-    selected_u9 = None
-    if u9_value:
-        selected_u9 = next(
-            (item for item in discover_u9_installs(Path(u9_value)) if item.valid), None
+    selected_installs = {
+        game_id: _setup_detect_install(
+            game_id, label, prompt, existing_config, setup_updates, rejected=rejected
         )
-        if selected_u9 is None:
-            print(
-                "  No valid U9 bitmap installation at that path; existing settings kept."
-            )
-        elif (
-            previous_u9_base
-            and selected_u9.root != Path(previous_u9_base).expanduser().absolute()
-        ):
-            print(
-                f"  Proposed u9 base correction: {previous_u9_base} -> {selected_u9.root}"
-            )
-            setup_updates["u9"] = {"game": {"base": selected_u9.root.as_posix()}}
-
-    # -- Ultima VI install detection ------------------------------
-    print("\nSearching for Ultima 6 installations...")
-    found_u6 = list(
-        dict.fromkeys(
-            u6_root
-            for candidate in u6_install_candidates(existing_config)
-            if (u6_root := inspect_u6_install(candidate)) is not None
-        )
-    )
-    for u6_root in found_u6:
-        print(f"  Found Ultima 6: {u6_root}")
-    previous_u6_base = existing_config.get("u6", {}).get("game", {}).get("base")
-    u6_default = str(previous_u6_base or (found_u6[0] if found_u6 else ""))
-    u6_value = (
-        ui.path(f"Ultima VI base [{u6_default or 'optional'}]: ", u6_default)
-        .strip()
-        .strip('"')
-    ) or u6_default
-    selected_u6 = inspect_u6_install(Path(u6_value)) if u6_value else None
-    if u6_value and selected_u6 is None:
-        print("  No Ultima VI map data at that path; existing settings kept.")
-    elif (
-        previous_u6_base
-        and selected_u6 is not None
-        and selected_u6 != Path(previous_u6_base).expanduser().absolute()
-    ):
-        setup_updates["u6"] = {"game": {"base": selected_u6.as_posix()}}
+        for game_id, label, prompt, rejected in simple_games
+    }
 
     # -- Martian Dreams install detection -------------------------
     print("\nSearching for Martian Dreams installations...")
-    found_md = list(
-        dict.fromkeys(
-            md_root
-            for candidate in martian_install_candidates(existing_config)
-            if (md_root := inspect_martian_install(candidate)) is not None
-        )
-    )
+    found_md = [install.root for install in find_installs("md", existing_config)]
     for root in found_md:
         print(f"  Found Martian Dreams: {root}")
     previous_md_base = existing_config.get("md", {}).get("game", {}).get("base")
@@ -1115,18 +1126,24 @@ def cmd_setup(args: SimpleNamespace) -> int:
     print(f"  U7 SI STATIC: {u7si_static_detected or '(empty)'}")
     print(f"  U7 SI GAMEDAT:{u7si_gamedat or '(empty)'}")
     print(f"  UO base:      {uo_base or '(empty)'}")
-    print(f"  U9 base:      {selected_u9.root if selected_u9 else '(empty)'}")
     print(f"  MD base:      {md_base or '(empty)'}")
-    print(f"  U6 base:      {selected_u6 or '(empty)'}")
-    if selected_u6:
-        for key, resource in u6_resource_paths(selected_u6).items():
-            print(f"  U6 {key}: {resource} [OK]")
+    for game_id, selected in selected_installs.items():
+        label = f"{game_id.upper()} base:"
+        print(f"  {label:<14}{selected.root if selected else '(empty)'}")
     if selected_md:
-        for key, resource in martian_resource_paths(selected_md).items():
+        for key, resource in martian_installation(selected_md).resources.items():
             print(f"  MD {key}: {resource} [OK]")
-    if selected_u9:
-        for key, status in selected_u9.checks.items():
-            print(f"  U9 {key}: {selected_u9.paths[key]} [{status}]")
+    for game_id, selected in selected_installs.items():
+        if selected is None:
+            continue
+        shown = dict(selected.resources)
+        if game_id == "u9":
+            from titan.u9.install import U9_RESOURCE_NAMES
+
+            shown = {key: shown[key] for key in U9_RESOURCE_NAMES}
+        for key, resource in shown.items():
+            status = selected.problems.get(key, "OK")
+            print(f"  {game_id.upper()} {key}: {resource} [{status}]")
     print(f"  Exult BG FLX: {exult_bg_flx or '(empty)'}")
     print(f"  Exult SI FLX: {exult_si_flx or '(empty)'}")
     for label, selected in (("BG", selected_bg), ("SI", selected_si)):
@@ -1193,10 +1210,9 @@ def cmd_setup(args: SimpleNamespace) -> int:
         u7bg_mod_sources = []
         u7si_mod_sources = []
         setup_updates = {}
-        selected_u9 = None
+        selected_installs = dict.fromkeys(selected_installs)
         selected_md = None
         md_base = None
-        selected_u6 = None
 
         manual_u8_static = (
             ui.path("U8 STATIC path [optional]: ").strip().replace("\\", "/")
@@ -1210,25 +1226,23 @@ def cmd_setup(args: SimpleNamespace) -> int:
         manual_u7si_static = (
             ui.path("U7 SI STATIC path [optional]: ").strip().replace("\\", "/")
         )
-        manual_u9 = ui.path("U9 installation base [optional]: ").strip().strip('"')
-        if manual_u9:
-            selected_u9 = next(
-                (item for item in discover_u9_installs(Path(manual_u9)) if item.valid),
-                None,
+        manual_prompts = {
+            "u9": "U9 installation base",
+            "u6": "U6 game directory",
+            "uw1": "UW1 installation base",
+            "uw2": "UW2 installation base",
+        }
+        for game_id, _, _, rejected in simple_games:
+            manual = (
+                ui.path(f"{manual_prompts[game_id]} [optional]: ").strip().strip('"')
             )
-            if selected_u9 is None:
-                print(
-                    "  No valid U9 bitmap installation at that path; existing settings kept."
-                )
-            elif previous_u9_base:
-                setup_updates["u9"] = {"game": {"base": selected_u9.root.as_posix()}}
-        manual_u6 = ui.path("U6 game directory [optional]: ").strip().strip('"')
-        if manual_u6:
-            selected_u6 = inspect_u6_install(Path(manual_u6))
-            if selected_u6 is None:
-                print("  No Ultima VI map data at that path; existing settings kept.")
-            elif previous_u6_base:
-                setup_updates["u6"] = {"game": {"base": selected_u6.as_posix()}}
+            selected_installs[game_id] = _setup_select_install(
+                game_id,
+                manual,
+                existing_config.get(game_id, {}).get("game", {}).get("base"),
+                setup_updates,
+                rejected=rejected,
+            )
         manual_md = (
             ui.path("MD MARTIAN directory or installation parent [optional]: ")
             .strip()
@@ -1302,28 +1316,25 @@ def cmd_setup(args: SimpleNamespace) -> int:
             "u7si", "serpentisle", u7si_base, si_paths, u7si_gamedat, u7si_mod_sources
         )
 
-    if selected_u9:
-        lines += u9_setup_lines(selected_u9)
-
-    if selected_u6:
-        lines += u6_setup_lines(selected_u6)
+    for selected in selected_installs.values():
+        if selected is not None:
+            lines += section_lines(install_config(selected))
 
     if selected_md and md_base:
-        lines += martian_setup_lines(selected_md, md_base)
+        lines += section_lines(
+            install_config(martian_installation(selected_md, md_base))
+        )
 
     if uo_base:
-        lines += [
-            "",
-            "[uo.game]",
-            f'base     = "{uo_base}"',
-        ]
+        lines += section_lines({"uo": {"game": {"base": uo_base}}})
 
-    if exult_bg_flx or exult_si_flx:
-        lines += ["", "[exult.paths]"]
-        if exult_bg_flx:
-            lines.append(f'bg_flx   = "{exult_bg_flx}"')
-        if exult_si_flx:
-            lines.append(f'si_flx   = "{exult_si_flx}"')
+    exult_paths = {
+        key: value
+        for key, value in (("bg_flx", exult_bg_flx), ("si_flx", exult_si_flx))
+        if value
+    }
+    if exult_paths:
+        lines += section_lines({"exult": {"paths": exult_paths}})
 
     from titan._setup_config import write_setup_config
 
@@ -1352,6 +1363,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
 
 @app.command("flex-info")
+@meta(results=("text",))
 def flex_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
 ) -> None:
@@ -1360,6 +1372,7 @@ def flex_info_cmd(
 
 
 @app.command("flex-list")
+@meta(results=("text",))
 def flex_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
 ) -> None:
@@ -1375,7 +1388,7 @@ def flex_extract_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output directory (default: ./<flexname>/; U8SHAPES.FLX and "
             "GLOB.FLX from the configured U8 go to titan's working folders)",
         ),
@@ -1477,7 +1490,7 @@ def music_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .xmi XMIDI file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Convert an XMIDI (.xmi) file to standard MIDI."""
@@ -1490,7 +1503,9 @@ def music_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .xmi files")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <dir>/midi/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <dir>/midi/)"
+        ),
     ] = None,
 ) -> None:
     """Batch-convert all XMIDI .xmi files to standard MIDI."""
@@ -1516,6 +1531,7 @@ def setup_cmd() -> None:
 
 
 @app.command("config")
+@meta(results=("text",))
 def config_cmd(
     edit: Annotated[
         bool,
@@ -1603,8 +1619,19 @@ for _compat_name, _compat_fn in _U8_COMPAT_COMMANDS:
 
 
 def main() -> int:
-    """CLI entry point."""
-    app()
+    """CLI entry point.
+
+    titan's own errors exit with their category's status inside the app (see
+    :data:`titan.errors.EXIT_CODES`). Anything else is a bug: print the
+    traceback and exit 70, so a front end can say "please report this".
+    """
+    try:
+        app()
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        return 70
     return 0
 
 

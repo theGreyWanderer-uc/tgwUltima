@@ -58,6 +58,7 @@ import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
+from titan.errors import InvalidDataError
 
 if TYPE_CHECKING:
     from titan.u9.text import U9TextArchive
@@ -117,7 +118,7 @@ def key_crc(key: bytes) -> int:
     return register ^ 0xFFFFFFFF
 
 
-class U9TextKeyTableError(Exception):
+class U9TextKeyTableError(InvalidDataError):
     """Raised when ``text.dat`` is truncated or has impossible framing."""
 
 

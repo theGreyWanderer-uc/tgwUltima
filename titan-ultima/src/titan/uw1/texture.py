@@ -14,13 +14,14 @@ from PIL import Image
 
 from titan.uw1.palette import UW1Palette
 from titan.uw2.strings import GameStrings
+from titan.errors import InvalidDataError
 
 _TEXTURE_ARCHIVE_NAME = re.compile(r"^(?P<kind>[FW])(?P<size>\d+)\.TR$", re.I)
 _TEXTURE_STRING_BLOCK = 10
 _FLOOR_STRING_ORIGIN = 510
 
 
-class UW1TextureError(ValueError):
+class UW1TextureError(InvalidDataError):
     """Raised when UW1 texture data is missing or malformed."""
 
 

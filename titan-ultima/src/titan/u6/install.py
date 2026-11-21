@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
+
+from titan._meta import Installation
 
 U6_RESOURCE_NAMES = {
     "palette": "U6PAL",
@@ -114,15 +115,32 @@ def u6_resource_paths(root: Path) -> dict[str, Path]:
     }
 
 
+def install_candidates(config: dict) -> list[Path]:
+    """Install protocol (see :func:`titan._meta.install_candidates`)."""
+    return u6_install_candidates(config)
+
+
+def discover_installs(path: Path) -> list[Installation]:
+    """Install protocol: the Ultima VI install at *path*, if it is one."""
+    root = inspect_u6_install(path)
+    if root is None:
+        return []
+    return [Installation("u6", root, u6_resource_paths(root))]
+
+
+def install_config(install: Installation) -> dict:
+    """Install protocol: ``[u6.game]`` base and ``[u6.paths]`` relative to it."""
+    return {
+        "game": {"base": install.root.as_posix()},
+        "paths": {
+            key: path.relative_to(install.root).as_posix()
+            for key, path in install.resources.items()
+        },
+    }
+
+
 def u6_setup_lines(root: Path) -> list[str]:
     """Render ``[u6.game]`` and ``[u6.paths]`` for a new ``titan.toml``."""
-    lines = [
-        "",
-        "[u6.game]",
-        f"base = {json.dumps(root.as_posix())}",
-        "",
-        "[u6.paths]",
-    ]
-    for key, resource in u6_resource_paths(root).items():
-        lines.append(f"{key} = {json.dumps(resource.relative_to(root).as_posix())}")
-    return lines
+    from titan._setup_config import section_lines
+
+    return section_lines({"u6": install_config(discover_installs(root)[0])})

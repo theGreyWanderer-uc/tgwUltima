@@ -42,13 +42,14 @@ __all__ = ["render_preview", "PreviewError", "PreviewUnavailableError"]
 
 import glob
 import os
+from titan.errors import TitanError, UnsupportedError
 
 
-class PreviewError(Exception):
+class PreviewError(TitanError):
     """Raised when a model-export folder has no renderable OBJ."""
 
 
-class PreviewUnavailableError(PreviewError):
+class PreviewUnavailableError(PreviewError, UnsupportedError):
     """Raised when ``pyvista`` (an optional dependency) isn't installed."""
 
 

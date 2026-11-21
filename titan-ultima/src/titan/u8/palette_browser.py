@@ -21,7 +21,8 @@ from titan.u8.palette import U8Palette
 from titan.u8.shape_browser import configured_u8_browser_file, find_u8_browser_file
 from titan.u8.xformpal import U8_XFORM_PALETTE
 
-U8_PALETTE_BROWSER_OUTPUT = Path("titan-out/u8_palette_browse_export")
+U8_PALETTE_BROWSER_OUTPUT = "palette-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 U8_PALETTE_EFFECTS = (
     "Normal",
     "Greyscale",

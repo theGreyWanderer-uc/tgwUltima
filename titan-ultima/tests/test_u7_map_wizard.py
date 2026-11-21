@@ -11,7 +11,7 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from titan import _wizard_ui as ui
-from titan.u7 import cli, map_wizard as wizard
+from titan.u7 import cli, map_wizard_ui as wizard
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapRenderer, U7TileRectOverlay

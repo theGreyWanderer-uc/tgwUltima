@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
 from titan.u8.flags import U8FlagSymbols
 from titan.u8.npc_browser import U8NpcSession, discover_u8_npc_sources
@@ -583,9 +584,11 @@ def run_u8_save_browser(
     anim: Path | None = None,
     symbols: Path | None = None,
     names: Path | None = None,
-    output: Path = U8_SAVE_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> int:
     """Browse native saves/GAMEDAT; redirected input uses shared line-menu fallback."""
+    if output is None:
+        output = export_dir("u8", U8_SAVE_BROWSER_OUTPUT)
     print("\nTitan U8 Save Browser")
     try:
         flag_symbols = U8FlagSymbols.from_file(symbols) if symbols else None
@@ -701,11 +704,13 @@ def save_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Export folder; existing files are preserved"
+            "-o", "--output-dir", help="Export folder; existing files are preserved"
         ),
-    ] = U8_SAVE_BROWSER_OUTPUT,
+    ] = None,
 ) -> None:
     """Browse native save entries/state, NPCs, flags, maps, kernel and comparisons."""
+    if output is None:
+        output = export_dir("u8", U8_SAVE_BROWSER_OUTPUT)
     from titan._config import get_config
     from titan.u8.install import resolve_u8_save
 

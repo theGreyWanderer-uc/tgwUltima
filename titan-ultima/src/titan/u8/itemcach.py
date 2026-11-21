@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Iterator
 
 from titan.u8.state_io import parse_u8_state_flex, read_u8_state_bytes
+from titan.errors import InvalidDataError
 
 __all__ = [
     "U8ItemCache",
@@ -60,7 +61,7 @@ ITEM_STATUS_NAMES = {
 }
 
 
-class U8ItemCacheError(ValueError):
+class U8ItemCacheError(InvalidDataError):
     """ITEMCACH.DAT's container or required item/cache blocks are malformed."""
 
 

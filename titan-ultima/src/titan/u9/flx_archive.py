@@ -63,6 +63,7 @@ __all__ = [
 import os
 import struct
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 COMMENT_SIZE = 0x4C
 VERSION_OFFSET = 0x54
@@ -91,7 +92,7 @@ MAX_ENTRIES = 1 << 20
 """Sanity ceiling on the directory. The largest shipped archive declares 16,384."""
 
 
-class U9FlxArchiveError(Exception):
+class U9FlxArchiveError(InvalidDataError):
     """Raised on malformed FLX archive data or an out-of-range entry index."""
 
 

@@ -15,6 +15,94 @@ work for the next release.
   about you, and gives up quickly when you're offline. Ordinary commands
   never check. Set `TITAN_NO_UPDATE_CHECK=1` to turn it off. Front ends can
   ask too, with `latest_release()` and `is_dev_build()` in `titan._version`.
+- **Front-end metadata for every command:** the 70 commands that had no
+  `@meta` tag now have one, so `titan._meta.command_meta()` describes every
+  visible command. Most of them print a report (`results=("text",)`): the
+  U9 `-info`/`-list`/`-show` inspectors, U6 `lib-list`, `object-list`,
+  `actor-list` and `flags-*`, `u8 save-list`, `uw2 object-info`, and root
+  `flex-info`, `flex-list` and `config`. Some also say what their
+  parameters mean: `u9 save-check --json` is an output file, `u7 map-create
+  --output-root` and `dialogue prepare --workdir` are output folders, and
+  `dialogue validate`/`launch --workdir` read the folder `prepare` writes.
+  A new test fails when a visible command has no tag.
+- **Ultima Underworld in setup:** `titan setup` now finds Ultima Underworld
+  and Ultima Underworld II installs, including both games inside a GOG
+  "Ultima Underworld 1+2" folder, and writes `[uw1.game]` / `[uw2.game]`.
+  `titan config` shows `[uw1.game]` too.
+- **One way to find installs, for every game:** front ends can find and check
+  installs without running setup's prompts. `titan._meta` now has
+  `find_installs(game_id)`, `inspect_install(game_id, path)`,
+  `discover_installs(game_id, path)` and `install_candidates(game_id)`, which
+  return `Installation` records (root, resources found, problems, settings),
+  and `install_config(install)`, which gives the `titan.toml` section to
+  write. Every game with a config section supports them: U6, Martian Dreams,
+  UW1, UW2, U7 Black Gate and Serpent Isle, U8, U9 and UO. Setup uses the same
+  code, so the CLI and front ends agree on what counts as an install.
+
+### Changed
+
+- **Option names now match across games.** The old spellings still work, and
+  `--help` shows only the new ones:
+
+  | Old | New | Where |
+  |---|---|---|
+  | `--gamedir` | `--game-dir` | U6, Martian Dreams, UW1, UW2 |
+  | `--savegame` | `--save` | Martian Dreams |
+  | `--nonfixed` | `--save` | U8 (U9's `--nonfixed`, a region file, is unchanged) |
+  | `--gamedat` | `--save` | U7 commands that read a GAMEDAT folder or Exult save |
+  | `--output` | `--output-dir` | Commands that write a folder of files; `-o` is unchanged |
+  | `--output-root` | `--output-dir` | `u7 map-create`, `u3 map-create` |
+  | `--json` | `--format json` | `uw1 texture-info`, `uw2 map-verify`, `uw2 shape-info`, `u7 save-list` |
+  | `--json FILE` | `-o/--output FILE` | `u9 save-check` |
+
+  Front ends reading `@meta`: parameter names are unchanged except the
+  four `--format` commands above, whose `json_output` is now `output_format`.
+- **U9 NPC commands' `--save` flag** is no longer tagged as a save for front
+  ends: it's an on/off switch saying FILE is a save, not a save to pick.
+- **Config loading:** titan's U8 code now reads `[u8]` directly, and loading
+  a config without U8 settings no longer imports the U8 package. The
+  top-level `[game]`/`[paths]` copy of `[u8]` is kept for older readers
+  outside titan but is deprecated.
+- **Clearer errors and exit codes.** titan's own errors now print as one
+  `ERROR:` line instead of a traceback, and the exit status says what kind of
+  problem it was: `78` titan isn't set up for this (no install configured, a
+  missing configured folder, or an invalid `titan.toml`, with a hint to run
+  `titan config` / `titan setup`), `65` a damaged or unexpected input file,
+  `66` a missing file, `69` unsupported here (or an optional library is
+  missing), `74` a read/write failure, and `70` a bug in titan (the traceback
+  is still printed). Before, most of these exited `1`. An invalid
+  `titan.toml` used to crash with a traceback; it's now reported. For code
+  using titan as a library, every game's error class now derives from
+  `titan.errors` (`TitanError`, `ConfigError`, `InvalidDataError`,
+  `UnsupportedError`), and they keep the built-in types callers already catch.
+- **Default export folders no longer depend on where you run titan.** The U7
+  and U8 browsers, `u8 world-query`/`egg-query`, `u8 npc-animation-report`
+  and `u9 save-browse` used to write to a `titan-out/` folder in the current
+  directory when no `-o` is given; UO exports without a configured output
+  used `uodata/` there. They now write to titan's data folder, under
+  `<game>/exports/<command>` (`titan config` shows the data folder), and
+  still print where things went. Passing `-o` works as before.
+
+- **U7 wizards split into logic and terminal halves.** The interactive parts
+  of `shape-create`, `map-render`'s guided mode, `world-query`, `egg-query`
+  and `container-browse` now live in `titan.u7.shape_wizard_ui`,
+  `map_wizard_ui`, `world_workflow_ui`, `eggs_ui` and `container_ui`; the
+  original modules keep the conversion, rendering and query code, which no
+  longer prints. What you see in the terminal is unchanged. For code that
+  imported them: `run_wizard` (and `run_from_config`, `show_preview` for
+  shapes) moved to the `_ui` modules.
+- **Library progress and warnings go through `logging`.** titan's library
+  code logs to `titan.*` loggers; the CLI shows INFO lines as before and
+  warnings/errors as `Warning: ...` / `ERROR: ...` on stderr. A test now
+  stops new `print`/`input`/terminal-toolkit use in library modules.
+
+### Added (front ends)
+
+- **Run results file:** set `TITAN_RESULTS_FILE` to a path and titan writes
+  `{"outputs": [...], "exit_code": N}` there when a command ends, listing what
+  it wrote. `flex-extract` and `uw1 texture-export` report so far; more
+  commands will follow. `titan._config.export_dir(game, name)` gives the
+  default export folder.
 
 ## [0.8.0]
 

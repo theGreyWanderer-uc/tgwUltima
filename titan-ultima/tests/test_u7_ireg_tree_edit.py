@@ -422,18 +422,26 @@ def saved(raw: bytes, kind: str = "zip", name: str = "u7ireg55") -> bytes:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+
+            def put(member: str, payload: bytes) -> None:
+                # A fixed timestamp keeps the bytes identical between calls; writestr
+                # with a bare name stamps the current time (2-second resolution).
+                info = zipfile.ZipInfo(member, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, payload)
+
             if kind == "grouped":
                 group = b"".join(
                     n.encode().ljust(12, b"\0") + struct.pack("<I", len(p)) + p
                     for n, p in [(name, raw), ("empty", b""), (name, b"untouched")]
                 ) + bytes(12)
-                archive.writestr("GAMEDAT", group)
+                put("GAMEDAT", group)
             elif kind == "nested":
-                archive.writestr("nested.sav", saved(raw, "flex", name))
+                put("nested.sav", saved(raw, "flex", name))
             else:
-                archive.writestr(name, raw)
-                archive.writestr("empty", b"")
-                archive.writestr(name, b"untouched")
+                put(name, raw)
+                put("empty", b"")
+                put(name, b"untouched")
     return stream.getvalue()
 
 

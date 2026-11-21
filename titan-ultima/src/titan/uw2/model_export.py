@@ -18,9 +18,10 @@ from titan.uw2.exe_models import (
 from titan.uw2.gr import UW2GRArchive
 from titan.uw2.model_render import ITEM_MODEL_NAMES, model_texture_index
 from titan.uw2.palette import UW2Palette
+from titan.errors import TitanError
 
 
-class UW2ModelExportError(ValueError):
+class UW2ModelExportError(TitanError, ValueError):
     """Raised when a built-in model cannot be exported."""
 
 

@@ -9,8 +9,9 @@ from typing import Annotated, Any
 import typer
 from PIL import Image
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan._config import cfg
+from titan.u8.install import u8_cfg as cfg
 from titan._terminal_image import terminal_image
 from titan.u8.npc_animation_report import export_u8_npc_animation_report
 from titan.u8.npc_browser import (
@@ -456,9 +457,11 @@ def browse_u8_npc_session(
     session: U8NpcSession,
     *,
     npc: int | None = None,
-    output: Path = U8_NPC_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> None:
     """Embed NPC browsing in a captured save snapshot; Q returns to its parent."""
+    if output is None:
+        output = export_dir("u8", U8_NPC_BROWSER_OUTPUT)
     if npc is not None and not 0 <= npc <= 255:
         raise ValueError("U8 NPC browser: NPC ID must be 0-255")
     _browse_npc_session(session, npc, output, embedded=True)
@@ -474,9 +477,11 @@ def run_u8_npc_browser(
     itemcach: Path | None = None,
     npc: int | None = None,
     names: Path | None = None,
-    output: Path = U8_NPC_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> int:
     """Browse native NPC snapshots using shared prompts; redirected input uses line menus."""
+    if output is None:
+        output = export_dir("u8", U8_NPC_BROWSER_OUTPUT)
     print("\nTitan U8 NPC Browser")
     try:
         if npc is not None and not 0 <= npc <= 255:
@@ -622,11 +627,13 @@ def npc_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Export folder; existing files are preserved"
+            "-o", "--output-dir", help="Export folder; existing files are preserved"
         ),
-    ] = U8_NPC_BROWSER_OUTPUT,
+    ] = None,
 ) -> None:
     """Browse U8 NPC names/state, equipment, sprite animations and report exports."""
+    if output is None:
+        output = export_dir("u8", U8_NPC_BROWSER_OUTPUT)
     raise SystemExit(
         run_u8_npc_browser(
             source=source,

@@ -789,7 +789,7 @@ def shape_create_cmd(
     slot allocation, explicit flats, sparse patches, archive copies and TOML
     recipes. Existing shape-import and flex-add-shape remain available.
     """
-    from titan.u7.shape_wizard import run_from_config, run_wizard
+    from titan.u7.shape_wizard_ui import run_from_config, run_wizard
 
     if config and source:
         raise typer.BadParameter("Use either a source argument or --config")
@@ -882,7 +882,7 @@ def shape_export_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
     shape: Annotated[
         Optional[int],
@@ -1190,7 +1190,7 @@ def shape_batch_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
     range_start: Annotated[
         Optional[int],
@@ -1274,7 +1274,7 @@ def shape_cycle_scan_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: shape_cycle_scan/)"
+            "-o", "--output-dir", help="Output directory (default: shape_cycle_scan/)"
         ),
     ] = None,
     range_start: Annotated[

@@ -794,6 +794,7 @@ def cmd_sound_import_batch(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def sound_category_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/sfxcat.flx")],
 ) -> None:
@@ -813,6 +814,7 @@ def sound_category_csv_cmd(
     raise SystemExit(cmd_sound_category_csv(SimpleNamespace(file=file, output=output)))
 
 
+@meta(results=("text",))
 def sound_environment_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to sound/sfxenv.flx")],
 ) -> None:
@@ -905,6 +907,7 @@ def sound_association_csv_cmd(
     )
 
 
+@meta(results=("text",))
 def sound_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
 ) -> None:
@@ -917,7 +920,9 @@ def sound_extract_pcm_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <file>_wav/)"
+        ),
     ] = None,
 ) -> None:
     """Extract every PCM-encoded entry in a sound archive as a playable WAV."""
@@ -929,7 +934,9 @@ def sound_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 sound/*.flx file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <file>_wav/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <file>_wav/)"
+        ),
     ] = None,
     entry: Annotated[
         Optional[int],

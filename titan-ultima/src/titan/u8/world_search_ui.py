@@ -10,6 +10,7 @@ from typing import Annotated, Any, Callable
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
 from titan._image_preview import open_preview
 from titan.u8.egg_search import (
@@ -349,9 +350,11 @@ def browse_u8_world_search(
     filters: U8WorldSearchFilters = U8WorldSearchFilters(),
     egg_filters: U8EggSearchFilters = U8EggSearchFilters(),
     eggs: bool = False,
-    output: Path = U8_WORLD_SEARCH_OUTPUT,
+    output: Path | None = None,
 ) -> None:
     """Keep search filters and page position while inspecting items and linked browsers."""
+    if output is None:
+        output = export_dir("u8", U8_WORLD_SEARCH_OUTPUT)
     page = 0
     dirty = True
     rows: list[dict[str, Any]] = []
@@ -414,7 +417,9 @@ def run_u8_world_search(
     output_format: str | None = None,
 ) -> int:
     """Capture one matching STATIC/save owner, then browse or run a deterministic query export."""
-    output = output or (U8_EGG_SEARCH_OUTPUT if eggs else U8_WORLD_SEARCH_OUTPUT)
+    output = output or export_dir(
+        "u8", U8_EGG_SEARCH_OUTPUT if eggs else U8_WORLD_SEARCH_OUTPUT
+    )
     try:
         if static_only and source is not None:
             raise ValueError(
@@ -611,7 +616,10 @@ def _make_u8_search_command(eggs: bool) -> Callable[..., None]:
         output: Annotated[
             Path | None,
             typer.Option(
-                "--output", "-o", help="Export root; each report uses a fresh directory"
+                "--output-dir",
+                "--output-dir",
+                "-o",
+                help="Export root; each report uses a fresh directory",
             ),
         ] = None,
         export: Annotated[

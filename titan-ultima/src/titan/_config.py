@@ -19,6 +19,7 @@ __all__ = [
     "cache_dir",
     "config_search_paths",
     "data_dir",
+    "export_dir",
     "find_config",
     "load_config",
     "cfg",
@@ -90,6 +91,18 @@ def data_dir(game: Optional[str] = None) -> Path:
     return root / game if game else root
 
 
+def export_dir(game: str, name: str = "") -> Path:
+    """Where a command writes when no output folder is given.
+
+    ``<data_dir(game)>/exports/<name>`` (*name* is usually the command, e.g.
+    ``"map-browse"``). Resolved when the command runs, so ``TITAN_DATA`` and the
+    platform folders apply; the folder may not exist yet. Commands print the
+    folder they used.
+    """
+    root = data_dir(game) / "exports"
+    return root / name if name else root
+
+
 def cache_dir() -> Path:
     """Return titan's cache folder: files titan can always recreate.
 
@@ -131,9 +144,6 @@ def load_config(config_path: Optional[str] = None) -> dict:
     """
     global _config
 
-    # Imported here: the U8 package itself reads this module at import time.
-    from titan.u8.install import expand_u8_paths
-
     if _tomllib is None:
         _config = {"paths": {}}
         return _config
@@ -148,8 +158,18 @@ def load_config(config_path: Optional[str] = None) -> dict:
         _config = {"paths": {}}
         return _config
 
-    with open(path, "rb") as f:
-        data = _tomllib.load(f)
+    try:
+        with open(path, "rb") as f:
+            data = _tomllib.load(f)
+    except _tomllib.TOMLDecodeError as error:
+        from titan.errors import ConfigFileError
+
+        raise ConfigFileError(f"{path} is not valid TOML: {error}") from error
+
+    if "u8" in data or "game" in data:
+        # Only U8 settings need U8's path rules; other games' configs load
+        # without importing the U8 package.
+        from titan.u8.install import expand_u8_paths
 
     # ── Legacy format: [game] + [paths] → treat as U8 ─────────────
     if "game" in data and "u8" not in data:
@@ -169,7 +189,9 @@ def load_config(config_path: Optional[str] = None) -> dict:
                     **u8_section.get(section, {}),
                 }
         expand_u8_paths(u8_section)
-        # Promote u8.game/u8.paths to top-level game/paths for compat
+        # Deprecated: copy u8.game/u8.paths to top-level game/paths for
+        # readers outside titan. titan's own U8 code uses
+        # titan.u8.install.u8_section().
         if "game" in u8_section:
             data["game"] = u8_section["game"]
         if "paths" in u8_section:

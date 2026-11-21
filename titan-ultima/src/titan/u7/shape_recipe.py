@@ -1,6 +1,6 @@
 """The ``u7 shape-create --config`` recipe, described for front ends.
 
-:func:`titan.u7.shape_wizard.run_from_config` reads these fields; a test keeps
+:func:`titan.u7.shape_wizard_ui.run_from_config` reads these fields; a test keeps
 the two in step. The schema is also documented in ``cli_reference.md``.
 """
 

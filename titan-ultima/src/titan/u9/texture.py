@@ -53,6 +53,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from titan.u9.palette import PALETTE_TRANSPARENCY_INDEX, U9Palette
+from titan.errors import InvalidDataError
 
 TEXTURE_SET_HEADER_SIZE = 0x10
 FRAME_DIR_ENTRY_SIZE = 0x08
@@ -120,7 +121,7 @@ def bc1_size(width: int, height: int) -> int:
     return blocks_x * blocks_y * BC1_BLOCK_BYTES
 
 
-class U9TextureError(Exception):
+class U9TextureError(InvalidDataError):
     """Raised when a texture entry/frame is too small or malformed to parse."""
 
 

@@ -692,6 +692,7 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def animation_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     limit: Annotated[
@@ -703,6 +704,7 @@ def animation_list_cmd(
     raise SystemExit(cmd_animation_list(SimpleNamespace(file=file, limit=limit)))
 
 
+@meta(results=("text",))
 def animation_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     id: Annotated[int, typer.Argument(help="Animation ID (the FLX entry index)")],
@@ -843,7 +845,7 @@ def animation_library_export_cmd(
     ] = True,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output animation-library directory"),
+        typer.Option("-o", "--output-dir", help="Output animation-library directory"),
     ] = None,
 ) -> None:
     """Export every approved plan entry as deduplicated actor/skeleton libraries."""
@@ -950,7 +952,7 @@ def animation_pose_export_cmd(
     ] = "obj",
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
     preview: Annotated[
         bool,
@@ -1012,7 +1014,7 @@ def animation_bundle_export_cmd(
     ] = True,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output bundle directory"),
+        typer.Option("-o", "--output-dir", help="Output bundle directory"),
     ] = None,
 ) -> None:
     """Export local limb meshes, exact U9 tracks, and an animated GLB."""
@@ -1079,7 +1081,7 @@ def animation_set_export_cmd(
     ] = True,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output animation-set directory"),
+        typer.Option("-o", "--output-dir", help="Output animation-set directory"),
     ] = None,
 ) -> None:
     """Export named clips and a neutral actor animation-set manifest."""
@@ -1143,7 +1145,7 @@ def avatar_animation_library_export_cmd(
     ] = True,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output Avatar library directory"),
+        typer.Option("-o", "--output-dir", help="Output Avatar library directory"),
     ] = None,
 ) -> None:
     """Export shared Avatar assets and every compatible named animation clip."""

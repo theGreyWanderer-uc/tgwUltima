@@ -30,6 +30,7 @@ import struct
 from dataclasses import dataclass
 
 from titan.u9.flx_archive import U9FlxArchive, U9FlxArchiveError
+from titan.errors import InvalidDataError
 
 BOX_ZONE_KIND = 1
 ENCOUNTER_SLOT_COUNT = 12
@@ -47,7 +48,7 @@ _ZONE_PREFIX_SIZE = 28
 _ZONE_SUFFIX_SIZE = 12
 
 
-class U9AreasError(Exception):
+class U9AreasError(InvalidDataError):
     """Raised when an ``areas.flx`` entry cannot be framed safely."""
 
 

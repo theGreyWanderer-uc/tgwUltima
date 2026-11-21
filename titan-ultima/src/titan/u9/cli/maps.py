@@ -835,7 +835,7 @@ def map_atlas_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output directory (default: ./u9_map_atlas)",
         ),
     ] = None,

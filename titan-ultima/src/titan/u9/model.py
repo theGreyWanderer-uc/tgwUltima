@@ -74,6 +74,7 @@ __all__ = [
 import math
 import struct
 from dataclasses import dataclass, field
+from titan.errors import InvalidDataError
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
@@ -95,7 +96,7 @@ INDEXED_CORNER_RECORD_SIZE = 0x18
 INVISIBLE_TEXTURE_ID = 0xFFFF
 
 
-class U9ModelError(Exception):
+class U9ModelError(InvalidDataError):
     """Raised when a model record is too small/malformed to parse at the expected offsets."""
 
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from titan._meta import Installation
 from titan.md.game_profile import resolve_martian_directory
 
 MD_RESOURCE_NAMES = {
@@ -93,15 +93,39 @@ def martian_resource_paths(root: Path) -> dict[str, Path]:
     }
 
 
+def martian_installation(root: Path, base: Path | None = None) -> Installation:
+    """The install whose data is in MARTIAN folder *root*, configured from *base*.
+
+    *base* may be MARTIAN's parent (as a user's existing setting can be); paths
+    in the config are then relative to it.
+    """
+    return Installation("md", base or root, martian_resource_paths(root))
+
+
+def install_candidates(config: dict) -> list[Path]:
+    """Install protocol (see :func:`titan._meta.install_candidates`)."""
+    return martian_install_candidates(config)
+
+
+def discover_installs(path: Path) -> list[Installation]:
+    """Install protocol: the Martian Dreams install at *path* (MARTIAN or its parent)."""
+    root = inspect_martian_install(path)
+    return [martian_installation(root)] if root is not None else []
+
+
+def install_config(install: Installation) -> dict:
+    """Install protocol: ``[md.game]`` base and ``[md.paths]`` relative to it."""
+    return {
+        "game": {"base": install.root.as_posix()},
+        "paths": {
+            key: path.relative_to(install.root).as_posix()
+            for key, path in install.resources.items()
+        },
+    }
+
+
 def martian_setup_lines(root: Path, base: Path) -> list[str]:
     """Render ``[md.game]`` and ``[md.paths]``; *base* may be MARTIAN's parent."""
-    lines = [
-        "",
-        "[md.game]",
-        f"base = {json.dumps(base.as_posix())}",
-        "",
-        "[md.paths]",
-    ]
-    for key, resource in martian_resource_paths(root).items():
-        lines.append(f"{key} = {json.dumps(resource.relative_to(base).as_posix())}")
-    return lines
+    from titan._setup_config import section_lines
+
+    return section_lines({"md": install_config(martian_installation(root, base))})

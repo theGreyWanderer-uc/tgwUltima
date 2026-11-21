@@ -34,6 +34,7 @@ import struct
 from collections import Counter
 from dataclasses import dataclass
 from enum import IntFlag
+from titan.errors import InvalidDataError
 
 RECORD_SIZE = 0x13C  # 316
 NAME_OFFSET = 0x04
@@ -212,7 +213,7 @@ class U9NpcTrait(IntFlag):
     KILL_PENALIZES_KARMA = 0x0800
 
 
-class U9NpcError(Exception):
+class U9NpcError(InvalidDataError):
     """Raised on malformed ``runtime/NPC.FLX`` data."""
 
 

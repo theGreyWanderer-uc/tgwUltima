@@ -41,6 +41,7 @@ from titan.u9.sdinfo import U9SdInfo, U9SdInfoError
 from titan.u9.terrain import CHUNK_POINTS
 from titan.u9.texture import U9TextureError, decode_frame
 from titan.u9.types_dat import U9TypesDat
+from titan.errors import TitanError
 
 _TEXTURE_KEY_COUNT = 1024 * 32 * 4
 MAX_MAP_PIXELS_PER_CELL = 32
@@ -60,7 +61,7 @@ _SDINFO_NAMES = {
 }
 
 
-class U9MapRenderError(Exception):
+class U9MapRenderError(TitanError):
     """Raised when a U9 region map cannot be rendered faithfully."""
 
 

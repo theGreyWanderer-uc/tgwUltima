@@ -228,7 +228,7 @@ def palette_export_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
     index: Annotated[
         Optional[int],

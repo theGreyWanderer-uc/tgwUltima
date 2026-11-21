@@ -12,11 +12,12 @@ from PIL import Image
 from typer.testing import CliRunner
 
 from titan.u7 import shape_wizard as wizard
+from titan.u7 import shape_wizard_ui as wizard_ui
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.shape import U7Shape
 
-_original_open_preview = wizard._open_preview
+_original_open_preview = wizard_ui._open_preview
 
 
 @pytest.fixture(autouse=True)
@@ -24,9 +25,9 @@ def isolate_profile(monkeypatch, tmp_path):
     monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
     monkeypatch.setattr(wizard, "_exult_paths", lambda game: None)
     monkeypatch.setattr("titan._config.get_config", lambda: {})
-    monkeypatch.setattr(wizard, "get_config", lambda: {})
+    monkeypatch.setattr(wizard_ui, "get_config", lambda: {})
     monkeypatch.setattr(wizard, "find_exult_cfg", lambda: None)
-    monkeypatch.setattr(wizard, "_open_preview", lambda path: True)
+    monkeypatch.setattr(wizard_ui, "_open_preview", lambda path: True)
     monkeypatch.setattr(
         wizard.tempfile,
         "NamedTemporaryFile",
@@ -384,7 +385,7 @@ def test_recipe_paths_and_archive_override_are_noninteractive(
     output = tmp_path / "destination.vga"
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
     monkeypatch.setattr(
-        wizard, "_open_preview", lambda path: pytest.fail("recipe opened viewer")
+        wizard_ui, "_open_preview", lambda path: pytest.fail("recipe opened viewer")
     )
     result = CliRunner().invoke(
         u7_app, ["shape-create", "--config", str(path), "-o", str(output)]
@@ -398,7 +399,7 @@ def test_recipe_missing_base_fails_without_prompt(tmp_path, artwork, monkeypatch
     path = tmp_path / "recipe.toml"
     write_recipe(path, output='format="flex"\narchive="patch/shapes.vga"')
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
-    assert wizard.run_from_config(str(path)) == 1
+    assert wizard_ui.run_from_config(str(path)) == 1
     assert not (tmp_path / "patch/shapes.vga").exists()
 
 
@@ -537,10 +538,10 @@ def test_image_preview_shows_large_source_and_quantized_pixels(
     before = Path(artwork.source).read_bytes()
     opened = []
     monkeypatch.setattr(
-        wizard, "_open_preview", lambda path: opened.append(path) or True
+        wizard_ui, "_open_preview", lambda path: opened.append(path) or True
     )
     converted = wizard.convert(artwork)
-    path = wizard.show_preview(converted, open_image=True)
+    path = wizard_ui.show_preview(converted, open_image=True)
     assert opened == [path]
     with Image.open(path) as preview:
         assert preview.size == (800, 408)
@@ -560,8 +561,8 @@ def test_image_preview_shows_large_source_and_quantized_pixels(
 def test_preview_remains_available_when_viewer_cannot_open(
     artwork, monkeypatch, capsys
 ):
-    monkeypatch.setattr(wizard, "_open_preview", lambda path: False)
-    path = wizard.show_preview(wizard.convert(artwork), open_image=True)
+    monkeypatch.setattr(wizard_ui, "_open_preview", lambda path: False)
+    path = wizard_ui.show_preview(wizard.convert(artwork), open_image=True)
     assert path.is_file()
     assert "Could not open the image viewer" in capsys.readouterr().out
 
@@ -843,7 +844,7 @@ def test_picker_discovers_registered_exult_game(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(wizard, "find_exult_cfg", lambda: cfg)
     monkeypatch.setattr("builtins.input", lambda prompt: "2")
     config = wizard.ShapeWizardConfig(game="SI")
-    wizard._select_target(config)
+    wizard_ui._select_target(config)
     assert config.target_static == str(custom / "static")
     assert config.target_patch == str(custom / "patch")
     assert config.standalone

@@ -571,6 +571,7 @@ def cmd_books_export(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def text_list_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
@@ -596,6 +597,7 @@ def text_list_cmd(
     )
 
 
+@meta(results=("text",))
 def text_blocks_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.flx")],
     by_size: Annotated[
@@ -611,6 +613,7 @@ def text_blocks_cmd(
     )
 
 
+@meta(results=("text",))
 def text_search_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
@@ -673,6 +676,7 @@ def text_import_cmd(
     )
 
 
+@meta(results=("text",))
 def text_keys_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
     text: Annotated[
@@ -707,6 +711,7 @@ def text_keys_info_cmd(
     )
 
 
+@meta(results=("text",))
 def text_key_lookup_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
     key: Annotated[str, typer.Argument(help="Full key, e.g. 'Avatar : Farewell.'")],
@@ -768,6 +773,7 @@ def text_keys_export_cmd(
     )
 
 
+@meta(results=("text",))
 def books_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     by_size: Annotated[
@@ -783,6 +789,7 @@ def books_list_cmd(
     )
 
 
+@meta(results=("text",))
 def books_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     id: Annotated[
@@ -797,6 +804,7 @@ def books_show_cmd(
     raise SystemExit(cmd_books_show(SimpleNamespace(file=file, id=id, name=name)))
 
 
+@meta(results=("text",))
 def books_search_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     needle: Annotated[str, typer.Argument(help="Substring to look for")],

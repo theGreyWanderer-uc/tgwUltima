@@ -822,7 +822,7 @@ def monster_report_cmd(
     ] = None,
     gamedat: Annotated[
         Optional[str],
-        typer.Option("--gamedat", help="Exult GAMEDAT folder or save (.sav)"),
+        typer.Option("--save", help="Exult GAMEDAT folder or save (.sav)"),
     ] = None,
     live_source: Annotated[
         Optional[str],

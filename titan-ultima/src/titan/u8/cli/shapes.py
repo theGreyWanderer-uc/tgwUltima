@@ -442,7 +442,7 @@ def shape_export_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Export frames from a Shape (.shp) file to PNG."""
@@ -471,7 +471,9 @@ def shape_batch_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <dir>/png/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <dir>/png/)"
+        ),
     ] = None,
 ) -> None:
     """Batch-export all .shp files in a directory, or all shapes in U8SHAPES.FLX, to PNG."""
@@ -605,7 +607,7 @@ def shape_convert_u7_all_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: u7_converted/)"
+            "-o", "--output-dir", help="Output directory (default: u7_converted/)"
         ),
     ] = None,
 ) -> None:

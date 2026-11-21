@@ -58,8 +58,17 @@ from titan.uw2.texture_catalog import (
     export_texture_usage,
 )
 from titan._meta import meta
+from titan.errors import InstallNotFoundError
+from titan._cli_aliases import TextOrJson, alias_group
 
 uw2_app = typer.Typer(
+    cls=alias_group(
+        {
+            "--gamedir": "--game-dir",
+            "--output": "--output-dir",
+            "--json": ("--format", "json"),
+        }
+    ),
     name="uw2",
     help="Ultima Underworld II — maps, palettes, shapes, and object metadata.",
     no_args_is_help=True,
@@ -72,6 +81,14 @@ def _uw2_game_directory(explicit: str | None) -> Path | None:
     configured = get_config().get("uw2", {}).get("game", {}).get("base")
     value = explicit or configured
     return Path(value).expanduser() if value else None
+
+
+def _require_uw2_game_directory(explicit: str | None) -> Path:
+    """:func:`_uw2_game_directory`, or :class:`InstallNotFoundError` if none is set."""
+    game_directory = _uw2_game_directory(explicit)
+    if game_directory is None:
+        raise InstallNotFoundError("provide --game-dir or configure [uw2.game] base")
+    return game_directory
 
 
 def _uw2_data_file(value: str, game_directory: Path | None) -> Path:
@@ -251,10 +268,7 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
 
 def cmd_terrain_export(args: SimpleNamespace) -> int:
     """Export T64.TR terrain textures, optionally with a contact sheet."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     terrain_path = _uw2_data_file("T64.TR", game_directory)
     palette_path = _uw2_data_file("PALS.DAT", game_directory)
     if not _require_file(terrain_path, "terrain archive"):
@@ -370,10 +384,7 @@ def cmd_object_dump(args: SimpleNamespace) -> int:
 
 def cmd_map_extract(args: SimpleNamespace) -> int:
     """Decode LEV.ARK into renderer-ready level JSON."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     lev_path = _uw2_data_file("LEV.ARK", game_directory)
     if not _require_file(lev_path, "map archive"):
         return 1
@@ -393,10 +404,7 @@ def cmd_map_extract(args: SimpleNamespace) -> int:
 
 def cmd_map_verify(args: SimpleNamespace) -> int:
     """Smoke-check LEV.ARK block shapes and decode every populated slot."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     lev_path = _uw2_data_file("LEV.ARK", game_directory)
     if not _require_file(lev_path, "map archive"):
         return 1
@@ -445,10 +453,7 @@ def cmd_map_verify(args: SimpleNamespace) -> int:
 
 def cmd_map_grid(args: SimpleNamespace) -> int:
     """Render flat top-down diagnostic grids from original files."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     lev_path = _uw2_data_file("LEV.ARK", game_directory)
     if not _require_file(lev_path, "map archive"):
         return 1
@@ -472,10 +477,7 @@ def cmd_map_grid(args: SimpleNamespace) -> int:
 
 def cmd_texture_catalog(args: SimpleNamespace) -> int:
     """Join STRINGS.PAK texture descriptions to TERRAIN.DAT properties."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     strings_path = _uw2_data_file("STRINGS.PAK", game_directory)
     if not _require_file(strings_path, "string archive"):
         return 1
@@ -490,10 +492,7 @@ def cmd_texture_catalog(args: SimpleNamespace) -> int:
 
 def cmd_texture_usage(args: SimpleNamespace) -> int:
     """Report where each named texture is used, per level and tile role."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     strings_path = _uw2_data_file("STRINGS.PAK", game_directory)
     lev_path = _uw2_data_file("LEV.ARK", game_directory)
     if not _require_file(strings_path, "string archive"):
@@ -523,10 +522,7 @@ def cmd_texture_usage(args: SimpleNamespace) -> int:
 
 def cmd_model_render(args: SimpleNamespace) -> int:
     """Render selected executable 3D objects without loading a map."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     try:
         item_ids = [int(value, 0) for value in args.items]
         written = render_object_models(
@@ -547,10 +543,7 @@ def cmd_model_render(args: SimpleNamespace) -> int:
 
 def cmd_model_export(args: SimpleNamespace) -> int:
     """Export selected or all executable 3D objects as individual OBJ assets."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     try:
         item_ids = [int(value, 0) for value in args.items] if args.items else None
         written = export_object_models(
@@ -570,10 +563,7 @@ def cmd_model_export(args: SimpleNamespace) -> int:
 
 def cmd_map_3d_render(args: SimpleNamespace) -> int:
     """Render one textured map scene from camera presets."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     slots = args.slot if isinstance(args.slot, (list, tuple)) else [args.slot]
     written: list[Path] = []
     try:
@@ -617,10 +607,7 @@ def cmd_map_3d_render(args: SimpleNamespace) -> int:
 
 def cmd_map_stack(args: SimpleNamespace) -> int:
     """Render each world's levels as one vertically stacked cutaway."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     lev_path = _uw2_data_file("LEV.ARK", game_directory)
     if not _require_file(lev_path, "map archive"):
         return 1
@@ -660,10 +647,7 @@ def cmd_map_stack(args: SimpleNamespace) -> int:
 
 def cmd_map_3d_export(args: SimpleNamespace) -> int:
     """Export one textured map scene as GLB with individual object nodes."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     try:
         written = export_map_scene(
             game_directory,
@@ -688,10 +672,7 @@ def cmd_map_3d_export(args: SimpleNamespace) -> int:
 
 def cmd_map_render(args: SimpleNamespace) -> int:
     """Render directly from original archives; intermediates are optional."""
-    game_directory = _uw2_game_directory(args.gamedir)
-    if game_directory is None:
-        typer.echo("ERROR: provide --gamedir or configure [uw2.game] base", err=True)
-        return 1
+    game_directory = _require_uw2_game_directory(args.gamedir)
     output = Path(args.output)
     workdir = Path(args.workdir or output / "_map_data")
     reuse_workdir = bool(getattr(args, "reuse_workdir", False))
@@ -748,7 +729,7 @@ GameDirOption = Annotated[
     Optional[str],
     typer.Option(
         "-g",
-        "--gamedir",
+        "--game-dir",
         help="UU2 install root or DATA directory; falls back to [uw2.game] base",
     ),
 ]
@@ -809,7 +790,7 @@ def _validate_view_options(
 @meta(results=("files",), params={"output": "output-dir"})
 def model_render_cmd(
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Rendered PNG directory")
+        str, typer.Option("-o", "--output-dir", help="Rendered PNG directory")
     ] = "uw2_models",
     items: Annotated[
         Optional[list[str]],
@@ -838,7 +819,7 @@ def model_render_cmd(
 @meta(results=("files",), params={"output": "output-dir"})
 def model_export_cmd(
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Export directory")
+        str, typer.Option("-o", "--output-dir", help="Export directory")
     ] = "uw2_model_exports",
     items: Annotated[
         Optional[list[str]],
@@ -860,7 +841,9 @@ def model_export_cmd(
 @uw2_app.command("map-extract")
 @meta(results=("files",), params={"output": "output-dir"})
 def map_extract_cmd(
-    output: Annotated[str, typer.Option("-o", "--output", help="Extraction directory")],
+    output: Annotated[
+        str, typer.Option("-o", "--output-dir", help="Extraction directory")
+    ],
     slots: SlotsOption = None,
     write_decoded_blocks: Annotated[
         bool,
@@ -874,25 +857,34 @@ def map_extract_cmd(
 
 @uw2_app.command("map-verify")
 @meta(
-    results=("json", "text"), params={"json_output": "format", "output": "output-file"}
+    results=("json", "text"),
+    params={"output_format": "format", "output": "output-file"},
 )
 def map_verify_cmd(
-    json_output: Annotated[
-        bool, typer.Option("--json", help="Emit the full report as JSON")
-    ] = False,
+    output_format: Annotated[
+        TextOrJson,
+        typer.Option(
+            "--format", help="Output format: text (default) or json (the full report)"
+        ),
+    ] = TextOrJson.text,
     output: Annotated[
         Optional[str], typer.Option("-o", "--output", help="Optional JSON report path")
     ] = None,
     gamedir: GameDirOption = None,
 ) -> None:
     """Smoke-check LEV.ARK block shapes and decode every populated map slot."""
-    raise SystemExit(cmd_map_verify(SimpleNamespace(**locals())))
+    json_output = output_format is TextOrJson.json
+    raise SystemExit(
+        cmd_map_verify(
+            SimpleNamespace(json_output=json_output, output=output, gamedir=gamedir)
+        )
+    )
 
 
 @uw2_app.command("map-3d-render")
 @meta(results=("files",), params={"output": "output-dir"})
 def map_3d_render_cmd(
-    output: Annotated[str, typer.Option("-o", "--output")] = "uw2_maps_3d",
+    output: Annotated[str, typer.Option("-o", "--output-dir")] = "uw2_maps_3d",
     slot: Annotated[
         Optional[list[int]],
         typer.Option("--slot", help="Zero-based LEV.ARK map slot; repeat as needed"),
@@ -976,7 +968,7 @@ def map_3d_render_cmd(
 @uw2_app.command("map-stack")
 @meta(results=("files",), params={"output": "output-dir"})
 def map_stack_cmd(
-    output: Annotated[str, typer.Option("-o", "--output")] = "uw2_stacks",
+    output: Annotated[str, typer.Option("-o", "--output-dir")] = "uw2_stacks",
     worlds: Annotated[
         Optional[list[str]],
         typer.Option("--world", help="World-name slug filter; repeat as needed"),
@@ -1037,7 +1029,7 @@ def map_stack_cmd(
 @uw2_app.command("map-3d-export")
 @meta(results=("files",), params={"output": "output-dir"})
 def map_3d_export_cmd(
-    output: Annotated[str, typer.Option("-o", "--output")] = "uw2_maps_3d",
+    output: Annotated[str, typer.Option("-o", "--output-dir")] = "uw2_maps_3d",
     slot: Annotated[
         int, typer.Option("--slot", help="Zero-based LEV.ARK map slot")
     ] = 0,
@@ -1064,7 +1056,7 @@ def map_3d_export_cmd(
 @meta(results=("files",), params={"output": "output-dir"})
 def map_render_cmd(
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Rendered PNG directory")
+        str, typer.Option("-o", "--output-dir", help="Rendered PNG directory")
     ] = "uw2_maps",
     slots: SlotsOption = None,
     workdir: Annotated[
@@ -1214,7 +1206,7 @@ def map_render_cmd(
 @meta(results=("files",), params={"output": "output-dir"})
 def map_grid_cmd(
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Rendered PNG directory")
+        str, typer.Option("-o", "--output-dir", help="Rendered PNG directory")
     ],
     slots: SlotsOption = None,
     tile_size: Annotated[int, typer.Option("--tile-size")] = 64,
@@ -1243,7 +1235,8 @@ def map_grid_cmd(
 @meta(results=("files",), params={"output": "output-dir"})
 def texture_catalog_cmd(
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Directory for texture_catalog.json")
+        str,
+        typer.Option("-o", "--output-dir", help="Directory for texture_catalog.json"),
     ],
     gamedir: GameDirOption = None,
 ) -> None:
@@ -1254,7 +1247,9 @@ def texture_catalog_cmd(
 @uw2_app.command("texture-usage")
 @meta(results=("files",), params={"output": "output-dir"})
 def texture_usage_cmd(
-    output: Annotated[str, typer.Option("-o", "--output", help="Usage JSON directory")],
+    output: Annotated[
+        str, typer.Option("-o", "--output-dir", help="Usage JSON directory")
+    ],
     slots: SlotsOption = None,
     write_catalog: Annotated[
         bool,
@@ -1275,7 +1270,7 @@ def palette_export_cmd(
         int, typer.Option("--swatch-size", help="Pixels per color swatch")
     ] = 16,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
     gamedir: GameDirOption = None,
 ) -> None:
@@ -1296,7 +1291,7 @@ def palette_export_cmd(
 @uw2_app.command("shape-info")
 @meta(
     results=("json", "text"),
-    params={"json_output": "format", "output": "output-file", "palette": "palette"},
+    params={"output_format": "format", "output": "output-file", "palette": "palette"},
 )
 def shape_info_cmd(
     file: Annotated[str, typer.Argument(help="UU2 .GR archive path/name")],
@@ -1305,9 +1300,10 @@ def shape_info_cmd(
     output: Annotated[
         Optional[str], typer.Option("-o", "--output", help="Optional report path")
     ] = None,
-    json_output: Annotated[
-        bool, typer.Option("--json", help="Emit JSON metadata")
-    ] = False,
+    output_format: Annotated[
+        TextOrJson,
+        typer.Option("--format", help="Output format: text (default) or json"),
+    ] = TextOrJson.text,
     gamedir: GameDirOption = None,
 ) -> None:
     """List dimensions and bitmap types in a UU2 GR shape archive."""
@@ -1318,7 +1314,7 @@ def shape_info_cmd(
                 palette=palette,
                 allpals=allpals,
                 output=output,
-                json=json_output,
+                json=output_format is TextOrJson.json,
                 gamedir=gamedir,
             )
         )
@@ -1339,7 +1335,7 @@ def shape_export_cmd(
         int, typer.Option("--transparent-index", help="Transparent palette index")
     ] = 0,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
     gamedir: GameDirOption = None,
 ) -> None:
@@ -1360,7 +1356,7 @@ def shape_batch_cmd(
         int, typer.Option("--transparent-index", help="Transparent palette index")
     ] = 0,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output directory")
+        Optional[str], typer.Option("-o", "--output-dir", help="Output directory")
     ] = None,
     contact_sheet: Annotated[
         bool,
@@ -1376,7 +1372,7 @@ def shape_batch_cmd(
 @meta(results=("files",), params={"output": "output-dir"})
 def terrain_export_cmd(
     output: Annotated[
-        str, typer.Option("-o", "--output", help="Terrain PNG directory")
+        str, typer.Option("-o", "--output-dir", help="Terrain PNG directory")
     ],
     contact_sheet: Annotated[
         bool,
@@ -1393,6 +1389,7 @@ def terrain_export_cmd(
 
 
 @uw2_app.command("object-info")
+@meta(results=("text",))
 def object_info_cmd(
     item_id: Annotated[int, typer.Argument(help="UU2 item ID (0..511)")],
     comobj: Annotated[

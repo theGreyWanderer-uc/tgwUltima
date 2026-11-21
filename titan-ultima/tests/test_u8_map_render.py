@@ -148,7 +148,7 @@ def test_merge_preserves_distinct_items_metadata_and_source_lists():
 def test_map_help_retains_source_and_selection_options(command):
     result = CliRunner().invoke(u8_app, [command, "--help"])
     assert result.exit_code == 0
-    for option in ("--fixed", "--nonfixed", "--typeflag", "--map"):
+    for option in ("--fixed", "--save", "--typeflag", "--map"):
         assert option in result.output
 
 

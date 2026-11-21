@@ -45,6 +45,7 @@ import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
+from titan.errors import InvalidDataError
 
 PALETTE_PREFIX_SIZE = 256 * 4
 # Eight halvings exhaust the 8-bit colour axes, so no lookup can reach deeper.
@@ -56,7 +57,7 @@ _CHILDREN = 8
 RGB = tuple[int, int, int]
 
 
-class U9ColorCubeError(Exception):
+class U9ColorCubeError(InvalidDataError):
     """Raised when a colour-cube file is truncated or its tree cannot close."""
 
 

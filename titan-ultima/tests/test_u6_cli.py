@@ -25,6 +25,8 @@ import struct
 
 from PIL import Image
 
+from titan.errors import InstallNotFoundError
+
 from titan.u6.actor import OFFSET_TALK_FLAGS
 from titan.u6.actor import REQUIRED_SIZE as ACTOR_REQUIRED_SIZE
 from titan.u6.cli import (
@@ -273,7 +275,7 @@ class TileExportCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_gamedir_errors(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(InstallNotFoundError):
             cmd_tile_export(
                 SimpleNamespace(tile_num=0, gamedir=None, palette=None, output=None)
             )
@@ -342,7 +344,7 @@ class MapRenderCliTests(unittest.TestCase):
         return SimpleNamespace(**base)
 
     def test_missing_gamedir_errors(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(InstallNotFoundError):
             cmd_map_render(self._args(gamedir=None))
 
     def test_no_scope_selected_errors(self):
@@ -438,7 +440,7 @@ class MapAuditZorderCliTests(unittest.TestCase):
         return SimpleNamespace(**base)
 
     def test_missing_gamedir_errors(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(InstallNotFoundError):
             cmd_map_audit_zorder(self._args(gamedir=None))
 
     def test_missing_look_lzd_errors(self):
@@ -2272,7 +2274,7 @@ class EggListCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_gamedir_errors(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(InstallNotFoundError):
             cmd_egg_list(
                 SimpleNamespace(gamedir=None, block=None, dungeon=None, limit=200)
             )
@@ -2316,7 +2318,7 @@ class ObjectListCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_gamedir_errors(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(InstallNotFoundError):
             cmd_object_list(
                 SimpleNamespace(gamedir=None, block=None, dungeon=None, limit=200)
             )
@@ -2365,7 +2367,7 @@ class ActorListCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_gamedir_errors(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(InstallNotFoundError):
             cmd_actor_list(SimpleNamespace(gamedir=None, all=False))
 
     def test_active_only_is_empty_for_all_zero_objlist(self):
@@ -2396,7 +2398,7 @@ class GamestateDumpCliTests(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def test_missing_gamedir_errors(self):
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(InstallNotFoundError):
             cmd_gamestate_dump(SimpleNamespace(gamedir=None))
 
     def test_missing_lzdngblk_errors(self):

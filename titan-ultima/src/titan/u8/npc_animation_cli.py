@@ -8,7 +8,8 @@ from typing import Annotated
 
 import typer
 
-from titan._config import cfg
+from titan._config import export_dir
+from titan.u8.install import u8_cfg as cfg
 from titan.u8.npc_source import load_u8_npc_source
 from titan.u8.npc_animation_report import (
     export_u8_npc_animation_report,
@@ -65,12 +66,14 @@ def npc_animation_report_cmd(
         Path,
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="New or empty output directory for CSV, HTML and contact sheets",
         ),
-    ] = Path("titan-out/u8_npc_animation_export"),
+    ] = None,
 ) -> None:
     """Export a master animation CSV and per-NPC HTML reports with contact sheets."""
+    if output is None:
+        output = export_dir("u8", U8_NPC_ANIMATION_OUTPUT)
     try:
         if shapes is None:
             configured = cfg("u8shapes")
@@ -107,6 +110,10 @@ def npc_animation_report_cmd(
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         raise SystemExit(1) from error
+
+
+U8_NPC_ANIMATION_OUTPUT = "npc-animation-report"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 def register_u8_npc_animation_report(app: typer.Typer) -> None:

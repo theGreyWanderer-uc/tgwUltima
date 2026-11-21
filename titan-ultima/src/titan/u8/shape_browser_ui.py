@@ -9,8 +9,9 @@ from typing import Annotated
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan._config import cfg
+from titan.u8.install import u8_cfg as cfg
 from titan._image_preview import open_preview
 from titan._terminal_image import checkerboard, play_terminal, terminal_image
 from titan.u8.palette import U8Palette
@@ -666,9 +667,11 @@ def run_u8_shape_browser(
     action: int | None = None,
     direction: int = 0,
     overlay: int | None = None,
-    output: Path = U8_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> int:
     """Browse U8 graphics with shared prompts; redirected input keeps line menus."""
+    if output is None:
+        output = export_dir("u8", U8_BROWSER_OUTPUT)
     print("\nTitan U8 Shape / Animation Browser")
     previews = Path(tempfile.mkdtemp(prefix="titan-u8-shape-browser-"))
     try:
@@ -758,9 +761,11 @@ def browse_u8_npc_shape(
     frame: int = 0,
     action: int | None = None,
     direction: int = 0,
-    output: Path = U8_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> None:
     """Inspect this NPC's shape/actions using the existing browser; Q returns to the NPC."""
+    if output is None:
+        output = export_dir("u8", U8_BROWSER_OUTPUT)
     with tempfile.TemporaryDirectory(prefix="titan-u8-npc-shape-") as temporary:
         _browse_library(
             library,
@@ -835,11 +840,15 @@ def shape_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Default export folder; existing files are preserved"
+            "-o",
+            "--output-dir",
+            help="Default export folder; existing files are preserved",
         ),
-    ] = U8_BROWSER_OUTPUT,
+    ] = None,
 ) -> None:
     """Browse U8 shapes/actions and export frames, contact sheets, GIFs and reports."""
+    if output is None:
+        output = export_dir("u8", U8_BROWSER_OUTPUT)
     raise SystemExit(
         run_u8_shape_browser(
             game_dir=game_dir,

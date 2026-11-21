@@ -25,8 +25,10 @@ from titan.u8.palette_browser_ui import register_u8_palette_browser
 from titan.u8.world_search_ui import register_u8_world_search
 
 from titan.u8.cli import palettes, shapes, audio, gamedata, saves, maps
+from titan._cli_aliases import alias_group
 
 u8_app = typer.Typer(
+    cls=alias_group({"--nonfixed": "--save", "--output": "--output-dir"}),
     name="u8",
     help="Ultima 8: Pagan — shape, map, music, sound, save, and data commands.",
     no_args_is_help=True,

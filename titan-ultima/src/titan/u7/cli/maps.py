@@ -557,11 +557,12 @@ _EXCLUDE_FLAG_CHOICES = [
 ]
 
 
+@meta(results=("files",), params={"output_root": "output-dir"})
 def map_create_cmd(
     output_root: Annotated[
         str,
         typer.Option(
-            "--output-root",
+            "--output-dir",
             help="Required PATCH-like root where mapNN and shared u7chunks are written",
         ),
     ],
@@ -862,7 +863,7 @@ def map_render_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat",
+            "--save",
             help="GAMEDAT folder or Exult save (.sav) for IREG dynamic objects",
         ),
     ] = None,
@@ -1086,7 +1087,7 @@ def map_render_cmd(
         highlight_labels=highlight_labels,
     )
     if wizard_mode:
-        from titan.u7.map_wizard import run_wizard
+        from titan.u7.map_wizard_ui import run_wizard
 
         raise SystemExit(run_wizard(render_args))
     raise SystemExit(cmd_map_render(render_args))
@@ -1177,7 +1178,7 @@ def map_inventory_cmd(
         Optional[str],
         typer.Option(
             "-o",
-            "--output",
+            "--output-dir",
             help="Output folder (default: u7data/map-inventory/<game>-map<NN>)",
         ),
     ] = None,
@@ -1190,7 +1191,7 @@ def map_inventory_cmd(
     gamedat: Annotated[
         Optional[str],
         typer.Option(
-            "--gamedat",
+            "--save",
             help="Count movable objects from this GAMEDAT folder or Exult save (.sav) instead of INITGAME.DAT",
         ),
     ] = None,
@@ -1283,7 +1284,7 @@ def map_inventory_cmd(
       titan u7 map-inventory --sc 0x55
       titan u7 map-inventory --cx0 60 --cy0 72 --cx1 62 --cy1 74
       titan u7 map-inventory --game si --contents
-      titan u7 map-inventory STATIC/ --gamedat gamedat/ -o inventory/
+      titan u7 map-inventory STATIC/ --save gamedat/ -o inventory/
     """
     from titan.u7.gamedat_source import gamedat_option
 

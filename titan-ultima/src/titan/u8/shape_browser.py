@@ -16,7 +16,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw
 
-from titan._config import cfg
+from titan.u8.install import u8_cfg as cfg
 from titan._terminal_image import FrameProvider, checkerboard
 from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
@@ -28,7 +28,8 @@ from titan.u8.typeflag import U8TypeFlags
 from titan.u8.wpnovlay import U8WeaponOverlayData
 
 U8_SHAPE_ARCHIVES = ("U8SHAPES.FLX", "U8GUMPS.FLX", "U8FONTS.FLX")
-U8_BROWSER_OUTPUT = Path("titan-out/u8_shape_browse_export")
+U8_BROWSER_OUTPUT = "shape-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 def find_u8_browser_file(directory: Path, filename: str) -> Path | None:

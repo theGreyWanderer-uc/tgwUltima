@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from titan.errors import InvalidDataError
 
 COMMON_OBJECT_HEADER_SIZE = 2
 COMMON_OBJECT_RECORD_SIZE = 11
@@ -20,7 +21,7 @@ RENDER_TYPE_NAMES = {
 }
 
 
-class UW2ObjectDataError(ValueError):
+class UW2ObjectDataError(InvalidDataError):
     """Raised when UU2 object metadata is incomplete or invalid."""
 
 

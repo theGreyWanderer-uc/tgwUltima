@@ -639,6 +639,7 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def texture_info_cmd(
     textures: Annotated[
         str,
@@ -738,7 +739,7 @@ def texture_export_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: current directory)"
+            "-o", "--output-dir", help="Output directory (default: current directory)"
         ),
     ] = None,
 ) -> None:
@@ -768,7 +769,7 @@ def texture_export_all_cmd(
     output: Annotated[
         str,
         typer.Option(
-            "-o", "--output", help="Output root; each archive gets its own folder"
+            "-o", "--output-dir", help="Output root; each archive gets its own folder"
         ),
     ] = "u9_textures",
     palette: Annotated[
@@ -816,6 +817,7 @@ def texture_export_all_cmd(
     )
 
 
+@meta(results=("text",))
 def icon_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
@@ -857,7 +859,7 @@ def icon_export_cmd(
     output: Annotated[
         Optional[str],
         typer.Option(
-            "-o", "--output", help="Output directory (default: current directory)"
+            "-o", "--output-dir", help="Output directory (default: current directory)"
         ),
     ] = None,
 ) -> None:
@@ -894,7 +896,9 @@ def icon_export_all_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: icon_export/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: icon_export/)"
+        ),
     ] = None,
 ) -> None:
     """Batch-export every candidate 2D UI icon (see titan.u9.icon) not referenced by any 3D model."""
@@ -907,6 +911,7 @@ def icon_export_all_cmd(
     )
 
 
+@meta(results=("text",))
 def sdinfo_list_cmd(
     file: Annotated[
         str,
@@ -926,6 +931,7 @@ def sdinfo_list_cmd(
     )
 
 
+@meta(results=("text",))
 def sdinfo_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
     index: Annotated[
@@ -937,6 +943,7 @@ def sdinfo_show_cmd(
     raise SystemExit(cmd_sdinfo_show(SimpleNamespace(file=file, index=index)))
 
 
+@meta(results=("text",))
 def sdinfo_verify_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
     textures: Annotated[

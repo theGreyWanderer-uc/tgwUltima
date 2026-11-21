@@ -213,7 +213,7 @@ def music_export_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract and convert music from MUSIC.FLX to MIDI files."""
@@ -227,7 +227,7 @@ def sound_export_all_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Extract and decode all sound effects from SOUND.FLX to WAV."""
@@ -246,7 +246,7 @@ def sound_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .raw Sonarc audio file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Decode a Sonarc audio file (.raw) to WAV."""
@@ -258,7 +258,9 @@ def sound_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .raw files")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory (default: <dir>/wav/)"),
+        typer.Option(
+            "-o", "--output-dir", help="Output directory (default: <dir>/wav/)"
+        ),
     ] = None,
 ) -> None:
     """Batch-decode all Sonarc .raw files in a directory to WAV."""

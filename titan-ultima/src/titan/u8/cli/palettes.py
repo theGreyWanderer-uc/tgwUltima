@@ -117,7 +117,7 @@ def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .pal file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Export a U8 palette (.pal) as PNG swatch + text dump."""
@@ -132,7 +132,7 @@ def xformpal_export_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
 ) -> None:
     """Export U8 transform palette as PNG swatch + text dump."""

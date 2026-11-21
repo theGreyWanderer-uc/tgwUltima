@@ -17,14 +17,14 @@ def test_md_map_render_help_lists_public_options() -> None:
     result = CliRunner().invoke(md_app, ["map-render", "--help"])
     assert result.exit_code == 0, result.output
     for option in (
-        "--gamedir",
+        "--game-dir",
         "--palette",
         "--region",
         "--dungeon",
         "--full",
         "--objects",
         "--actors",
-        "--savegame",
+        "--save",
         "--show-markers",
         "--show-invisible",
         "--tick",

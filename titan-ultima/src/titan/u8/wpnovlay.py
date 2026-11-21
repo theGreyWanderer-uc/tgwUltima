@@ -21,6 +21,7 @@ from titan.flex import (
     FlexArchive,
 )
 from titan.u8.anim import ACTION_COUNT, DIRECTION_NAMES, U8AnimAction, U8AnimData
+from titan.errors import InvalidDataError
 
 __all__ = [
     "U8WeaponOverlayData",
@@ -61,7 +62,7 @@ WEAPON_OVERLAY_TYPES = {
 }
 
 
-class U8WeaponOverlayError(ValueError):
+class U8WeaponOverlayError(InvalidDataError):
     """Weapon overlay data or its pairing with avatar ANIM.DAT is invalid."""
 
 

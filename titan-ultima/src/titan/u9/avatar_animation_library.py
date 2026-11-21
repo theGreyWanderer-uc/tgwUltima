@@ -35,6 +35,7 @@ from titan.u9.mesh_export import TextureResolver
 from titan.u9.model import U9Model
 
 from titan.u9.node_registry import U9NodeRegistry
+from titan.errors import TitanError
 
 AVATAR_ANIMATION_LIBRARY_SCHEMA = "titan.u9.avatar-animation-library"
 AVATAR_ANIMATION_LIBRARY_SCHEMA_VERSION = 1
@@ -52,7 +53,7 @@ _EQUIPMENT_LABELS = (
 )
 
 
-class U9AvatarAnimationLibraryError(Exception):
+class U9AvatarAnimationLibraryError(TitanError):
     """Raised when Avatar-labelled clips cannot form an animation library."""
 
 

@@ -87,6 +87,32 @@ def test_tagged_names_are_real_parameters() -> None:
         assert not info.batch_with or info.interactive, path
 
 
+def test_every_visible_command_is_tagged() -> None:
+    """A command without ``@meta`` hasn't been reviewed for front ends.
+
+    Tag what the command produces, even when it only prints (``results=("text",)``);
+    ``@meta()`` with no fields means "reviewed, nothing to say". Hidden commands
+    (deprecated aliases) are exempt.
+    """
+
+    def visible(command, path):
+        children = getattr(command, "commands", None)
+        if children:
+            for name, child in children.items():
+                if not child.hidden:
+                    yield from visible(child, (*path, name))
+        else:
+            yield path
+
+    tagged = set(_meta.command_metas())
+    missing = [
+        " ".join(path)
+        for path in visible(typer.main.get_command(app), ())
+        if path not in tagged
+    ]
+    assert not missing, "commands without @meta: " + ", ".join(missing)
+
+
 def test_interactive_commands_are_tagged() -> None:
     interactive = {
         path for path, info in _meta.command_metas().items() if info.interactive
@@ -139,9 +165,20 @@ def test_every_save_spelling_is_tagged() -> None:
     assert kind(("md", "map-render"), "savegame") == "save"
     assert kind(("u7", "map-render"), "gamedat") == "save"
     assert kind(("u6", "flags-set"), "savegame") == "save"
-    assert kind(("u9", "npc-list"), "save") == "save"
+    assert kind(("u9", "npc-diff"), "save_file") == "save"
+    # U9's --save is a flag that says FILE is a save; it isn't a save itself.
+    assert kind(("u9", "npc-list"), "save") is None
     # U9's --nonfixed is one region file, not a whole save.
     assert kind(("u9", "map-render"), "nonfixed") is None
+
+
+def test_save_and_path_kinds_are_never_flags() -> None:
+    commands = dict(_leaf_commands())
+    for path, info in _meta.command_metas().items():
+        params = {param.name: param for param in commands[path].params}
+        for name, kind in info.params.items():
+            if kind != "format":
+                assert not getattr(params[name], "is_flag", False), (path, name, kind)
 
 
 def test_wizard_tags_and_kinds_share_one_decorator() -> None:
@@ -168,7 +205,7 @@ def test_results_for_known_commands() -> None:
     assert results("u7", "shape-export") == ("files",)
     assert set(results("uw2", "shape-info")) == {"json", "text"}
     info = _meta.command_meta("uw2", "shape-info")
-    assert info is not None and info.params["json_output"] == "format"
+    assert info is not None and info.params["output_format"] == "format"
 
 
 def test_path_kinds_use_the_vocabulary_and_cover_install_tables() -> None:

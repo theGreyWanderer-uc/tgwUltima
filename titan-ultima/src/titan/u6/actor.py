@@ -78,6 +78,7 @@ import struct
 from dataclasses import dataclass
 
 from titan.u6.object import unpack_position
+from titan.errors import InvalidDataError
 
 NUM_ACTORS = 256
 
@@ -139,7 +140,7 @@ STATUS_IN_PARTY = 0x80
 STATUS_ALIGNMENT_MASK = 0x60
 
 
-class U6ActorError(Exception):
+class U6ActorError(InvalidDataError):
     """Raised when objlist data is too short to contain the actor tables."""
 
 

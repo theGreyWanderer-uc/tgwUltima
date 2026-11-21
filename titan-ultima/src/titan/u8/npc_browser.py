@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from titan._config import cfg
+from titan.u8.install import u8_cfg as cfg
 from titan.u8.npc_names import describe_u8_npc_identity, load_u8_npc_labels
 from titan.u8.npc_source import U8NpcSource, load_u8_npc_source
 from titan.u8.gumps import U8GumpState
@@ -18,7 +18,8 @@ from titan.u8.save_state import U8SaveSnapshot, format_u8_save_info
 from titan.u8.shape_browser import U8ShapeLibrary, find_u8_browser_file
 from titan.u8.state_report import format_u8_npcdata_report
 
-U8_NPC_BROWSER_OUTPUT = Path("titan-out/u8_npc_browse_export")
+U8_NPC_BROWSER_OUTPUT = "npc-browse"
+"""Default export folder name, under :func:`titan._config.export_dir` ("u8")."""
 
 
 @dataclass

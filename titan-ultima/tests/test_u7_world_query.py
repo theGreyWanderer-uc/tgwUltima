@@ -10,6 +10,7 @@ from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.world import WorldQueryParams, parse_numbers, parse_rectangle, run_query
 from titan.u7 import world_workflow as workflow
+from titan.u7 import world_workflow_ui as workflow_ui
 from titan.u7 import install as u7_install
 
 
@@ -365,7 +366,7 @@ def test_wizard_reprompts_invalid_input_and_refines_without_losing_choices(
         "Finish",
     ]
     prompts = scripted_questions(monkeypatch, answers)
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     output = capsys.readouterr().out
     assert "Invalid Shape number" in output
     assert "Tile coordinate must" in output
@@ -402,7 +403,7 @@ def test_wizard_change_area_does_not_reask_filters_and_can_save_recipe(
         "Finish",
     ]
     prompts = scripted_questions(monkeypatch, answers)
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     assert sum(message.startswith("Shape numbers") for message, _ in prompts) == 1
     assert workflow.load_recipe(str(recipe)).superchunks == [1]
     assert workflow.load_recipe(str(recipe)).shape_nums == [151]
@@ -412,7 +413,7 @@ def test_wizard_change_area_does_not_reask_filters_and_can_save_recipe(
 def test_cancel_at_each_initial_stage_is_clean(world, monkeypatch, stage):
     answers = [[], False, "", "", "", [], "Entire world", True, "Finish"]
     scripted_questions(monkeypatch, answers[:stage] + [None])
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
 
 
 def test_explicit_custom_static_inside_mods_does_not_inherit_outer_world(
@@ -441,13 +442,13 @@ def test_world_query_can_change_world_and_map_between_searches(
     target = ArchiveTarget("Custom world", own, tmp_path / "new/patch", True)
     monkeypatch.setattr(picker, "game_targets", lambda game: (base, [target]))
     seen = []
-    original = workflow.run_query
+    original = workflow_ui.run_query
 
     def query(params):
         seen.append(replace(params))
         return original(params)
 
-    monkeypatch.setattr(workflow, "run_query", query)
+    monkeypatch.setattr(workflow_ui, "run_query", query)
     scripted_questions(
         monkeypatch,
         [
@@ -474,7 +475,7 @@ def test_world_query_can_change_world_and_map_between_searches(
             "Finish",
         ],
     )
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     assert len(seen) == 2
     assert seen[-1].game == "si" and seen[-1].map_num == 1
     assert seen[-1].static_dir == seen[-1].base_static == str(own)
@@ -581,7 +582,7 @@ def test_wizard_shows_placements_exports_and_clears_new_search_filters(
         "Finish",
     ]
     prompts = scripted_questions(monkeypatch, answers)
-    assert workflow.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == 0
     assert "frame=  1" in capsys.readouterr().out
     assert output.read_text().count("\n") == 2
     shape_prompts = [

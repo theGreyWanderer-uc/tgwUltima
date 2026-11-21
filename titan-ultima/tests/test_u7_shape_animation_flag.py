@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from titan.cli import app
 from titan.u7 import shape_wizard as wizard
+from titan.u7 import shape_wizard_ui as wizard_ui
 from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
@@ -37,7 +38,7 @@ def shape_bytes(count=2):
 @pytest.fixture
 def assets(tmp_path, monkeypatch):
     monkeypatch.setattr("titan._config.get_config", lambda: {})
-    monkeypatch.setattr(wizard, "get_config", lambda: {})
+    monkeypatch.setattr(wizard_ui, "get_config", lambda: {})
     monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
     source = tmp_path / "source"
     source.mkdir()
@@ -135,13 +136,13 @@ def test_standalone_creation_carries_yes_choice_to_archive_import(
 
 def test_wizard_prompt_for_multiple_frames_and_recipe_setting(assets, monkeypatch):
     _, root, _ = assets
-    monkeypatch.setattr(wizard, "_select_target", lambda config: None)
-    monkeypatch.setattr(wizard, "show_preview", lambda *args, **kwargs: None)
+    monkeypatch.setattr(wizard_ui, "_select_target", lambda config: None)
+    monkeypatch.setattr(wizard_ui, "show_preview", lambda *args, **kwargs: None)
     config = wizard.ShapeWizardConfig(
         source=str(root / "frames"), palette_file=str(root / "palette.pal")
     )
     converted = wizard.convert(config)
-    monkeypatch.setattr(wizard, "_conversion_steps", lambda config: converted)
+    monkeypatch.setattr(wizard_ui, "_conversion_steps", lambda config: converted)
     result = CliRunner().invoke(
         u7_app,
         ["shape-create", str(root / "frames"), "-o", str(root / "created.shp")],

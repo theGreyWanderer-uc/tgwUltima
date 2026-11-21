@@ -8,8 +8,9 @@ from typing import Annotated
 
 import typer
 
+from titan._config import export_dir
 from titan import _wizard_ui as ui
-from titan._config import cfg
+from titan.u8.install import u8_cfg as cfg
 from titan._image_preview import open_preview
 from titan._inventory_browser import InventoryBrowser, InventoryFilters
 from titan.u8.container_browser import (
@@ -246,10 +247,12 @@ def browse_u8_container_inventory(
     session: U8ContainerSession,
     number: U8InventoryId,
     *,
-    output: Path = U8_CONTAINER_BROWSER_OUTPUT,
+    output: Path | None = None,
     back_label: str = "Back to parent browser",
 ) -> None:
     """Enter one captured inventory and return directly to its calling NPC browser."""
+    if output is None:
+        output = export_dir("u8", U8_CONTAINER_BROWSER_OUTPUT)
     validate_u8_container_output(session, output)
     u8_inventory_rows(session, number)
     with tempfile.TemporaryDirectory(prefix="titan-u8-inventory-") as temporary:
@@ -262,9 +265,11 @@ def browse_u8_container_session(
     session: U8ContainerSession,
     *,
     container: U8InventoryId | None = None,
-    output: Path = U8_CONTAINER_BROWSER_OUTPUT,
+    output: Path | None = None,
 ) -> None:
     """Use the shared persistent flow while retaining native U8 IDs and actions."""
+    if output is None:
+        output = export_dir("u8", U8_CONTAINER_BROWSER_OUTPUT)
     validate_u8_container_output(session, output)
     if container is not None:
         u8_inventory_rows(session, container)
@@ -289,11 +294,13 @@ def run_u8_container_browser(
     cache_only: bool = False,
     npc_backpack: bool = True,
     map_id: int | None = None,
-    output: Path = U8_CONTAINER_BROWSER_OUTPUT,
+    output: Path | None = None,
     data_only: bool = False,
     export: bool = False,
 ) -> int:
     """Load source-bound inventories once; --export provides a repeatable batch path."""
+    if output is None:
+        output = export_dir("u8", U8_CONTAINER_BROWSER_OUTPUT)
     print("\nTitan U8 Container Browser")
     try:
         library = None
@@ -451,9 +458,11 @@ def container_browse_cmd(
     output: Annotated[
         Path,
         typer.Option(
-            "-o", "--output", help="Export folder; each report uses a fresh directory"
+            "-o",
+            "--output-dir",
+            help="Export folder; each report uses a fresh directory",
         ),
-    ] = U8_CONTAINER_BROWSER_OUTPUT,
+    ] = None,
     data_only: Annotated[
         bool,
         typer.Option(
@@ -467,6 +476,8 @@ def container_browse_cmd(
     ] = False,
 ) -> None:
     """Browse U8 nested containers, NPC inventories, native previews and offline reports."""
+    if output is None:
+        output = export_dir("u8", U8_CONTAINER_BROWSER_OUTPUT)
     try:
         selected_container = (
             parse_u8_inventory_id(container) if container is not None else None

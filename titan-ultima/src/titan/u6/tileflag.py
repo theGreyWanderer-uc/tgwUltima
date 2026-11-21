@@ -54,11 +54,12 @@ __all__ = ["U6TileFlags", "U6TileFlagEntry", "U6TileFlagsError"]
 
 import os
 from dataclasses import dataclass
+from titan.errors import InvalidDataError
 
 ARTICLES = ("", "a", "an", "the")
 
 
-class U6TileFlagsError(Exception):
+class U6TileFlagsError(InvalidDataError):
     """Raised when TILEFLAG data is too short to contain all four regions."""
 
 

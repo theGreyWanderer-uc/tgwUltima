@@ -19,10 +19,17 @@ __all__ = [
     "GAMES",
     "CommandMeta",
     "GameMeta",
+    "Installation",
     "command_meta",
     "command_metas",
+    "discover_installs",
+    "find_installs",
     "get_game",
+    "has_install_support",
     "has_saves",
+    "inspect_install",
+    "install_candidates",
+    "install_config",
     "list_saves",
     "meta",
     "path_kind",
@@ -392,6 +399,101 @@ def resolve_save(
     if provider is None:
         return Path(value).expanduser() if value else None
     return provider.resolve_save(value, _loaded_config(config))
+
+
+# --- installs ------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Installation:
+    """One game install titan found, and what it found in it."""
+
+    game_id: str
+    """The :data:`GAMES` id this install belongs to."""
+    root: Path
+    """The folder ``[<section>.game] base`` names."""
+    resources: Mapping[str, Path] = field(default_factory=dict)
+    """Files and folders found, keyed like ``[<section>.paths]`` where the game
+    has that section (UW1, UW2 and UO name their own keys)."""
+    problems: Mapping[str, str] = field(default_factory=dict)
+    """Resource key -> what's wrong (``"NOT FOUND"``, ``"INVALID: ..."``) for
+    the files a valid install needs. Empty for a usable install."""
+    settings: Mapping[str, str] = field(default_factory=dict)
+    """Other facts ``[<section>.game]`` records, e.g. U8 ``language``."""
+
+    @property
+    def valid(self) -> bool:
+        """Whether every file the game needs is present and readable."""
+        return not self.problems
+
+
+_INSTALL_PROVIDERS = {
+    "u6": ("titan.u6.install", False),
+    "md": ("titan.md.install", False),
+    "uw1": ("titan.uw1.install", False),
+    "uw2": ("titan.uw2.install", False),
+    "u7bg": ("titan.u7.install", True),
+    "u7si": ("titan.u7.install", True),
+    "u8": ("titan.u8.install", False),
+    "u9": ("titan.u9.install", False),
+    "uo": ("titan.uo.installs", False),
+}
+"""Game id -> (module, takes game id). The module has
+``install_candidates(config)``, ``discover_installs(path)`` and
+``install_config(install)``; a shared module (U7 BG and SI) also gets the game
+id as the last argument of the first two."""
+
+
+def has_install_support(game_id: str) -> bool:
+    """Whether titan can find and check installs of *game_id*."""
+    return game_id in _INSTALL_PROVIDERS
+
+
+def _install_provider(game_id: str):
+    entry = _INSTALL_PROVIDERS.get(game_id)
+    if entry is None:
+        raise KeyError(f"titan finds no installs for {game_id!r}")
+    return import_module(entry[0]), ((game_id,) if entry[1] else ())
+
+
+def install_candidates(game_id: str, config: Optional[dict] = None) -> list[Path]:
+    """Folders worth checking for *game_id*: configured ones first, then the
+    usual GOG, Steam and manual locations. Most won't exist."""
+    provider, extra = _install_provider(game_id)
+    return provider.install_candidates(_loaded_config(config), *extra)
+
+
+def discover_installs(game_id: str, path: Path) -> list[Installation]:
+    """Installs of *game_id* at or a few levels below *path*, valid or not.
+
+    ``[]`` means nothing there looks like the game. An install with
+    :attr:`Installation.problems` is the game, but incomplete or damaged.
+    """
+    provider, extra = _install_provider(game_id)
+    return provider.discover_installs(Path(path).expanduser(), *extra)
+
+
+def inspect_install(game_id: str, path: Path) -> Optional[Installation]:
+    """The install of *game_id* at *path* (preferring a valid one), or ``None``."""
+    found = discover_installs(game_id, path)
+    return next((item for item in found if item.valid), found[0] if found else None)
+
+
+def find_installs(game_id: str, config: Optional[dict] = None) -> list[Installation]:
+    """Every install of *game_id* in :func:`install_candidates`, each root once."""
+    found: dict[Path, Installation] = {}
+    for candidate in install_candidates(game_id, config):
+        for install in discover_installs(game_id, candidate):
+            found.setdefault(install.root, install)
+    return list(found.values())
+
+
+def install_config(install: Installation) -> dict:
+    """The ``titan.toml`` section that selects *install*, as
+    ``{section: {"game": {...}, "paths": {...}, ...}}``."""
+    provider, _ = _install_provider(install.game_id)
+    section = get_game(install.game_id).config_section  # type: ignore[union-attr]
+    return {section: provider.install_config(install)}
 
 
 # --- config paths --------------------------------------------------------

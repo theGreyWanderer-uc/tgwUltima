@@ -83,6 +83,7 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
     return 0
 
 
+@meta(results=("text",))
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8 save file")],
 ) -> None:
@@ -95,7 +96,7 @@ def save_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8 save file")],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output directory"),
+        typer.Option("-o", "--output-dir", help="Output directory"),
     ] = None,
     entry: Annotated[
         Optional[str],

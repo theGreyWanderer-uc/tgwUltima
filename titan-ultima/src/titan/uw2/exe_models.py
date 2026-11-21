@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 import math
 from pathlib import Path
 import struct
+from titan.errors import InvalidDataError
 
 
 MODEL_COUNT = 32
@@ -141,7 +142,7 @@ def shaded_palette_index(colors, palette_index: int, shade: int) -> int:
     return target
 
 
-class UW2ModelError(ValueError):
+class UW2ModelError(InvalidDataError):
     """Raised when executable model data is missing or malformed."""
 
 

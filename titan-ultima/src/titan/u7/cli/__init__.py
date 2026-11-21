@@ -34,8 +34,17 @@ from titan.u7.cli import (
     places,
     saves,
 )
+from titan._cli_aliases import alias_group
 
 u7_app = typer.Typer(
+    cls=alias_group(
+        {
+            "--gamedat": "--save",
+            "--output-root": "--output-dir",
+            "--output": "--output-dir",
+            "--json": ("--format", "json"),
+        }
+    ),
     name="u7",
     help="Ultima 7 — The Black Gate / Serpent Isle commands.",
     no_args_is_help=True,
