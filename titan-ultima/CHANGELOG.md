@@ -163,6 +163,16 @@ work for the next release.
 
 ### Fixed
 
+- **U7 query commands without a terminal:** `titan u7 egg-query`,
+  `world-query` and `container-browse` crashed when their input or output
+  was piped or captured. With no filter options they start a wizard, and the
+  wizard can't prompt without a terminal. They now run unfiltered instead and
+  print every egg, a world summary, or every container. Your terminal still
+  gets the wizard.
+- **Output that can't show some characters:** when titan's output goes to a
+  file or pipe on Windows, characters such as the wizards' `─` separators
+  now print as `?` instead of crashing the command. Set
+  `PYTHONIOENCODING=utf-8` to keep the real characters.
 - **Ultima 8 setup on GOG:** `titan setup` wrote `nonfixed = "U8SAVE.000"`
   without checking it existed, so on GOG installs, whose saves start at 001,
   the map commands failed. Re-running setup removes that value when the file

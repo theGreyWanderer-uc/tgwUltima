@@ -109,6 +109,22 @@ def test_main_exits_70_for_a_bug(monkeypatch: pytest.MonkeyPatch, capsys) -> Non
     assert "RuntimeError: boom" in capsys.readouterr().err
 
 
+def test_main_replaces_characters_the_output_cannot_encode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Captured output on Windows is cp1252, which has no box-drawing characters.
+    import io
+    import sys
+
+    buffer = io.BytesIO()
+    stream = io.TextIOWrapper(buffer, encoding="cp1252", newline="\n")
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(cli, "app", lambda: print("── U7 Egg Query ──"))
+    assert cli.main() == 0
+    stream.flush()
+    assert buffer.getvalue() == b"?? U7 Egg Query ??" + b"\n"
+
+
 def test_export_dir_follows_titan_data(isolated: Path) -> None:
     assert (
         _config.export_dir("u8", "map-browse")

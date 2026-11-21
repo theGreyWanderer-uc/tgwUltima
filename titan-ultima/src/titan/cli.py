@@ -1618,6 +1618,24 @@ for _compat_name, _compat_fn in _U8_COMPAT_COMMANDS:
 # ============================================================================
 
 
+def _tolerate_unencodable_output() -> None:
+    """Replace characters the output encoding can't represent instead of crashing.
+
+    Piped or captured output on Windows uses the ANSI code page (cp1252), which
+    has no box-drawing characters, so a wizard's ``─`` separator raised
+    ``UnicodeEncodeError``. The encoding itself is left alone; set
+    ``PYTHONIOENCODING=utf-8`` to get the real characters.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main() -> int:
     """CLI entry point.
 
@@ -1625,6 +1643,7 @@ def main() -> int:
     :data:`titan.errors.EXIT_CODES`). Anything else is a bug: print the
     traceback and exit 70, so a front end can say "please report this".
     """
+    _tolerate_unencodable_output()
     try:
         app()
     except Exception:

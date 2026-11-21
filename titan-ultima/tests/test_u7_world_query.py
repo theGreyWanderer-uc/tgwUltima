@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from titan.u7.cli import u7_app
+from titan.u7.cli import world as world_cli
 from titan.u7.flex import U7FlexArchive
 from titan.u7.world import WorldQueryParams, parse_numbers, parse_rectangle, run_query
 from titan.u7 import world_workflow as workflow
@@ -293,12 +294,37 @@ def test_cli_map_number_passed_to_wizard(world, monkeypatch):
         return 0
 
     monkeypatch.setattr(engine, "run_wizard", wizard)
+    monkeypatch.setattr(world_cli, "menus_enabled", lambda: True)
     result = CliRunner().invoke(
         u7_app, ["world-query", world.static_dir, "--map-num", "3", "--game", "si"]
     )
     assert result.exit_code == 0, result.output
     assert context["map_num"] == 3
     assert context["game"] == "si"
+
+
+@pytest.mark.parametrize("command", ["world-query", "egg-query", "container-browse"])
+def test_cli_without_terminal_runs_unfiltered_instead_of_wizard(
+    world, monkeypatch, tmp_path, command
+):
+    import titan.u7.container_ui as container_ui
+    import titan.u7.eggs_ui as eggs_ui
+    import titan.u7.world as engine
+
+    def wizard(**kwargs):
+        raise AssertionError("the wizard needs a terminal")
+
+    for module in (engine, eggs_ui, container_ui):
+        monkeypatch.setattr(module, "run_wizard", wizard)
+    monkeypatch.setattr(world_cli, "menus_enabled", lambda: False)
+    args = [command, world.static_dir]
+    if command != "world-query":  # these read IREG, so they need a GAMEDAT
+        gamedat = tmp_path / "gamedat"
+        gamedat.mkdir()
+        args += ["--save", str(gamedat)]
+    result = CliRunner().invoke(u7_app, args)
+    assert result.exit_code == 0, result.output
+    assert "found" in result.output or "matched" in result.output
 
 
 @pytest.mark.parametrize(

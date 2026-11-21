@@ -11,6 +11,7 @@ from typing import Annotated, Literal, Optional
 
 import typer
 
+from titan._wizard_ui import menus_enabled
 from titan.u7 import install
 from titan._meta import meta
 
@@ -222,7 +223,8 @@ def world_query_cmd(
     """Query world object placements from IFIX and IREG.
 
     With no filter flags, launches an interactive wizard (requires questionary).
-    Supply any filter flag to run non-interactively.
+    Supply any filter flag to run non-interactively. Without a terminal (piped
+    or captured output), it runs unfiltered instead of launching the wizard.
 
     \\b
     Non-interactive examples:
@@ -300,7 +302,7 @@ def world_query_cmd(
             )
             or force
         )
-        if not non_interactive:
+        if not non_interactive and menus_enabled():
             raise SystemExit(
                 _world_wizard(
                     static_dir=params.static_dir,
@@ -484,7 +486,8 @@ def container_browse_cmd(
     """Browse container contents from IREG, with full nesting support.
 
     With no filter flags, launches an interactive wizard (requires questionary).
-    Supply any filter flag to run non-interactively.
+    Supply any filter flag to run non-interactively. Without a terminal (piped
+    or captured output), it runs unfiltered instead of launching the wizard.
 
     \\b
     Non-interactive examples:
@@ -531,7 +534,7 @@ def container_browse_cmd(
 
     _exult_flx = exult_flx or exult_cfg(f"{game}_flx") or None
 
-    if not _non_interactive:
+    if not _non_interactive and menus_enabled():
         raise SystemExit(
             _container_wizard(
                 static_dir=static_dir,
@@ -700,7 +703,8 @@ def egg_query_cmd(
     """Query egg trigger objects from IREG, showing type, function, and location.
 
     With no filter flags, launches an interactive wizard (requires questionary).
-    Supply any filter flag to run non-interactively.
+    Supply any filter flag to run non-interactively. Without a terminal (piped
+    or captured output), it runs unfiltered instead of launching the wizard.
 
     \\b
     Non-interactive examples:
@@ -729,9 +733,11 @@ def egg_query_cmd(
     if not gamedat_dir:
         gamedat_dir = install.resolve_u7_gamedat(game)
 
+    # The wizard needs a terminal; without one (piped or captured, as a front
+    # end runs it) list every egg instead of failing on the first prompt.
     _non_interactive = any([egg_type, fn, tile_rect, sc, format, output])
 
-    if not _non_interactive:
+    if not _non_interactive and menus_enabled():
         raise SystemExit(
             _egg_wizard(
                 static_dir=static_dir,
