@@ -570,7 +570,14 @@ def run_u8_npc_browser(
 
 @meta(
     results=("files",),
-    params={"output": "output-dir", "palette": "palette"},
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "source": "input-file",
+        "anim": "install-file",
+        "itemcach": "input-file",
+        "names": "input-file",
+    },
     interactive=True,
 )
 def npc_browse_cmd(

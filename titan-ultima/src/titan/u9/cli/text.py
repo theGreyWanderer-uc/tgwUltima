@@ -652,7 +652,7 @@ def text_export_cmd(
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "csv_path": "input-file"})
 def text_import_cmd(
     file: Annotated[
         str,

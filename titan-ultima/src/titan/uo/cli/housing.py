@@ -642,7 +642,9 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",), params={"output": "output-dir", "server_profile": "input-file"}
+)
 def house_footprints_cmd(
     client: Annotated[
         Optional[str],
@@ -688,7 +690,15 @@ def house_footprints_cmd(
     raise SystemExit(cmd_house_footprints(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={
+        "output": "output-dir",
+        "regions": "input-file",
+        "region_scripts": "input-dir",
+        "server_profile": "input-file",
+    },
+)
 def house_capacity_cmd(
     client: Annotated[
         Optional[str],

@@ -36,7 +36,7 @@ __all__ = [
     "resolve_save",
 ]
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
@@ -95,6 +95,7 @@ PARAM_KINDS = frozenset(
         "save",  # a save slot, save file or save folder for this game
         "palette",  # a palette file
         "install-file",  # a file inside the game install
+        "install-dir",  # a folder of the game install: its root, STATIC, a patch folder
         "input-file",
         "input-dir",
         "output-file",
@@ -143,6 +144,13 @@ class CommandMeta:
     """``"module:function"`` returning the :class:`RecipeSpec` its ``recipe``
     parameter reads; use :meth:`recipe_spec`. Named, not imported, so tagging
     a command doesn't load the wizard."""
+    resources: Mapping[str, str] = field(default_factory=dict)
+    """``{parameter name: install resource}`` for ``install-file``,
+    ``install-dir``, ``working-dir`` and ``palette`` parameters a front end can fill from a
+    detected install: a key of :attr:`Installation.resources` (and of the
+    game's ``[<section>.paths]``), or ``"root"`` for :attr:`Installation.root`.
+    A parameter without one is still from the install; titan just can't name
+    which file (any FLX, say)."""
 
     def recipe_spec(self) -> Optional[RecipeSpec]:
         """The recipe this command reads, or ``None``. Imports the recipe module."""
@@ -176,14 +184,23 @@ def meta(
     params: Optional[Mapping[str, str]] = None,
     results: Iterable[str] = (),
     recipe: Optional[str] = None,
+    resources: Optional[Mapping[str, str]] = None,
 ) -> Callable[[_F], _F]:
     """Attach :class:`CommandMeta` to a command function.
 
     The command's path comes from where the function sits in titan's command
     tree, not from its name, so one function registered twice gets both paths.
+    Common inputs (``--gamedir``, U9's configured FILE arguments, U8 options
+    named like ``[u8.paths]`` keys, ...) get their kind and resource from
+    :mod:`titan._input_kinds`; tag only what those rules don't cover.
     """
     info = CommandMeta(
-        interactive, tuple(batch_with), dict(params or {}), tuple(results), recipe
+        interactive,
+        tuple(batch_with),
+        dict(params or {}),
+        tuple(results),
+        recipe,
+        dict(resources or {}),
     )
 
     def decorate(fn: _F) -> _F:
@@ -197,10 +214,13 @@ def meta(
 def command_metas() -> dict[tuple[str, ...], CommandMeta]:
     """Every tagged command, keyed by its full path, e.g. ``("u7", "shape-create")``.
 
-    Builds titan's command tree on first call (about two seconds).
+    ``params`` and ``resources`` include what :mod:`titan._input_kinds` works
+    out for common inputs; explicit tags win. Builds titan's command tree on
+    first call (about two seconds).
     """
     import typer.main
 
+    from titan._input_kinds import merge_inputs
     from titan.cli import app
 
     found: dict[tuple[str, ...], CommandMeta] = {}
@@ -213,7 +233,8 @@ def command_metas() -> dict[tuple[str, ...], CommandMeta]:
             return
         info = getattr(getattr(command, "callback", None), _ATTR, None)
         if isinstance(info, CommandMeta):
-            found[path] = info
+            params, resources = merge_inputs(path, command.params, info)
+            found[path] = replace(info, params=params, resources=resources)
 
     walk(typer.main.get_command(app), ())
     return found

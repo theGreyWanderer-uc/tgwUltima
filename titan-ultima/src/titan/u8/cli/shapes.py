@@ -433,7 +433,10 @@ def cmd_shape_convert_u7_all(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette", "file": "input-file"},
+)
 def shape_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .shp file")],
     palette: Annotated[
@@ -457,7 +460,10 @@ def shape_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette", "directory": "input-dir"},
+)
 def shape_batch_cmd(
     directory: Annotated[
         str,
@@ -488,7 +494,15 @@ def shape_batch_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("file",),
+    params={
+        "output": "output-file",
+        "palette": "palette",
+        "directory": "input-dir",
+        "original": "input-file",
+    },
+)
 def shape_import_cmd(
     directory: Annotated[
         str,
@@ -522,7 +536,17 @@ def shape_import_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(
+    results=("file",),
+    params={
+        "output": "output-file",
+        "file": "input-file",
+        "u7_static": "install-dir",
+        "u8_palette": "palette",
+        "u7_palette": "palette",
+    },
+    resources={"u8_palette": "palette"},
+)
 def shape_convert_u7_cmd(
     file: Annotated[str, typer.Argument(help="Path to the U8 .shp file to convert")],
     shape_num: Annotated[
@@ -580,7 +604,17 @@ def shape_convert_u7_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={
+        "output": "output-dir",
+        "file": "install-file",
+        "u7_static": "install-dir",
+        "u8_palette": "palette",
+        "u7_palette": "palette",
+    },
+    resources={"file": "u8shapes", "u8_palette": "palette"},
+)
 def shape_convert_u7_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8SHAPES.FLX")],
     typeflag: Annotated[

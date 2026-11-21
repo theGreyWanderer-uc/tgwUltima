@@ -198,7 +198,7 @@ def cmd_palette_info(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(interactive=True)
+@meta(interactive=True, params={"file": "palette"}, resources={"file": "palette"})
 def palette_browse_cmd(
     file: Annotated[
         Optional[str],
@@ -221,7 +221,11 @@ def palette_browse_cmd(
     raise SystemExit(run_browser(game=game, file=file, index=index, encoding=encoding))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "palette"},
+    resources={"file": "palette"},
+)
 def palette_export_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to PALETTES.FLX or a standalone .pal file")
@@ -257,7 +261,8 @@ def palette_export_cmd(
 
 @meta(
     results=("json", "table", "text"),
-    params={"format": "format", "output": "output-file"},
+    params={"format": "format", "output": "output-file", "file": "palette"},
+    resources={"file": "palette"},
 )
 def palette_info_cmd(
     file: Annotated[

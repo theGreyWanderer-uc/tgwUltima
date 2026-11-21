@@ -719,7 +719,13 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
 
 @meta(
     results=("file",),
-    params={"output": "output-file", "config": "recipe"},
+    params={
+        "output": "output-file",
+        "config": "recipe",
+        "source": "input-file",
+        "base_archive": "install-file",
+        "preview": "output-file",
+    },
     interactive=True,
     batch_with=("config",),
     recipe="titan.u7.shape_recipe:shape_recipe",
@@ -820,7 +826,14 @@ def shape_create_cmd(
     )
 
 
-@meta(params={"palette": "palette"}, interactive=True)
+@meta(
+    params={
+        "palette": "palette",
+        "archive": "install-file",
+        "base_archive": "install-file",
+    },
+    interactive=True,
+)
 def shape_browse_cmd(
     archive: Annotated[
         Optional[str],
@@ -869,7 +882,17 @@ def shape_browse_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "file": "install-file",
+        "translucent_bg": "input-file",
+        "base_archive": "install-file",
+    },
+    resources={"file": "shapes"},
+)
 def shape_export_cmd(
     file: Annotated[
         str,
@@ -967,7 +990,10 @@ def shape_export_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("file",),
+    params={"output": "output-file", "palette": "palette", "directory": "input-dir"},
+)
 def shape_import_cmd(
     directory: Annotated[
         str,
@@ -1031,7 +1057,17 @@ def shape_import_cmd(
     )
 
 
-@meta(results=("json", "table"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("json", "table"),
+    params={
+        "format": "format",
+        "output": "output-file",
+        "file": "install-file",
+        "wihh": "install-file",
+        "base_archive": "install-file",
+    },
+    resources={"file": "shapes"},
+)
 def shape_frame_report_cmd(
     file: Annotated[
         str,
@@ -1079,7 +1115,16 @@ def shape_frame_report_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("image",),
+    params={
+        "output": "output-file",
+        "palette": "palette",
+        "file": "install-file",
+        "base_archive": "install-file",
+    },
+    resources={"file": "shapes"},
+)
 def shape_animate_cmd(
     file: Annotated[
         str,
@@ -1174,7 +1219,16 @@ def shape_animate_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "file": "install-file",
+        "base_archive": "install-file",
+    },
+    resources={"file": "shapes"},
+)
 def shape_batch_cmd(
     file: Annotated[
         str,
@@ -1251,7 +1305,14 @@ def shape_batch_cmd(
 
 @meta(
     results=("files", "json", "table"),
-    params={"format": "format", "output": "output-dir", "palette": "palette"},
+    params={
+        "format": "format",
+        "output": "output-dir",
+        "palette": "palette",
+        "file": "install-file",
+        "base_archive": "install-file",
+    },
+    resources={"file": "shapes"},
 )
 def shape_cycle_scan_cmd(
     file: Annotated[

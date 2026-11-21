@@ -215,7 +215,10 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "install-file"},
+)
 def usecode_scan_intrinsic_cmd(
     file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
     intrinsic: Annotated[
@@ -262,7 +265,14 @@ def usecode_scan_intrinsic_cmd(
     )
 
 
-@meta(results=("text",), params={"output": "output-file"})
+@meta(
+    results=("text",),
+    params={
+        "output": "output-file",
+        "file": "install-file",
+        "patch_file": "input-file",
+    },
+)
 def usecode_disasm_cmd(
     file: Annotated[str, typer.Argument(help="Path to U7 USECODE file")],
     function: Annotated[

@@ -518,7 +518,7 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(interactive=True)
+@meta(interactive=True, params={"source": "input-file"})
 def monster_browse_cmd(
     source: Annotated[
         Optional[str],
@@ -540,7 +540,7 @@ def monster_browse_cmd(
     raise SystemExit(run_browser(game=game, source=source, shape=shape))
 
 
-@meta(interactive=True)
+@meta(interactive=True, params={"source": "input-file"})
 def npc_browse_cmd(
     source: Annotated[
         Optional[str],
@@ -585,7 +585,10 @@ def npc_browse_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "input-file"},
+)
 def npc_dump_cmd(
     file: Annotated[
         str,
@@ -629,7 +632,15 @@ def npc_dump_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={
+        "format": "format",
+        "output": "output-file",
+        "file": "install-file",
+        "npc_file": "input-file",
+    },
+)
 def schedule_dump_cmd(
     file: Annotated[
         str,
@@ -679,7 +690,15 @@ def schedule_dump_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={
+        "format": "format",
+        "output": "output-file",
+        "file": "install-file",
+        "shape_info": "input-file",
+    },
+)
 def monster_defs_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to MONSTERS.DAT or STATIC directory")
@@ -725,7 +744,10 @@ def monster_defs_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "input-file"},
+)
 def monster_dump_cmd(
     file: Annotated[
         str,
@@ -764,7 +786,15 @@ def monster_dump_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={
+        "format": "format",
+        "output": "output-file",
+        "mod_monsters": "input-file",
+        "equip_file": "install-file",
+    },
+)
 def monster_equipment_cmd(
     static: Annotated[
         Optional[str],
@@ -814,7 +844,15 @@ def monster_equipment_cmd(
     )
 
 
-@meta(params={"gamedat": "save"})
+@meta(
+    params={
+        "gamedat": "save",
+        "live_source": "input-file",
+        "mod_monsters": "input-file",
+        "mod_equip": "input-file",
+        "output_dir": "output-dir",
+    }
+)
 def monster_report_cmd(
     static: Annotated[
         Optional[str],
@@ -871,7 +909,10 @@ def monster_report_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file", "file": "input-file"},
+)
 def npc_equipment_cmd(
     file: Annotated[
         str,

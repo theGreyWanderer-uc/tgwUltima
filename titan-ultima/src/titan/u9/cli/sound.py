@@ -1017,7 +1017,7 @@ def sound_import_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "directory": "input-dir"})
 def sound_import_batch_cmd(
     archive: Annotated[str, typer.Argument(help="Target Speech/sfx/music FLX")],
     directory: Annotated[

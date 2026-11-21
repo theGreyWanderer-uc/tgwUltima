@@ -1053,7 +1053,7 @@ def map_3d_export_cmd(
 
 
 @uw2_app.command("map-render")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "workdir": "working-dir"})
 def map_render_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output-dir", help="Rendered PNG directory")
@@ -1262,7 +1262,7 @@ def texture_usage_cmd(
 
 
 @uw2_app.command("palette-export")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "palette"})
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="PALS.DAT path/name")] = "PALS.DAT",
     index: Annotated[int, typer.Option("--index", help="Palette index")] = 0,
@@ -1291,7 +1291,13 @@ def palette_export_cmd(
 @uw2_app.command("shape-info")
 @meta(
     results=("json", "text"),
-    params={"output_format": "format", "output": "output-file", "palette": "palette"},
+    params={
+        "output_format": "format",
+        "output": "output-file",
+        "palette": "palette",
+        "file": "install-file",
+        "allpals": "palette",
+    },
 )
 def shape_info_cmd(
     file: Annotated[str, typer.Argument(help="UU2 .GR archive path/name")],
@@ -1322,7 +1328,15 @@ def shape_info_cmd(
 
 
 @uw2_app.command("shape-export")
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "file": "install-file",
+        "allpals": "palette",
+    },
+)
 def shape_export_cmd(
     file: Annotated[str, typer.Argument(help="UU2 .GR archive path/name")],
     index: Annotated[int, typer.Argument(help="Image index")],
@@ -1344,7 +1358,15 @@ def shape_export_cmd(
 
 
 @uw2_app.command("shape-batch")
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "file": "install-file",
+        "allpals": "palette",
+    },
+)
 def shape_batch_cmd(
     file: Annotated[str, typer.Argument(help="UU2 .GR archive path/name")],
     palette: PaletteOption = None,
@@ -1389,7 +1411,7 @@ def terrain_export_cmd(
 
 
 @uw2_app.command("object-info")
-@meta(results=("text",))
+@meta(results=("text",), params={"comobj": "install-file", "objects": "install-file"})
 def object_info_cmd(
     item_id: Annotated[int, typer.Argument(help="UU2 item ID (0..511)")],
     comobj: Annotated[
@@ -1405,7 +1427,15 @@ def object_info_cmd(
 
 
 @uw2_app.command("object-dump")
-@meta(results=("json", "table"), params={"output": "output-file"})
+@meta(
+    results=("json", "table"),
+    params={
+        "output": "output-file",
+        "comobj": "install-file",
+        "objects": "install-file",
+        "format_name": "format",
+    },
+)
 def object_dump_cmd(
     comobj: Annotated[
         Optional[str], typer.Option("--comobj", help="COMOBJ.DAT path/name")

@@ -458,7 +458,12 @@ def browse_u8_map_session(
 
 @meta(
     results=("files",),
-    params={"output": "output-dir", "palette": "palette"},
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "source": "input-file",
+        "names": "input-file",
+    },
     interactive=True,
 )
 def map_browse_cmd(

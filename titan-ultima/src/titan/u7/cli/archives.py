@@ -253,7 +253,15 @@ def u7_flex_create_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(
+    results=("file",),
+    params={
+        "output": "output-file",
+        "archive": "install-file",
+        "shape": "input-file",
+        "base_archive": "install-file",
+    },
+)
 def u7_flex_add_shape_cmd(
     archive: Annotated[
         str,

@@ -16,7 +16,7 @@ from titan.u7 import install
 from titan._meta import meta
 
 
-@meta(results=("json",), params={"output": "output-file"})
+@meta(results=("json",), params={"output": "output-file", "file": "input-file"})
 def ireg_dump_cmd(
     file: Annotated[str, typer.Argument(help="Raw U7IREG stream to inspect")],
     static: Annotated[
@@ -91,7 +91,13 @@ def ireg_dump_cmd(
 
 @meta(
     results=("table", "text"),
-    params={"format": "format", "gamedat": "save", "output": "output-file"},
+    params={
+        "format": "format",
+        "gamedat": "save",
+        "output": "output-file",
+        "config": "recipe",
+        "mod_data": "input-dir",
+    },
     interactive=True,
     batch_with=(
         "config",
@@ -371,7 +377,13 @@ def world_query_cmd(
 
 @meta(
     results=("table", "text"),
-    params={"format": "format", "gamedat": "save", "output": "output-file"},
+    params={
+        "format": "format",
+        "gamedat": "save",
+        "output": "output-file",
+        "exult_flx": "install-file",
+        "mod_data": "input-dir",
+    },
     interactive=True,
     batch_with=(
         "container_shape",

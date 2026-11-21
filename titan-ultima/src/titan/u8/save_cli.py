@@ -26,7 +26,12 @@ from titan._meta import meta
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={
+        "output_format": "format",
+        "output": "output-file",
+        "file": "input-file",
+        "symbols": "install-file",
+    },
 )
 def flags_dump_cmd(
     file: Annotated[
@@ -102,7 +107,7 @@ def flags_dump_cmd(
 
 @meta(
     results=("json", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={"output_format": "format", "output": "output-file", "file": "save"},
 )
 def save_info_cmd(
     file: Annotated[
@@ -132,7 +137,13 @@ def save_info_cmd(
 
 @meta(
     results=("json", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={
+        "output_format": "format",
+        "output": "output-file",
+        "before": "save",
+        "after": "save",
+        "symbols": "install-file",
+    },
 )
 def save_diff_cmd(
     before: Annotated[
@@ -184,7 +195,7 @@ def save_diff_cmd(
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
 def avatar_dump_cmd(
     file: Annotated[Path, typer.Argument(help="AVATAR.DAT or native U8SAVE archive")],
@@ -211,7 +222,7 @@ def avatar_dump_cmd(
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
 def gumps_dump_cmd(
     file: Annotated[Path, typer.Argument(help="GUMPS.DAT or native U8SAVE archive")],
@@ -244,7 +255,7 @@ def gumps_dump_cmd(
 
 @meta(
     results=("json", "table", "text"),
-    params={"output_format": "format", "output": "output-file"},
+    params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
 def kernel_dump_cmd(
     file: Annotated[Path, typer.Argument(help="KERNEL.DAT or native U8SAVE archive")],

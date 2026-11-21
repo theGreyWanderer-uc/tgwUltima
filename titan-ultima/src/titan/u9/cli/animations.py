@@ -730,7 +730,7 @@ def animation_show_cmd(
     )
 
 
-@meta(results=("json",), params={"output": "output-file"})
+@meta(results=("json",), params={"output": "output-file", "diagnostics": "output-file"})
 def animation_library_plan_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     output: Annotated[
@@ -794,7 +794,10 @@ def animation_library_plan_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette", "plan": "input-file"},
+)
 def animation_library_export_cmd(
     plan: Annotated[str, typer.Argument(help="Animation library plan JSON path")],
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],

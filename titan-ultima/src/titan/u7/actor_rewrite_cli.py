@@ -115,7 +115,7 @@ def read_actor_edit_plan(value: object) -> U7ActorEditPlan:
     )
 
 
-@meta(results=("json",), params={"output": "output-file"})
+@meta(results=("json",), params={"output": "output-file", "file": "input-file"})
 def actor_headers_cmd(
     file: Annotated[
         str,
@@ -177,7 +177,7 @@ def actor_headers_cmd(
         raise SystemExit(1) from error
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "file": "input-file"})
 def actor_rewrite_cmd(
     file: Annotated[
         str, typer.Argument(help="Loose actor stream or explicitly selected save")

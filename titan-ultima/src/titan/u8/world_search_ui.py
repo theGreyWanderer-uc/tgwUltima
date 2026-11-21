@@ -484,6 +484,8 @@ def _make_u8_search_command(eggs: bool) -> Callable[..., None]:
             "output_format": "format",
             "output": "output-dir",
             "palette": "palette",
+            "source": "input-file",
+            "names": "input-file",
         },
         interactive=True,
     )

@@ -645,6 +645,9 @@ def run_u8_save_browser(
         "output": "output-dir",
         "palette": "palette",
         "source": "save",
+        "anim": "install-file",
+        "symbols": "install-file",
+        "names": "input-file",
     },
     interactive=True,
 )

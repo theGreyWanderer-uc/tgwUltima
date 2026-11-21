@@ -1365,7 +1365,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
 
 @app.command("flex-info")
-@meta(results=("text",))
+@meta(results=("text",), params={"file": "input-file"})
 def flex_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
 ) -> None:
@@ -1374,7 +1374,7 @@ def flex_info_cmd(
 
 
 @app.command("flex-list")
-@meta(results=("text",))
+@meta(results=("text",), params={"file": "input-file"})
 def flex_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
 ) -> None:
@@ -1383,7 +1383,7 @@ def flex_list_cmd(
 
 
 @app.command("flex-extract")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "input-file"})
 def flex_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
     output: Annotated[
@@ -1401,7 +1401,7 @@ def flex_extract_cmd(
 
 
 @app.command("flex-create")
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "directory": "input-dir"})
 def flex_create_cmd(
     directory: Annotated[
         str,
@@ -1451,7 +1451,10 @@ def flex_create_cmd(
 
 
 @app.command("flex-update")
-@meta(results=("file",), params={"output": "output-file"})
+@meta(
+    results=("file",),
+    params={"output": "output-file", "file": "input-file", "data": "input-file"},
+)
 def flex_update_cmd(
     file: Annotated[str, typer.Argument(help="Path to .flx archive")],
     index: Annotated[
@@ -1487,7 +1490,7 @@ def flex_update_cmd(
 
 
 @app.command("music-export")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "input-file"})
 def music_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .xmi XMIDI file")],
     output: Annotated[
@@ -1500,7 +1503,7 @@ def music_export_cmd(
 
 
 @app.command("music-batch")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "directory": "input-dir"})
 def music_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .xmi files")],
     output: Annotated[

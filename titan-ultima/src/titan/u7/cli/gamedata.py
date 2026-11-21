@@ -399,7 +399,10 @@ def wihh_dump_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(
+    results=("table",),
+    params={"output": "output-file", "exult_flx": "install-file", "file": "input-file"},
+)
 def static_data_dump_cmd(
     kind: Annotated[
         str,

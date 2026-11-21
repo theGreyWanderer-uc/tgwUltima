@@ -783,7 +783,13 @@ def browse_u8_npc_shape(
 
 @meta(
     results=("files",),
-    params={"output": "output-dir", "palette": "palette"},
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "archive": "install-file",
+        "anim": "install-file",
+        "wpnovlay": "install-file",
+    },
     interactive=True,
 )
 def shape_browse_cmd(

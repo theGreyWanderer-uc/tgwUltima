@@ -373,8 +373,15 @@ def run_u8_container_browser(
 
 @meta(
     results=("files",),
-    params={"output": "output-dir", "palette": "palette"},
+    params={
+        "output": "output-dir",
+        "palette": "palette",
+        "source": "save",
+        "gumps": "install-file",
+        "names": "input-file",
+    },
     interactive=True,
+    resources={"gumps": "u8gumps"},
 )
 def container_browse_cmd(
     source: Annotated[

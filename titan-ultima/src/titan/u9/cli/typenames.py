@@ -252,7 +252,7 @@ def typename_csv_cmd(
     raise SystemExit(cmd_typename_csv(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "csv_path": "input-file"})
 def typename_import_cmd(
     file: Annotated[
         str, typer.Argument(help="Original type-name archive (TYPENAME.FLX, Tnbrk.*)")

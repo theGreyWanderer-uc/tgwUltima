@@ -250,7 +250,7 @@ def flx_extract_all_cmd(
     raise SystemExit(cmd_flx_extract_all(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "directory": "input-dir"})
 def flx_pack_cmd(
     directory: Annotated[
         str, typer.Argument(help="Directory of NNNNN.bin entry files")
@@ -277,7 +277,7 @@ def flx_pack_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(results=("file",), params={"output": "output-file", "replace": "input-dir"})
 def flx_repack_cmd(
     file: Annotated[str, typer.Argument(help="Path to an existing U9 FLX archive")],
     output: Annotated[

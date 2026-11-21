@@ -13,7 +13,10 @@ from titan.u7.ireg_rewrite import read_ireg_edit_plan, rewrite_ireg_stream
 from titan._meta import meta
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(
+    results=("file",),
+    params={"output": "output-file", "file": "input-file", "edits": "input-file"},
+)
 def ireg_rewrite_cmd(
     file: Annotated[
         str, typer.Argument(help="Standalone IREG stream; the source stays unchanged")

@@ -71,7 +71,10 @@ def read_u7_repack_plan(
     return tuple(replacements)
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(
+    results=("file",),
+    params={"output": "output-file", "file": "input-file", "plan": "input-file"},
+)
 def save_repack_cmd(
     file: Annotated[
         str, typer.Argument(help="Source U7 named Flex or ZIP save/INITGAME")

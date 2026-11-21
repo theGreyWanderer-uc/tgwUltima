@@ -788,7 +788,10 @@ def cmd_map_render_3d(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette", "metadata": "output-file"},
+)
 def map_atlas_cmd(
     static: Annotated[
         str,
@@ -1069,7 +1072,10 @@ def map_atlas_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("image",),
+    params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
+)
 def map_render_cmd(
     terrain: Annotated[
         str, typer.Argument(help="Path to a static/terrain.<region> file")
@@ -1306,7 +1312,10 @@ def map_render_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("file",),
+    params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
+)
 def map_export_glb_cmd(
     terrain: Annotated[
         str, typer.Argument(help="Path to a static/terrain.<region> file")
@@ -1444,7 +1453,7 @@ def map_export_glb_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file"})
+@meta(results=("image",), params={"output": "output-file", "metadata": "output-file"})
 def map_render_3d_cmd(
     scene: Annotated[
         str,

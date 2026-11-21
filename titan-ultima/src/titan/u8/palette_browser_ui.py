@@ -251,7 +251,12 @@ def run_u8_palette_browser(
         return 1
 
 
-@meta(results=("files",), params={"output": "output-dir"}, interactive=True)
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "source": "palette"},
+    interactive=True,
+    resources={"source": "palette"},
+)
 def palette_browse_cmd(
     source: Annotated[
         Path | None,

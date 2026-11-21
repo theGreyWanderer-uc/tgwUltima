@@ -10,6 +10,14 @@ work for the next release.
 
 ### Added
 
+- **Every file and folder input is described for front ends:** each
+  command's file and folder parameters now say what they take (a game file
+  or folder from the install, the user's own file or folder, a save, a
+  working folder or a palette) through `titan._meta.command_metas()`, and
+  install inputs name the install file that fills them (`resources`, e.g.
+  `u7 shape-export FILE` → `shapes`). A new `install-dir` kind covers
+  `--gamedir`, U7 `--static` and similar folders. A test fails when a new
+  file or folder parameter has no kind.
 - **Update check:** `titan --version` now tells you when a newer titan is
   on PyPI, and how to update. It asks PyPI at most once a day, sends nothing
   about you, and gives up quickly when you're offline. Ordinary commands

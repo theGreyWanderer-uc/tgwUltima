@@ -557,7 +557,14 @@ _EXCLUDE_FLAG_CHOICES = [
 ]
 
 
-@meta(results=("files",), params={"output_root": "output-dir"})
+@meta(
+    results=("files",),
+    params={
+        "output_root": "output-dir",
+        "from_json": "input-file",
+        "gamedat_root": "input-dir",
+    },
+)
 def map_create_cmd(
     output_root: Annotated[
         str,
@@ -698,7 +705,15 @@ def map_export_json_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("image",),
+    params={
+        "output": "output-file",
+        "palette": "palette",
+        "json_file": "input-file",
+        "tiles_dir": "output-dir",
+    },
+)
 def map_render_json_cmd(
     json_file: Annotated[
         str,
@@ -784,7 +799,12 @@ def map_render_json_cmd(
 
 @meta(
     results=("image",),
-    params={"gamedat": "save", "output": "output-file", "palette": "palette"},
+    params={
+        "gamedat": "save",
+        "output": "output-file",
+        "palette": "palette",
+        "map_root": "install-dir",
+    },
     interactive=True,
     batch_with=(ANY_PARAM,),
 )
@@ -1162,7 +1182,15 @@ def map_sample_cmd(
     )
 
 
-@meta(results=("files",), params={"gamedat": "save", "output": "output-dir"})
+@meta(
+    results=("files",),
+    params={
+        "gamedat": "save",
+        "output": "output-dir",
+        "initgame": "install-file",
+        "mod_data": "input-dir",
+    },
+)
 def map_inventory_cmd(
     static: Annotated[
         Optional[str],

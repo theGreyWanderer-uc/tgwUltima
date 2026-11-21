@@ -1150,7 +1150,7 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
 
 
 @u6_app.command("lzw-decompress")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def lzw_decompress_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 LZW-compressed file")],
     output: Annotated[
@@ -1162,7 +1162,7 @@ def lzw_decompress_cmd(
 
 
 @u6_app.command("lib-list")
-@meta(results=("text",))
+@meta(results=("text",), params={"file": "install-file"})
 def lib_list_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a U6 library file (e.g. CONVERSE.A)")
@@ -1186,7 +1186,7 @@ def lib_list_cmd(
 
 
 @u6_app.command("lib-extract")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def lib_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
     item: Annotated[int, typer.Argument(help="Item index to extract")],
@@ -1216,7 +1216,7 @@ def lib_extract_cmd(
 
 
 @u6_app.command("lib-extract-all")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def lib_extract_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
     entry_size: Annotated[
@@ -1247,7 +1247,11 @@ def lib_extract_all_cmd(
 
 
 @u6_app.command("tileflag-dump")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "tileflag"},
+)
 def tileflag_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to TILEFLAG")],
     output: Annotated[
@@ -1259,7 +1263,11 @@ def tileflag_dump_cmd(
 
 
 @u6_app.command("palette-export")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "palette"},
+    resources={"file": "palette"},
+)
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to U6PAL")],
     output: Annotated[
@@ -1536,7 +1544,7 @@ def gamestate_dump_cmd(
 
 
 @u6_app.command("flags-dump")
-@meta(results=("text",))
+@meta(results=("text",), params={"source": "input-dir"})
 def flags_dump_cmd(
     source: Annotated[
         str,
@@ -1554,7 +1562,7 @@ def flags_dump_cmd(
 
 
 @u6_app.command("flags-compare")
-@meta(results=("text",))
+@meta(results=("text",), params={"source_a": "input-dir", "source_b": "input-dir"})
 def flags_compare_cmd(
     source_a: Annotated[str, typer.Argument(help="First gamedir or SAVEGAME folder")],
     source_b: Annotated[str, typer.Argument(help="Second gamedir or SAVEGAME folder")],
@@ -1625,7 +1633,7 @@ def flags_set_cmd(
 
 
 @u6_app.command("converse-dump")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
 def converse_dump_cmd(
     file: Annotated[
         str,
@@ -1669,7 +1677,11 @@ def converse_dump_cmd(
 
 
 @u6_app.command("font-export")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "font"},
+)
 def font_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to U6.CH")],
     text: Annotated[
@@ -1694,7 +1706,11 @@ def font_export_cmd(
 
 
 @u6_app.command("look-dump")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "look"},
+)
 def look_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to LOOK.LZD")],
     output: Annotated[
@@ -1706,7 +1722,11 @@ def look_dump_cmd(
 
 
 @u6_app.command("book-dump")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "books"},
+)
 def book_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to BOOK.DAT")],
     book: Annotated[
@@ -1726,7 +1746,11 @@ def book_dump_cmd(
 
 
 @u6_app.command("schedule-dump")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "schedule"},
+)
 def schedule_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to SCHEDULE")],
     actor: Annotated[

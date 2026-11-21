@@ -112,7 +112,11 @@ def cmd_xformpal_export(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "palette"},
+    resources={"file": "palette"},
+)
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .pal file")],
     output: Annotated[
@@ -124,7 +128,11 @@ def palette_export_cmd(
     raise SystemExit(cmd_palette_export(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+    resources={"file": "xformpal"},
+)
 def xformpal_export_cmd(
     file: Annotated[
         Optional[str],

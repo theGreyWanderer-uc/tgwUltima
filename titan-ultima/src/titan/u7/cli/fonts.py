@@ -28,7 +28,11 @@ def cmd_font_create(args: SimpleNamespace) -> int:
 
 @meta(
     results=("file",),
-    params={"output": "output-file", "config": "recipe"},
+    params={
+        "output": "output-file",
+        "config": "recipe",
+        "base_archive": "install-file",
+    },
     interactive=True,
     batch_with=("config",),
     recipe="titan.fonts.recipe:font_recipe",

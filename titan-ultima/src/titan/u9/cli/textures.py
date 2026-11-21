@@ -971,7 +971,15 @@ def sdinfo_verify_cmd(
     raise SystemExit(cmd_sdinfo_verify(SimpleNamespace(file=file, textures=textures)))
 
 
-@meta(results=("file",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    results=("file",),
+    params={
+        "output": "output-file",
+        "palette": "palette",
+        "image": "input-file",
+        "frames_dir": "input-dir",
+    },
+)
 def texture_import_cmd(
     textures: Annotated[
         str,
