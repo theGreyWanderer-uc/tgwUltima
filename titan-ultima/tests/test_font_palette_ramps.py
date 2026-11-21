@@ -5,6 +5,7 @@ from itertools import product
 import pytest
 
 from titan.fonts import wizard
+from titan.fonts import wizard_ui
 from titan.fonts.palette import (
     GRADIENT_PRESETS,
     GradientPreset,
@@ -177,9 +178,12 @@ def test_wizard_reports_a_palette_limited_ramp(monkeypatch, capsys):
     palette = U7Palette()
     palette.colors[1] = (255, 141, 28)
     monkeypatch.setattr(wizard, "resolve_game_palette", lambda *args, **kwargs: palette)
-    monkeypatch.setattr(wizard.ui, "menus_enabled", lambda: False)
+    monkeypatch.setattr(wizard_ui.ui, "menus_enabled", lambda: False)
     config = wizard.WizardConfig(gradient_preset="sunrise")
-    wizard._resolve_gradient_config(config, 6)
+    resolution = wizard.resolve_gradient(config, 6)
+    assert resolution.indices == config.gradient_indices
+    assert resolution.repeats
+    wizard_ui._show_gradient(resolution)
     output = capsys.readouterr().out
     distinct = len({palette.colors[i] for i in config.gradient_indices})
     assert f"{distinct} distinct colours across 6 steps" in output
@@ -203,7 +207,9 @@ def test_wizard_does_not_warn_when_all_requested_shades_are_distinct(
         lambda key: GradientPreset("test", "Test", ["#000000", "#ffffff"]),
     )
     config = wizard.WizardConfig(gradient_preset="test")
-    wizard._resolve_gradient_config(config, 6)
+    resolution = wizard.resolve_gradient(config, 6)
+    assert not resolution.repeats
+    wizard_ui._show_gradient(resolution)
     assert len(set(config.gradient_indices)) == 6
     assert "some steps repeat" not in capsys.readouterr().out
 
@@ -231,7 +237,7 @@ def test_font_recipe_encodes_the_resolved_ramp_or_explicit_indices(
         '[output]\nformat = "shp"\npath = "font.shp"\n',
         encoding="utf-8",
     )
-    assert wizard.run_from_config(str(recipe)) == 0
+    assert wizard_ui.run_from_config(str(recipe)) == 0
     shape = U7Shape.from_file(str(tmp_path / "font.shp"))
     used = {
         int(pixel)

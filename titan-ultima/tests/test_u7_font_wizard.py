@@ -12,6 +12,7 @@ import pytest
 from typer.testing import CliRunner
 
 from titan.fonts import wizard
+from titan.fonts import wizard_ui
 from titan.fonts.archive import read_font_archive
 from titan.fonts.encoder import glyphs_to_shape
 from titan.fonts.exult_cfg import ExultGamePaths, scan_font_archives, parse_exult_cfg
@@ -29,17 +30,17 @@ from titan.u7.shape import U7Shape
 @pytest.fixture(autouse=True)
 def isolate_profile(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "game_paths", lambda game: None)
-    monkeypatch.setattr(wizard, "_show_exult_info", lambda game: None)
+    monkeypatch.setattr(wizard_ui, "_show_exult_info", lambda game: None)
     monkeypatch.setattr("titan.fonts.archive.game_paths", lambda game: None)
     monkeypatch.setattr("titan._config.get_config", lambda: {})
     monkeypatch.setattr("titan._config.exult_cfg", lambda key: None)
     monkeypatch.setattr("titan.u7.target_picker.find_exult_cfg", lambda: None)
     monkeypatch.setattr("titan.u7.install.exult_game_paths", lambda game: {})
-    monkeypatch.setattr(wizard, "open_preview", lambda path: True)
+    monkeypatch.setattr(wizard_ui, "open_preview", lambda path: True)
     monkeypatch.setattr(
-        wizard.tempfile,
+        wizard_ui.tempfile,
         "NamedTemporaryFile",
-        partial(wizard.tempfile.NamedTemporaryFile, dir=tmp_path),
+        partial(wizard_ui.tempfile.NamedTemporaryFile, dir=tmp_path),
     )
 
 
@@ -122,15 +123,16 @@ def test_invalid_inputs_rejected_before_writing(tmp_path, field, value):
     output = tmp_path / "font.shp"
     cfg = config(output_path=str(output), **{field: value})
     with pytest.raises(ValueError):
-        wizard._generate(cfg, {65: np.ones((8, 4), dtype=np.uint8)}, True)
+        wizard.encode(cfg, wizard.RenderedFont({65: np.ones((8, 4), dtype=np.uint8)}))
     assert not output.exists()
 
 
 def test_ink_height_affects_bitmap_and_encoded_baseline():
     cfg = config(code_range=(65, 65))
-    original, mono, indexed = wizard._render(cfg)
-    changed, _, _ = wizard._render(replace(cfg, ink_height=4))
-    assert mono and not indexed
+    rendered = wizard.render(cfg)
+    original = rendered.glyphs
+    changed = wizard.render(replace(cfg, ink_height=4)).glyphs
+    assert rendered.is_mono and not rendered.is_indexed
     assert not np.array_equal(original[65], changed[65])
     shape, _ = glyphs_to_shape(
         changed, 127, PaletteLUT.mono(), cell_height=8, ink_height=4
@@ -144,11 +146,10 @@ def test_threshold_uses_grayscale_cutoff(monkeypatch):
     monkeypatch.setattr(
         wizard, "render_all_glyphs_grayscale", lambda *args, **kwargs: ({65: gray}, 9)
     )
-    low, mono, indexed = wizard._render(
-        config(render_method="threshold", threshold=128)
-    )
-    high, _, _ = wizard._render(config(render_method="threshold", threshold=201))
-    assert mono and not indexed
+    rendered = wizard.render(config(render_method="threshold", threshold=128))
+    low = rendered.glyphs
+    high = wizard.render(config(render_method="threshold", threshold=201)).glyphs
+    assert rendered.is_mono and not rendered.is_indexed
     assert low[65].tolist() == [[0, 0, 0, 1, 1, 1]]
     assert high[65].tolist() == [[0, 0, 0, 0, 0, 1]]
 
@@ -159,7 +160,8 @@ def test_render_warns_above_72_pixels(monkeypatch, capsys):
         "render_all_glyphs_mono",
         lambda *args, **kwargs: ({65: np.ones((8, 73), dtype=np.uint8)}, 9),
     )
-    wizard._render(config())
+    assert wizard.render(config()).oversized
+    wizard_ui._render(config())
     assert "exceed 72x72" in capsys.readouterr().err
 
 
@@ -167,10 +169,9 @@ def test_render_warns_above_72_pixels(monkeypatch, capsys):
 def test_font_output_enforces_fullscreen_size_cap(tmp_path, width, height):
     output = tmp_path / "font.shp"
     with pytest.raises(ValueError, match="maximum permitted"):
-        wizard._generate(
+        wizard.encode(
             config(output_path=str(output)),
-            {65: np.ones((height, width), dtype=np.uint8)},
-            True,
+            wizard.RenderedFont({65: np.ones((height, width), dtype=np.uint8)}),
         )
     assert not output.exists()
 
@@ -183,13 +184,13 @@ def test_invalid_exult_config_has_clear_error(tmp_path):
 
 
 def test_preview_maps_black_ink_and_transparency():
-    assert wizard._preview_glyph(
+    assert wizard_ui._preview_glyph(
         np.array([[255, 0, 185]], dtype=np.uint8), is_mono=False, is_indexed=True
     ) == ["·██"]
 
 
 def test_redirected_swatches_contain_no_escape_codes(capsys):
-    wizard._print_swatches("Selected: red (#ff0000) ", ["#ff0000", "#93291e"])
+    wizard_ui._print_swatches("Selected: red (#ff0000) ", ["#ff0000", "#93291e"])
     output = capsys.readouterr().out
     assert "Selected: red (#ff0000)" in output
     assert "\x1b" not in output
@@ -210,7 +211,7 @@ def test_terminal_colours_use_formatted_output(monkeypatch):
         "prompt_toolkit.print_formatted_text",
         lambda text, **kwargs: printed.append((list(text), kwargs)),
     )
-    wizard._print_swatches("Selected: ", ["#ff0000", "#93291e"])
+    wizard_ui._print_swatches("Selected: ", ["#ff0000", "#93291e"])
     fragments, options = printed[0]
     assert ("bg:#ff0000", "  ") in fragments
     assert ("bg:#93291e", "  ") in fragments
@@ -237,7 +238,7 @@ def test_colour_glyph_preview_keeps_black_ink_gradient_and_transparency(monkeypa
     assert sheet.getpixel((20, 48)) == (255, 52, 52)
     rows = []
     monkeypatch.setattr(ui, "print_coloured", lambda fragments: rows.append(fragments))
-    wizard._show_preview({65: bitmap}, is_indexed=True, palette=palette)
+    wizard_ui._show_preview({65: bitmap}, is_indexed=True, palette=palette)
     assert ("fg:#ff3434 bg:#505050", "█") in rows[0]
     assert ("fg:#000000 bg:#505050", "█") in rows[0]
     assert ("fg:#a0a0a0 bg:#505050", "·") in rows[0]
@@ -257,9 +258,9 @@ def test_mapped_colour_preview_uses_final_palette_and_survives_viewer_failure(
     monkeypatch.setattr(ui, "menus_enabled", lambda: True)
     opened = []
     monkeypatch.setattr(
-        wizard, "open_preview", lambda path: opened.append(path) or False
+        wizard_ui, "open_preview", lambda path: opened.append(path) or False
     )
-    path = wizard._mapped_preview(
+    path = wizard_ui._mapped_preview(
         cfg, {65: np.array([[0, 1]], dtype=np.uint8)}, True, False
     )
     assert opened == [path]
@@ -303,7 +304,7 @@ def test_custom_text_png_uses_mapped_glyph_pixels_in_word_order(tmp_path, monkey
         66: np.array([[1, 0]], dtype=np.uint8),
     }
     before = {code: bitmap.copy() for code, bitmap in glyphs.items()}
-    path = wizard._mapped_preview(cfg, glyphs, True, False, preview_text="ABBA")
+    path = wizard_ui._mapped_preview(cfg, glyphs, True, False, preview_text="ABBA")
     with Image.open(path) as preview:
         assert preview.getpixel((12, 48)) == (160, 160, 160)
         assert preview.getpixel((16, 48)) == (255, 52, 52)
@@ -368,7 +369,7 @@ def test_template_is_not_default_destination(tmp_path, monkeypatch):
         game="BG", patch_path=str(tmp_path / "patch"), font_config="original"
     )
     monkeypatch.setattr("builtins.input", lambda prompt: "a")
-    wizard._step_resolve_flex_target(cfg, paths)
+    wizard_ui._step_resolve_flex_target(cfg, paths)
     assert Path(cfg.flex_source) == tmp_path / "patch/fonts_original.vga"
     assert cfg.template_archive == str(source)
 
@@ -401,7 +402,7 @@ def test_new_font_patch_preserves_exult_template_format_and_holes(tmp_path):
         template_archive=str(source), output_format="flex", flex_source=str(target)
     )
     data = font_record(4)
-    wizard._write_outputs(cfg, data)
+    wizard.write_outputs(cfg, data)
     archive = U7FlexArchive.from_file(str(target), strict=True)
     assert archive.records == [b"", b"", data]
     assert target.read_bytes()[0x58:0x80] == source.read_bytes()[0x58:0x80]
@@ -415,7 +416,7 @@ def test_sparse_template_inherits_retail_slots_without_mutation(tmp_path):
     before = patch.read_bytes()
     archive = read_font_archive(patch)
     assert archive.records == [font_record(7), font_record(10), font_record(9)]
-    assert set(wizard._read_archive_slots(patch)) == {0, 1, 2}
+    assert set(wizard.read_archive_slots(patch)) == {0, 1, 2}
     assert patch.read_bytes() == before
 
 
@@ -446,7 +447,7 @@ def test_recipe_paths_relative_to_recipe_and_never_prompt(tmp_path, monkeypatch)
     lut.write_text('[mapping]\n"0-0"=255\n"1-255"=15\n', encoding="utf-8")
     recipe(path, rendering='method="lut"\nlut="ink.toml"')
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
-    assert wizard.run_from_config(str(path)) == 0
+    assert wizard_ui.run_from_config(str(path)) == 0
     shape = U7Shape.from_data((tmp_path / "out/font.shp").read_bytes(), strict=True)
     assert set(np.unique(shape.frames[65].pixels)) == {15, 255}
 
@@ -456,7 +457,7 @@ def test_flex_recipe_output_override_is_archive(tmp_path, monkeypatch):
     destination = tmp_path / "out/fonts_original.vga"
     recipe(path, output='format="flex"\nflex_source="ignored.vga"')
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
-    assert wizard.run_from_config(str(path), str(destination)) == 0
+    assert wizard_ui.run_from_config(str(path), str(destination)) == 0
     assert len(U7FlexArchive.from_file(str(destination), strict=True).records) == 3
     assert not (tmp_path / "ignored.vga").exists()
 
@@ -464,7 +465,7 @@ def test_flex_recipe_output_override_is_archive(tmp_path, monkeypatch):
 def test_flex_recipe_path_is_archive(tmp_path):
     path = tmp_path / "recipe.toml"
     recipe(path, output='format="flex"\npath="out/fonts.vga"')
-    assert wizard.run_from_config(str(path)) == 0
+    assert wizard_ui.run_from_config(str(path)) == 0
     assert (tmp_path / "out/fonts.vga").is_file()
 
 
@@ -476,19 +477,19 @@ def test_flex_recipe_auto_resolves_exult_without_prompt(tmp_path, monkeypatch):
         wizard, "resolve_font_vga_path", lambda game: (None, str(destination))
     )
     monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("recipe prompted"))
-    assert wizard.run_from_config(str(path)) == 0
+    assert wizard_ui.run_from_config(str(path)) == 0
     assert destination.is_file()
 
 
 def test_recipe_existing_outputs_require_force(tmp_path):
     path = tmp_path / "recipe.toml"
     recipe(path)
-    assert wizard.run_from_config(str(path)) == 0
+    assert wizard_ui.run_from_config(str(path)) == 0
     output = tmp_path / "out/font.shp"
     before = output.read_bytes()
-    assert wizard.run_from_config(str(path)) == 1
+    assert wizard_ui.run_from_config(str(path)) == 1
     assert output.read_bytes() == before
-    assert wizard.run_from_config(str(path), force=True) == 0
+    assert wizard_ui.run_from_config(str(path), force=True) == 0
 
 
 def test_corrupt_archive_aborts_before_either_output(tmp_path):
@@ -502,7 +503,7 @@ def test_corrupt_archive_aborts_before_either_output(tmp_path):
         path,
         output='format="both"\npath="out/font.shp"\nflex_source="fonts.vga"\nforce=true',
     )
-    assert wizard.run_from_config(str(path)) == 1
+    assert wizard_ui.run_from_config(str(path)) == 1
     assert destination.read_bytes() == broken
     assert not (tmp_path / "out/font.shp").exists()
 
@@ -512,7 +513,7 @@ def test_archive_save_preserves_other_slots_holes_and_format(tmp_path):
     write_archive(destination, [font_record(7), b"", font_record(8), font_record(9)])
     path = tmp_path / "recipe.toml"
     recipe(path, output='format="flex"\nflex_source="fonts.vga"\nforce=true')
-    assert wizard.run_from_config(str(path)) == 0
+    assert wizard_ui.run_from_config(str(path)) == 0
     archive = U7FlexArchive.from_file(str(destination), strict=True)
     assert archive.magic2 == 0xCC01
     assert archive.records[0] == font_record(7)
@@ -529,9 +530,7 @@ def test_failed_atomic_shape_replace_preserves_destination(tmp_path, monkeypatch
         lambda *args: (_ for _ in ()).throw(OSError("replace failed")),
     )
     with pytest.raises(OSError, match="replace failed"):
-        wizard._write_outputs(
-            config(output_path=str(output), force=True), font_record()
-        )
+        wizard.write_outputs(config(output_path=str(output), force=True), font_record())
     assert output.read_bytes() == b"original"
     assert list(tmp_path.iterdir()) == [output]
 
@@ -582,3 +581,49 @@ def test_help_lists_new_options():
     help_text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.output)
     for option in ("--force", "--allow-cycling", "--base-archive"):
         assert option in help_text
+
+
+def test_library_creates_a_font_from_recipe_data_without_terminal_output(
+    tmp_path, monkeypatch, capsys, caplog
+):
+    # What a desktop page does: form values in, files out, nothing printed.
+    import logging
+
+    from titan import _results
+
+    monkeypatch.setattr(_results, "_outputs", [])
+    # An earlier CLI test may have installed the terminal log handler; a
+    # front end attaches its own instead.
+    monkeypatch.setattr(logging.getLogger("titan"), "handlers", [])
+    lut = tmp_path / "ink.toml"
+    lut.write_text('[mapping]\n"0-0"=255\n"1-255"=15\n', encoding="utf-8")
+    data = {
+        "target": {"game": "BG", "slot": 2},
+        "source": {"font": "dosVga437"},
+        "rendering": {"method": "lut", "lut": "ink.toml"},
+        "output": {"format": "shp", "path": "out/font.shp"},
+    }
+    config = wizard.config_from_recipe_data(data, tmp_path)
+    assert config.lut_path == str(tmp_path / "ink.toml")
+    with caplog.at_level("INFO", logger="titan"):
+        created = wizard.create_font(config)
+    output = tmp_path / "out/font.shp"
+    assert created.written.shape == output and created.written.archive is None
+    assert created.encoded.frame_count == len(
+        U7Shape.from_data(output.read_bytes(), strict=True).frames
+    )
+    assert created.rendered.glyphs and not created.rendered.oversized
+    assert capsys.readouterr() == ("", "")
+    assert any("Shape written" in record.getMessage() for record in caplog.records)
+    assert _results.recorded_outputs() == [output.absolute().as_posix()]
+
+
+def test_recipe_data_is_validated_and_never_prompts(tmp_path, monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("prompted"))
+    with pytest.raises(ValueError, match="Unknown rendering method"):
+        wizard.config_from_recipe_data(
+            {"rendering": {"method": "mystery"}, "output": {"path": "a.shp"}},
+            tmp_path,
+        )
+    with pytest.raises(ValueError, match="Font slot must be an integer"):
+        wizard.config_from_recipe_data({"target": {"slot": "2"}}, tmp_path)

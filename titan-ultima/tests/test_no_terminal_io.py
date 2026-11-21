@@ -40,7 +40,6 @@ TERMINAL_IMPORTS = {"typer", "click", "questionary", "rich", "prompt_toolkit"}
 
 # Library module -> terminal I/O uses still in it. Shrink this; never grow it.
 ALLOWED: dict[str, int] = {
-    "fonts/wizard.py": 89,  # the font-create wizard: split like u7/shape_wizard
     # dialogue pipeline steps, also runnable as scripts that print progress
     "dialogue/pipeline/lint_json.py": 14,
     "dialogue/pipeline/build_data.py": 8,

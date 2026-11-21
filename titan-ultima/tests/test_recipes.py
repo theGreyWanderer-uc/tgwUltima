@@ -11,6 +11,7 @@ from PIL import Image
 
 from titan import _meta
 from titan.fonts import wizard as font_wizard
+from titan.fonts import wizard_ui as font_wizard_ui
 from titan.u7 import shape_wizard_ui as shape_wizard_ui
 
 try:
@@ -19,6 +20,11 @@ except ImportError:
     import tomli as tomllib  # type: ignore[no-redef]
 
 WIZARDS = {
+    ("u7", "font-create"): font_wizard_ui,
+    ("u7", "shape-create"): shape_wizard_ui,
+}
+# Where each wizard parses its recipe TOML.
+RECIPE_READERS = {
     ("u7", "font-create"): font_wizard,
     ("u7", "shape-create"): shape_wizard_ui,
 }
@@ -97,7 +103,9 @@ def test_recipe_spec_matches_what_run_from_config_reads(
 ) -> None:
     module = WIZARDS[path]
     recipe = _Recipe()
-    monkeypatch.setattr(module, "tomllib", SimpleNamespace(load=lambda _: recipe))
+    monkeypatch.setattr(
+        RECIPE_READERS[path], "tomllib", SimpleNamespace(load=lambda _: recipe)
+    )
     monkeypatch.setattr("builtins.input", lambda *_: pytest.fail("recipe prompted"))
     monkeypatch.chdir(tmp_path)
     (tmp_path / "recipe.toml").write_text("", encoding="utf-8")
@@ -158,7 +166,7 @@ def test_generated_font_recipe_runs(tmp_path: Path, monkeypatch) -> None:
         ),
         encoding="utf-8",
     )
-    assert font_wizard.run_from_config(str(recipe)) == 0
+    assert font_wizard_ui.run_from_config(str(recipe)) == 0
     assert output.is_file()
 
 

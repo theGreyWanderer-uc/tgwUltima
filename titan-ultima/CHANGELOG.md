@@ -41,6 +41,14 @@ work for the next release.
 
 ### Changed
 
+- **Font creation without the wizard:** the `u7 font-create` wizard now
+  lives in `titan.fonts.wizard_ui`, and `titan.fonts.wizard` holds the work
+  itself with no prompts or printing. Front ends and scripts can build a
+  font from recipe values in memory (`config_from_recipe_data()`, then
+  `create_font()`), or step by step (`render()`, `mapped_glyphs()` for a
+  preview, `encode()`, `write_outputs()`). The command's output is
+  unchanged. `font-create` also reports the shape and archive it writes
+  through `TITAN_RESULTS_FILE`.
 - **Option names now match across games.** The old spellings still work, and
   `--help` shows only the new ones:
 

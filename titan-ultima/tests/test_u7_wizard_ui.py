@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
-from titan.fonts import wizard as fonts
+from titan.fonts import wizard_ui as fonts
 from titan.u7 import shape_wizard as shapes
 from titan.u7 import shape_wizard_ui as shapes_ui
 from titan import _wizard_ui as ui
