@@ -57,6 +57,9 @@ Options mean the same thing in every game:
 | `-o`, `--output-dir DIR` | A folder of output files |
 | `--format FORMAT` | Output format, e.g. `text`, `json`, `csv` |
 
+Contributors adding commands: see [CLAUDE.md](CLAUDE.md) for the full checklist and the tests
+that enforce it.
+
 Where a default export folder is listed as `<data folder>/<game>/exports/<command>`,
 `<data folder>` is titan's data folder: `%LOCALAPPDATA%\Titan` on Windows,
 `~/.local/share/titan` elsewhere, or `TITAN_DATA` when set (`titan config` shows it).

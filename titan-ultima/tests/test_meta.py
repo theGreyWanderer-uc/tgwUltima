@@ -404,6 +404,76 @@ def test_output_options_have_no_relative_default() -> None:
     assert relative == []
 
 
+# Spellings retired by the option-name standardization (cli_reference.md, "Option
+# names"). They survive only as aliases in ``titan._cli_aliases``; a new option must
+# use the canonical name.
+_RETIRED_OPTIONS = {
+    "--gamedir": "--game-dir",
+    "--savegame": "--save",
+    "--gamedat": "--save",
+    "--nonfixed": "--save",
+    "--json": "--format json",
+    "--output-root": "--output-dir",
+}
+# Old spellings kept on purpose because they mean something else in these commands.
+_RETIRED_OPTION_EXCEPTIONS = {
+    ("u9", "map-render", "--nonfixed"),  # a region file, not a save
+    ("u9", "map-export-glb", "--nonfixed"),
+}
+
+
+def test_new_options_use_the_canonical_names() -> None:
+    """Options mean the same thing in every game: ``--game-dir`` for an install
+    root, ``--save`` for a save, ``--format`` for the output format,
+    ``-o/--output`` for one file and ``-o/--output-dir`` for a folder."""
+    metas = _meta.command_metas()
+    retired = []
+    mismatched = []
+    for path, command in _visible_leaves():
+        info = metas.get(path)
+        for param in command.params:
+            for opt in (*param.opts, *getattr(param, "secondary_opts", ())):
+                if (
+                    opt in _RETIRED_OPTIONS
+                    and (*path, opt) not in _RETIRED_OPTION_EXCEPTIONS
+                ):
+                    retired.append(
+                        f"{' '.join(path)} {opt} (use {_RETIRED_OPTIONS[opt]})"
+                    )
+            kind = info.params.get(param.name) if info else None
+            if "--output" in param.opts and kind != "output-file":
+                mismatched.append(f"{' '.join(path)} --output is {kind}")
+            if "--output-dir" in param.opts and kind != "output-dir":
+                mismatched.append(f"{' '.join(path)} --output-dir is {kind}")
+    assert not retired, "retired option names: " + ", ".join(retired)
+    assert not mismatched, (
+        "--output must be an output-file and --output-dir an output-dir: "
+        + ", ".join(mismatched)
+    )
+
+
+def test_command_groups_use_the_shared_group_class() -> None:
+    """Input filling, output reporting, option aliases and CLI logging are hooked
+    into :class:`~titan._cli_aliases.AliasGroup`; a group built without
+    ``cls=alias_group(...)`` silently skips all of them. The dialogue pipeline
+    is left as it is on purpose."""
+    from titan._cli_aliases import AliasGroup
+
+    def groups(command, path):
+        children = getattr(command, "commands", None)
+        if children is not None:
+            yield path, command
+            for name, child in children.items():
+                yield from groups(child, (*path, name))
+
+    plain = [
+        " ".join(path)
+        for path, group in groups(typer.main.get_command(app), ())
+        if path and path[0] != "dialogue" and not isinstance(group, AliasGroup)
+    ]
+    assert not plain, "groups without cls=alias_group(...): " + ", ".join(plain)
+
+
 def test_export_output_names_a_folder_per_command(tmp_path, monkeypatch) -> None:
     from titan._config import export_output
 
