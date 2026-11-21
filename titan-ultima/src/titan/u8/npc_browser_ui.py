@@ -87,7 +87,7 @@ def _choose_npc_source(library: U8ShapeLibrary) -> Path | None:
         )
         selected = _npc_menu("Choose NPC snapshot:", labels)
         if selected == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if selected == "W":
             return None
         if selected == "C":
@@ -559,9 +559,10 @@ def run_u8_npc_browser(
             if selected == "W":
                 library = None
                 palette, anim = None, None
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
         return 1

@@ -316,8 +316,7 @@ def cmd_flex_create(args: SimpleNamespace) -> int:
                 animated=getattr(args, "animated", None),
             )
         except (ui.PromptCancelled, KeyboardInterrupt):
-            print("Cancelled.")
-            return 0
+            return ui.cancelled()
     archive.save(output_file)
     if metadata:
         write_u7_animation_payloads(metadata)
@@ -470,8 +469,7 @@ def cmd_flex_update(args: SimpleNamespace) -> int:
                 animated=getattr(args, "animated", None),
             )
         except (ui.PromptCancelled, KeyboardInterrupt):
-            print("Cancelled.")
-            return 0
+            return ui.cancelled()
     archive.save(output_path)
     if metadata:
         write_u7_animation_payloads(metadata)
@@ -1526,8 +1524,7 @@ def setup_cmd() -> None:
     try:
         raise SystemExit(cmd_setup(SimpleNamespace(config=None)))
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        typer.echo("Setup cancelled.")
-        raise SystemExit(0) from None
+        raise SystemExit(ui.cancelled("Setup cancelled.")) from None
 
 
 @app.command("config")

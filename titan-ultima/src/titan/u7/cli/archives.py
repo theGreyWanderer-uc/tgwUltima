@@ -212,8 +212,7 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
         save_u7_flex_atomically(archive, output_path)
         write_u7_animation_payloads(metadata)
     except (ui.PromptCancelled, KeyboardInterrupt):
-        print("Cancelled.")
-        return 0
+        return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"ERROR: U7 Flex add-shape failed: {error}", file=sys.stderr)
         return 1

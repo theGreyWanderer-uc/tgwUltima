@@ -13,6 +13,7 @@ from titan._setup_config import write_setup_config
 from titan.u7.flex import U7FlexArchive
 from titan.u7.install import inspect_install, install_roots, resolve_u7_path
 from titan.u7 import install as u7_install
+from titan.errors import EXIT_CODES
 
 try:
     import tomllib
@@ -509,7 +510,7 @@ def test_setup_menu_cancellation_preserves_files(setup_workspace, monkeypatch):
 
     monkeypatch.setattr(questionary, "path", lambda *args, **kwargs: Prompt())
     result = CliRunner().invoke(cli.app, ["setup"])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == EXIT_CODES["cancelled"], result.output
     assert "Setup cancelled" in result.output
     assert not (setup_workspace / "work/titan.toml").exists()
 

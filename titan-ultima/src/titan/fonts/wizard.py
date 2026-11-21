@@ -1272,8 +1272,7 @@ def run_wizard(
             config.force = True
         return _generate(config, glyphs, is_mono, is_indexed=is_indexed)
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError, KeyError, TypeError, freetype.FT_Exception) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

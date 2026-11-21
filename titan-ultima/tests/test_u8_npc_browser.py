@@ -27,6 +27,7 @@ from titan.u8.npc_source import load_u8_npc_source
 from titan.u8.shape_browser import U8ShapeTarget, load_u8_shape_library
 from tests.test_u8_cached_state import save_bytes
 from tests.test_u8_npc_animation_report import case as case
+from titan.errors import EXIT_CODES
 
 
 def session_for_case(case: tuple[Path, Path]):
@@ -312,7 +313,7 @@ def test_browser_cancellation_and_help_contract(case, monkeypatch):
         "choice",
         lambda *args, **kwargs: (_ for _ in ()).throw(ui.PromptCancelled()),
     )
-    assert run_u8_npc_browser(shapes=static / "U8SHAPES.FLX") == 0
+    assert run_u8_npc_browser(shapes=static / "U8SHAPES.FLX") == EXIT_CODES["cancelled"]
     result = CliRunner().invoke(u8_app, ["npc-browse", "--help"])
     assert result.exit_code == 0
     for option in (

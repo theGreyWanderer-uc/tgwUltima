@@ -146,7 +146,8 @@ class RootGroup(AliasGroup):
 
     A :class:`~titan.errors.TitanError` or ``OSError`` that escapes a command
     prints one ``ERROR:`` line (plus a hint for config problems) and exits
-    with :func:`titan.errors.exit_code`. Other exceptions are bugs and
+    with :func:`titan.errors.exit_code`. Ctrl+C or a prompt whose input ended
+    prints ``Cancelled.`` and exits ``EXIT_CODES["cancelled"]``. Other exceptions are bugs and
     propagate with their traceback. Either way the ``TITAN_RESULTS_FILE``
     document (:mod:`titan._results`) is written.
     """
@@ -157,9 +158,18 @@ class RootGroup(AliasGroup):
         from titan._results import write_results
         from titan.errors import ConfigError, TitanError, exit_code
 
+        from titan._wizard_ui import PromptCancelled
+        from titan.errors import EXIT_CODES
+
         status = 0
         try:
             return super().invoke(ctx)
+        except (typer.Abort, KeyboardInterrupt, EOFError, PromptCancelled) as stop:
+            # Ctrl+C, or a prompt whose input ended. Click would print
+            # "Aborted!" and exit 1, which reads as a failure.
+            status = EXIT_CODES["cancelled"]
+            typer.echo("Cancelled.", err=True)
+            raise typer.Exit(status) from stop
         except (TitanError, OSError) as error:
             status = exit_code(error)
             typer.echo(f"ERROR: {error}", err=True)

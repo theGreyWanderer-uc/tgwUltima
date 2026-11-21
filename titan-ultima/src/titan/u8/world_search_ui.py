@@ -471,8 +471,7 @@ def run_u8_world_search(
             )
         return 0
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
         return 1

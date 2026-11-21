@@ -30,6 +30,7 @@ from tests.test_u8_native_runtime_state import (
 )
 from tests.test_u8_npc_animation_report import Links, case as case
 from tests.test_u8_save_state import native_flex, native_nonfixed, native_save, map_item
+from titan.errors import EXIT_CODES
 
 
 @pytest.fixture
@@ -397,7 +398,10 @@ def test_cancellation_exits_cleanly_without_exports(
         browser, "_menu", lambda *args, **kwargs: (_ for _ in ()).throw(exception())
     )
     output = tmp_path / "out"
-    assert browser.run_u8_save_browser(source=full_save[2], output=output) == 0
+    assert (
+        browser.run_u8_save_browser(source=full_save[2], output=output)
+        == EXIT_CODES["cancelled"]
+    )
     assert not output.exists()
 
 

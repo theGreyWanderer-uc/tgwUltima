@@ -16,6 +16,7 @@ from titan.u8 import shape_browser as browser
 from titan.u8 import shape_browser_ui as menus
 from titan.u8.cli import u8_app
 from tests.test_u8_save_state import native_flex
+from titan.errors import EXIT_CODES
 
 
 def shape_bytes(frames: list[tuple[bytes, int, int]] | None = None) -> bytes:
@@ -554,7 +555,7 @@ def test_next_previous_shapes_follow_filter_and_live_playback_has_redirected_fal
 
 def test_cancellation_at_initial_source_prompt_is_clean(owner: Path):
     result = CliRunner().invoke(u8_app, ["shape-browse"])
-    assert result.exit_code == 0 and "Cancelled" in result.output
+    assert result.exit_code == EXIT_CODES["cancelled"] and "Cancelled" in result.output
 
 
 def test_invalid_explicit_frame_returns_command_error(owner: Path):

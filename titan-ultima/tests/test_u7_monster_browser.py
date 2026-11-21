@@ -24,6 +24,7 @@ from titan.u7.flex import U7FlexArchive
 from titan.u7.monster import U7WeaponInfos, monster_equipment_rows
 from titan.u7.npc_browser import Source
 from titan.u7.shape import U7Shape
+from titan.errors import EXIT_CODES
 
 
 def write_flex(path, entries, magic=0xCC):
@@ -692,4 +693,4 @@ def test_eof_cancel_is_clean(owner, monkeypatch):
         raise EOFError
 
     monkeypatch.setattr("builtins.input", cancel)
-    assert browser_ui.run_browser() == 0
+    assert browser_ui.run_browser() == EXIT_CODES["cancelled"]

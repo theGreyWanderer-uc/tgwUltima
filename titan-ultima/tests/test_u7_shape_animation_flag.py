@@ -16,6 +16,7 @@ from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
+from titan.errors import EXIT_CODES
 from titan.u7.shape_animation_flag import (
     choose_u7_shape_animation,
     prepare_u7_archive_animation,
@@ -281,7 +282,7 @@ def test_cancelled_animation_prompt_does_not_write_any_output(assets, monkeypatc
             str(output),
         ],
     )
-    assert result.exit_code == 0 and "Cancelled" in result.output
+    assert result.exit_code == EXIT_CODES["cancelled"] and "Cancelled" in result.output
     assert not output.parent.exists()
 
 

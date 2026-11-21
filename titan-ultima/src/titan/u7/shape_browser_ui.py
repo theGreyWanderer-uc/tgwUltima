@@ -363,7 +363,7 @@ def _choose_archive(target: ArchiveTarget, supplied: Path | None = None) -> Path
         else:
             selection = _menu("Shape library:", labels, "1")
             if selection == "Q":
-                raise ui.PromptCancelled
+                raise ui.WizardQuit
             if selection == "W":
                 return None
             path = (
@@ -553,6 +553,7 @@ def run_browser(
                         break
             # Palette and archive selections must never leak into another owner.
             palette, base_archive, shape, palette_index = None, None, None, 0
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()

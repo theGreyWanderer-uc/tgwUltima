@@ -476,8 +476,7 @@ def run_wizard(defaults: SimpleNamespace) -> int:
             if action == "W":
                 target = _world(args, keep_supplied=False)
     except (ui.PromptCancelled, EOFError, KeyboardInterrupt):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

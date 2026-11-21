@@ -516,8 +516,7 @@ def run_wizard(
             return 0
         return save(config, converted)
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (OSError, ValueError, TypeError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

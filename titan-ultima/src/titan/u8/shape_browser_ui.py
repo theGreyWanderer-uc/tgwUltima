@@ -122,7 +122,7 @@ def _archive(target: U8ShapeTarget) -> Path | None:
         )
         selected = _menu("Shape library:", labels, "1")
         if selected == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if selected == "W":
             return None
         path = _path("Archive or .shp file") if selected == "C" else paths[selected]
@@ -746,9 +746,10 @@ def run_u8_shape_browser(
             if selected == "W":
                 target = choose_u8_shape_target(game_dir)
         return 0
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
         return 1

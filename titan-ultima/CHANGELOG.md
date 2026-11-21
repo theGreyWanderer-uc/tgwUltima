@@ -163,6 +163,12 @@ work for the next release.
 
 ### Fixed
 
+- **Cancelled wizards no longer look successful:** pressing Ctrl+C in a
+  wizard or browser, or its input running out before it finished, now exits
+  with status `130` and prints `Cancelled.` on stderr. Before, most wizards
+  exited `0`, as if they had finished, and a few exited `1` with Typer's
+  `Aborted!`. Choosing a wizard's Quit option still exits `0`. This covers
+  every wizard and browser, `titan setup` and `dialogue copy`.
 - **U7 query commands without a terminal:** `titan u7 egg-query`,
   `world-query` and `container-browse` crashed when their input or output
   was piped or captured. With no filter options they start a wizard, and the

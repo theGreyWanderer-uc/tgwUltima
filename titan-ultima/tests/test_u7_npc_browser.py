@@ -22,6 +22,7 @@ from titan.u7.cli import u7_app
 from titan.u7.flex import U7FlexArchive
 from titan.u7.save import U7NPCInventoryItem, U7ReadyTypes
 from titan.u7.shape import U7Shape
+from titan.errors import EXIT_CODES
 
 
 def npc_bytes(name="Avatar", *, flags=0, inventory=b"", unused=False):
@@ -739,7 +740,7 @@ def test_bad_source_retries_and_cancel_returns_success(
     monkeypatch.setattr(
         "builtins.input", lambda prompt="": (_ for _ in ()).throw(EOFError())
     )
-    assert browser_ui.run_browser() == 0
+    assert browser_ui.run_browser() == EXIT_CODES["cancelled"]
 
 
 def test_exports_nested_json_and_never_overwrites_sources(owner, monkeypatch, tmp_path):

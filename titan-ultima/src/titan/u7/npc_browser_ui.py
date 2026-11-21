@@ -231,7 +231,7 @@ def _choose_source(target: ArchiveTarget, default: str) -> Source | None:
             default,
         )
         if action == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if action == "W":
             return None
         if action == "C":
@@ -577,6 +577,7 @@ def run_browser(
                 if action == "W":
                     break
                 npc = None
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()

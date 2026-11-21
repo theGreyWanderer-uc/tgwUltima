@@ -78,6 +78,9 @@ EXIT_CODES = {
     "internal": 70,  # EX_SOFTWARE: a bug in titan (a traceback is printed)
     "io": 74,  # EX_IOERR: the system couldn't read or write a file
     "config": ConfigError.exit_code,
+    # Stopped before finishing: Ctrl+C, or a wizard's input ended mid-prompt.
+    # 130 is the shell's status for Ctrl+C. Choosing a wizard's Quit is still 0.
+    "cancelled": 130,
 }
 """What each titan exit status means. Front ends can map a status back to its key."""
 

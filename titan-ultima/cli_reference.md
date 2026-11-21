@@ -78,6 +78,7 @@ problems) and exits with a status that says what kind of problem it was:
 | `70` | A bug in titan; the traceback is printed. Please report it |
 | `74` | The system couldn't read or write a file |
 | `78` | titan isn't set up for this: no install configured, a missing configured path, or an invalid `titan.toml` |
+| `130` | Cancelled: Ctrl+C, or a wizard's input ended before it finished. Choosing a wizard's Quit is `0` |
 
 Front ends can set `TITAN_RESULTS_FILE` to a path; titan then writes a JSON
 document there when the command ends, `{"outputs": [...], "exit_code": N}`,

@@ -365,8 +365,7 @@ def run_u8_container_browser(
             browse_u8_container_session(session, container=container, output=output)
         return 0
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
         return 1

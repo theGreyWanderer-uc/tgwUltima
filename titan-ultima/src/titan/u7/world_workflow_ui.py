@@ -340,5 +340,4 @@ def run_wizard(initial: WorldQueryParams) -> int:
                         continue
                     print(f"Saved recipe to {path}")
     except (_Cancelled, SelectionCancelled):
-        print("Search cancelled.")
-        return 0
+        return ui.cancelled("Search cancelled.")

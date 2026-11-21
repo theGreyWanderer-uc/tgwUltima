@@ -52,7 +52,7 @@ def run_wizard(
             require_gamedat=True,
         )
     except (SelectionCancelled, KeyboardInterrupt, EOFError):
-        return 0
+        return ui.cancelled()
     from titan.u7.container_browser import load_u7_container_session
     from titan.u7.container_browser_ui import browse_u7_container_session
 
@@ -68,8 +68,7 @@ def run_wizard(
         browse_u7_container_session(session)
         return 0
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  U7 container browser unavailable: {error}")
         return 1

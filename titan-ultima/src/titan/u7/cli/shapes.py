@@ -109,8 +109,7 @@ def cmd_shape_import(args: SimpleNamespace) -> int:
         shape.save(str(output_path))
         write_u7_animation_payloads(metadata)
     except (ui.PromptCancelled, KeyboardInterrupt):
-        print("Cancelled.")
-        return 0
+        return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"ERROR: U7 shape import failed: {error}", file=sys.stderr)
         return 1

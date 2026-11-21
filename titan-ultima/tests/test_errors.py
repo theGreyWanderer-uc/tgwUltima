@@ -125,6 +125,49 @@ def test_main_replaces_characters_the_output_cannot_encode(
     assert buffer.getvalue() == b"?? U7 Egg Query ??" + b"\n"
 
 
+def _app_raising(error: BaseException):
+    import typer
+
+    from titan._cli_aliases import root_group
+
+    app = typer.Typer(cls=root_group({}))
+
+    @app.command()
+    def run() -> None:
+        raise error
+
+    @app.command()
+    def other() -> None:  # a second command keeps "run" a subcommand
+        pass
+
+    return app
+
+
+@pytest.mark.parametrize(
+    "error", ["abort", KeyboardInterrupt(), EOFError(), "prompt-cancelled"]
+)
+def test_cancelled_run_exits_with_the_cancelled_status(error, isolated) -> None:
+    import typer
+
+    from titan._wizard_ui import PromptCancelled
+
+    error = {"abort": typer.Abort(), "prompt-cancelled": PromptCancelled()}.get(
+        error, error
+    )
+    result = CliRunner().invoke(_app_raising(error), ["run"])
+    assert result.exit_code == EXIT_CODES["cancelled"] == 130
+    assert result.stderr.strip() == "Cancelled."
+
+
+def test_wizard_cancel_and_quit_statuses(capsys) -> None:
+    from titan import _wizard_ui as ui
+
+    assert ui.cancelled("Search cancelled.") == EXIT_CODES["cancelled"]
+    assert capsys.readouterr().err.strip() == "Search cancelled."
+    # Quit unwinds like a cancel, but wizards catch it first and exit 0.
+    assert issubclass(ui.WizardQuit, ui.PromptCancelled)
+
+
 def test_export_dir_follows_titan_data(isolated: Path) -> None:
     assert (
         _config.export_dir("u8", "map-browse")

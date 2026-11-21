@@ -13,6 +13,7 @@ from titan.u7.world import WorldQueryParams, parse_numbers, parse_rectangle, run
 from titan.u7 import world_workflow as workflow
 from titan.u7 import world_workflow_ui as workflow_ui
 from titan.u7 import install as u7_install
+from titan.errors import EXIT_CODES
 
 
 def write_ifix(directory, sc, objects):
@@ -439,7 +440,7 @@ def test_wizard_change_area_does_not_reask_filters_and_can_save_recipe(
 def test_cancel_at_each_initial_stage_is_clean(world, monkeypatch, stage):
     answers = [[], False, "", "", "", [], "Entire world", True, "Finish"]
     scripted_questions(monkeypatch, answers[:stage] + [None])
-    assert workflow_ui.run_wizard(world) == 0
+    assert workflow_ui.run_wizard(world) == EXIT_CODES["cancelled"]
 
 
 def test_explicit_custom_static_inside_mods_does_not_inherit_outer_world(

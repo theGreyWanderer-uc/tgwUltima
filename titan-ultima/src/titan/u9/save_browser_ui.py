@@ -366,8 +366,7 @@ def run_u9_save_browser(
             if _browse_u9_save_session(session) == "Q":
                 return 0
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {clean_u9_browser_text(error)}")
         return 1

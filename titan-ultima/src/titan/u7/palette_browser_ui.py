@@ -391,5 +391,4 @@ def run_browser(
                     automatic = False
                     print(f"  ERROR: {error}")
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()

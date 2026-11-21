@@ -19,6 +19,7 @@ from titan.u7.palette import U7Palette
 from titan.u7.shape import U7Shape
 from titan.u7.target_picker import select_map
 from titan.u7 import install as u7_install
+from titan.errors import EXIT_CODES
 
 
 def archive(path: Path, records: list[bytes]) -> None:
@@ -409,7 +410,7 @@ def test_eof_cancels_cleanly_without_rendering(world, monkeypatch):
         raise EOFError
 
     monkeypatch.setattr("builtins.input", eof)
-    assert wizard.run_wizard(options()) == 0
+    assert wizard.run_wizard(options()) == EXIT_CODES["cancelled"]
 
 
 def test_ireg_never_falls_back_to_main_map_save_data(world, tmp_path):

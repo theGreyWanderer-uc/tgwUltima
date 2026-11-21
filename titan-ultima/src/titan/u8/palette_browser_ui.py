@@ -244,8 +244,8 @@ def run_u8_palette_browser(
                             page, index, effect = 0, 0, 0
                 except (OSError, ValueError) as error:
                     print(f"  ERROR: {error}")
-    except ui.PromptCancelled:
-        return 0
+    except ui.CANCELLED_EXCEPTIONS:
+        return ui.cancelled()
     except (OSError, ValueError) as error:
         print(f"  ERROR: {error}")
         return 1

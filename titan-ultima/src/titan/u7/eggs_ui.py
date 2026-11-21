@@ -58,7 +58,7 @@ def run_wizard(
             require_gamedat=True,
         )
     except (SelectionCancelled, KeyboardInterrupt, EOFError):
-        return 0
+        return ui.cancelled()
     static_dir, gamedat_dir = world.static_dir, world.gamedat_dir
 
     # ── 1. Paths ─────────────────────────────────────────────────────────────
@@ -67,14 +67,14 @@ def run_wizard(
             "STATIC directory:", q=questionary, only_directories=True
         ).ask()
         if static_dir is None:
-            return 0
+            return ui.cancelled()
 
     if not gamedat_dir:
         gamedat_dir = ui.path_prompt(
             "GAMEDAT directory:", q=questionary, only_directories=True
         ).ask()
         if not gamedat_dir:
-            return 0
+            return ui.cancelled()
 
     # ── 2. Egg type filter ────────────────────────────────────────────────────
     print()
@@ -88,7 +88,7 @@ def run_wizard(
         or []
     )
     if selected_types is None:
-        return 0
+        return ui.cancelled()
 
     # ── 3. Usecode function filter ────────────────────────────────────────────
     fn_filter: Optional[int] = None
@@ -100,7 +100,7 @@ def run_wizard(
             default="",
         ).ask()
         if fn_raw is None:
-            return 0
+            return ui.cancelled()
         fn_raw = fn_raw.strip()
         if fn_raw:
             try:
@@ -113,7 +113,7 @@ def run_wizard(
     print(f"  {_SEP}")
     area_all = questionary.confirm("Search the entire world?", default=True).ask()
     if area_all is None:
-        return 0
+        return ui.cancelled()
 
     superchunks: list[int] = []
     tile_rect: Optional[tuple[int, int, int, int]] = None
@@ -125,7 +125,7 @@ def run_wizard(
             choices=["Superchunks", "Tile rectangle"],
         ).ask()
         if area_type is None:
-            return 0
+            return ui.cancelled()
 
         if area_type == "Superchunks":
             sc_input = questionary.text(
@@ -133,7 +133,7 @@ def run_wizard(
                 default="",
             ).ask()
             if sc_input is None:
-                return 0
+                return ui.cancelled()
             for token in sc_input.split(","):
                 token = token.strip()
                 try:
@@ -148,7 +148,7 @@ def run_wizard(
             tx1_raw = questionary.text("Bottom-right tile X:").ask()
             ty1_raw = questionary.text("Bottom-right tile Y:").ask()
             if None in (tx0_raw, ty0_raw, tx1_raw, ty1_raw):
-                return 0
+                return ui.cancelled()
             try:
                 tx0 = int(tx0_raw.strip(), 0)
                 ty0 = int(ty0_raw.strip(), 0)
@@ -168,7 +168,7 @@ def run_wizard(
         default="table",
     ).ask()
     if fmt is None:
-        return 0
+        return ui.cancelled()
 
     output_path: Optional[str] = None
     if questionary.confirm("Save output to a file?", default=False).ask():

@@ -36,6 +36,7 @@ from tests.test_u8_map_browser import assets as assets
 from tests.test_u8_native_runtime_state import container_bytes, gumps_bytes
 from tests.test_u8_npc_animation_report import Links, case as case
 from tests.test_u8_shape_browser import shape_bytes
+from titan.errors import EXIT_CODES
 
 
 def put_item(
@@ -549,7 +550,7 @@ def test_redirected_menus_and_cancellation(inventory, tmp_path):
     result = CliRunner().invoke(
         u8_app, ["container-browse", str(gamedat), "--data-only"], input=""
     )
-    assert result.exit_code == 0
+    assert result.exit_code == EXIT_CODES["cancelled"]
 
 
 def composition_session(inventory):

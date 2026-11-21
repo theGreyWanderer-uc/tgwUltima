@@ -18,6 +18,7 @@ from titan.u7 import container, container_ui, eggs_ui, target_picker
 from titan.u7.archive_targets import ArchiveTarget
 from titan.u7.flex import U7FlexArchive
 from titan.u7.map import U7MapObject
+from titan.errors import EXIT_CODES
 
 
 def scripted_menus(monkeypatch, answers):
@@ -263,7 +264,7 @@ def test_shape_menu_accepts_automatic_custom_game_palette(
 @pytest.mark.parametrize("wizard", [fonts.run_wizard, shapes_ui.run_wizard])
 def test_menu_cancel_is_clean_and_writes_nothing(monkeypatch, tmp_path, wizard):
     scripted_menus(monkeypatch, [None])
-    assert wizard(output_override=str(tmp_path / "out.shp")) == 0
+    assert wizard(output_override=str(tmp_path / "out.shp")) == EXIT_CODES["cancelled"]
     assert not (tmp_path / "out.shp").exists()
 
 

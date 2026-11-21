@@ -632,8 +632,7 @@ def run_u8_save_browser(
             # A new primary snapshot never silently inherits the previous comparison.
             comparison = None
     except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
-        return 0
+        return ui.cancelled()
     except (ValueError, OSError) as error:
         print(f"  ERROR: {error}")
         return 1

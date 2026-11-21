@@ -251,7 +251,7 @@ def _source(target: ArchiveTarget, default: str = "D") -> npc_browser.Source | N
             default,
         )
         if action == "Q":
-            raise ui.PromptCancelled
+            raise ui.WizardQuit
         if action == "W":
             return None
         if action == "D":
@@ -520,6 +520,7 @@ def run_browser(
                         print(f"  ERROR: {error}")
                 if action == "W":
                     break
-    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
-        print("\nCancelled.")
+    except ui.WizardQuit:
         return 0
+    except (ui.PromptCancelled, KeyboardInterrupt, EOFError):
+        return ui.cancelled()

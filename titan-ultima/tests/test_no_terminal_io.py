@@ -40,7 +40,7 @@ TERMINAL_IMPORTS = {"typer", "click", "questionary", "rich", "prompt_toolkit"}
 
 # Library module -> terminal I/O uses still in it. Shrink this; never grow it.
 ALLOWED: dict[str, int] = {
-    "fonts/wizard.py": 90,  # the font-create wizard: split like u7/shape_wizard
+    "fonts/wizard.py": 89,  # the font-create wizard: split like u7/shape_wizard
     # dialogue pipeline steps, also runnable as scripts that print progress
     "dialogue/pipeline/lint_json.py": 14,
     "dialogue/pipeline/build_data.py": 8,
@@ -106,5 +106,5 @@ def test_library_modules_do_no_terminal_io() -> None:
         "library modules print, prompt or import a terminal toolkit; log instead "
         f"(titan._log) or move the code into a *_ui / cli module: {new}"
     )
-    stale = {m: n for m, n in ALLOWED.items() if found.get(m, 0) < n}
+    stale = {m: found.get(m, 0) for m, n in ALLOWED.items() if found.get(m, 0) < n}
     assert not stale, f"shrink ALLOWED in {__file__} to the current counts: {stale}"
