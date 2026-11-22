@@ -213,7 +213,7 @@ def cmd_types_csv(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="data", results=("text",))
 def typename_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/TYPENAME.FLX")],
 ) -> None:
@@ -221,7 +221,7 @@ def typename_dump_cmd(
     raise SystemExit(cmd_typename_dump(SimpleNamespace(file=file)))
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="data", results=("table",), params={"output": "output-file"})
 def typename_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/TYPENAME.FLX")],
     output: Annotated[
@@ -233,7 +233,11 @@ def typename_csv_cmd(
     raise SystemExit(cmd_typename_csv(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("file",), params={"output": "output-file", "csv_path": "input-file"})
+@meta(
+    category="data",
+    results=("file",),
+    params={"output": "output-file", "csv_path": "input-file"},
+)
 def typename_import_cmd(
     file: Annotated[
         str, typer.Argument(help="Original type-name archive (TYPENAME.FLX, Tnbrk.*)")
@@ -257,7 +261,7 @@ def typename_import_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="data", results=("table",), params={"output": "output-file"})
 def types_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/TYPES.DAT")],
     output: Annotated[

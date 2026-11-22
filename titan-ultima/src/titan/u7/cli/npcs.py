@@ -522,7 +522,7 @@ def cmd_npc_equipment(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(interactive=True, params={"source": "input-file"})
+@meta(category="characters", interactive=True, params={"source": "input-file"})
 def monster_browse_cmd(
     source: Annotated[
         Optional[str],
@@ -544,7 +544,7 @@ def monster_browse_cmd(
     raise SystemExit(run_browser(game=game, source=source, shape=shape))
 
 
-@meta(interactive=True, params={"source": "input-file"})
+@meta(category="characters", interactive=True, params={"source": "input-file"})
 def npc_browse_cmd(
     source: Annotated[
         Optional[str],
@@ -590,6 +590,7 @@ def npc_browse_cmd(
 
 
 @meta(
+    category="characters",
     results=("table", "text"),
     params={"format": "format", "output": "output-file", "file": "input-file"},
 )
@@ -637,6 +638,7 @@ def npc_dump_cmd(
 
 
 @meta(
+    category="characters",
     results=("table", "text"),
     params={
         "format": "format",
@@ -695,6 +697,7 @@ def schedule_dump_cmd(
 
 
 @meta(
+    category="characters",
     results=("table", "text"),
     params={
         "format": "format",
@@ -749,6 +752,7 @@ def monster_defs_cmd(
 
 
 @meta(
+    category="characters",
     results=("table", "text"),
     params={"format": "format", "output": "output-file", "file": "input-file"},
 )
@@ -791,6 +795,7 @@ def monster_dump_cmd(
 
 
 @meta(
+    category="characters",
     results=("table", "text"),
     params={
         "format": "format",
@@ -849,6 +854,7 @@ def monster_equipment_cmd(
 
 
 @meta(
+    category="characters",
     params={
         "gamedat": "save",
         "mod": "mod",
@@ -856,7 +862,7 @@ def monster_equipment_cmd(
         "mod_monsters": "input-file",
         "mod_equip": "input-file",
         "output_dir": "output-dir",
-    }
+    },
 )
 def monster_report_cmd(
     static: Annotated[
@@ -917,6 +923,7 @@ def monster_report_cmd(
 
 
 @meta(
+    category="characters",
     results=("table", "text"),
     params={"format": "format", "output": "output-file", "file": "input-file"},
 )

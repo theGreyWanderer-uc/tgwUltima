@@ -672,7 +672,7 @@ def cmd_avatar_animation_library_export(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="models", results=("text",))
 def animation_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     limit: Annotated[
@@ -684,7 +684,7 @@ def animation_list_cmd(
     raise SystemExit(cmd_animation_list(SimpleNamespace(file=file, limit=limit)))
 
 
-@meta(results=("text",))
+@meta(category="models", results=("text",))
 def animation_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     id: Annotated[int, typer.Argument(help="Animation ID (the FLX entry index)")],
@@ -710,7 +710,11 @@ def animation_show_cmd(
     )
 
 
-@meta(results=("json",), params={"output": "output-file", "diagnostics": "output-file"})
+@meta(
+    category="models",
+    results=("json",),
+    params={"output": "output-file", "diagnostics": "output-file"},
+)
 def animation_library_plan_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     output: Annotated[
@@ -775,6 +779,7 @@ def animation_library_plan_cmd(
 
 
 @meta(
+    category="models",
     results=("files",),
     params={"output": "output-dir", "palette": "palette", "plan": "input-file"},
 )
@@ -852,7 +857,11 @@ def animation_library_export_cmd(
     )
 
 
-@meta(results=("json", "table"), params={"fmt": "format", "output": "output-file"})
+@meta(
+    category="models",
+    results=("json", "table"),
+    params={"fmt": "format", "output": "output-file"},
+)
 def animation_model_report_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     output: Annotated[
@@ -910,7 +919,11 @@ def animation_model_report_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="models",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def animation_pose_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
@@ -962,7 +975,11 @@ def animation_pose_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="models",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def animation_bundle_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     animation_id: Annotated[int, typer.Argument(help="Animation/FLX entry ID")],
@@ -1020,7 +1037,11 @@ def animation_bundle_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="models",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def animation_set_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
@@ -1087,7 +1108,11 @@ def animation_set_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="models",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def avatar_animation_library_export_cmd(
     animations: Annotated[str, typer.Argument(help="Path to static/anim.flx")],
     sappear: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],

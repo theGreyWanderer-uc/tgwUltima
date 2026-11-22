@@ -141,7 +141,11 @@ def _looks_like_text(data: bytes) -> bool:
     return all((0x20 <= b <= 0x7E) or b in (0x0A, 0x0D, 0x09) for b in sample)
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="audio",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def music_export_cmd(
     file: Annotated[
         str,
@@ -176,7 +180,11 @@ def music_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="audio",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def voc_export_cmd(
     file: Annotated[
         str,
@@ -198,7 +206,11 @@ def voc_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="audio",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def speech_export_cmd(
     file: Annotated[
         str,

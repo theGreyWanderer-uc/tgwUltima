@@ -643,7 +643,7 @@ def cmd_terrain_export(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def nonfixed_info_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
@@ -653,7 +653,7 @@ def nonfixed_info_cmd(
     raise SystemExit(cmd_nonfixed_info(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def nonfixed_chunks_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
@@ -663,7 +663,7 @@ def nonfixed_chunks_cmd(
     raise SystemExit(cmd_nonfixed_chunks(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def nonfixed_entities_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a runtime/nonfixed.<region> file")
@@ -704,7 +704,7 @@ def nonfixed_entities_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def nonfixed_diff_cmd(
     left: Annotated[str, typer.Argument(help="First runtime/nonfixed.<region> file")],
     right: Annotated[str, typer.Argument(help="Second runtime/nonfixed.<region> file")],
@@ -721,7 +721,7 @@ def nonfixed_diff_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def fixed_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
 ) -> None:
@@ -729,7 +729,7 @@ def fixed_info_cmd(
     raise SystemExit(cmd_fixed_info(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def fixed_chunks_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
     by_grid: Annotated[
@@ -746,7 +746,7 @@ def fixed_chunks_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def fixed_objects_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
     chunk: Annotated[
@@ -777,7 +777,7 @@ def fixed_objects_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def fixed_types_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/fixed.<region> file")],
     typenames: Annotated[
@@ -796,7 +796,7 @@ def fixed_types_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def terrain_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
 ) -> None:
@@ -804,7 +804,7 @@ def terrain_info_cmd(
     raise SystemExit(cmd_terrain_info(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def terrain_tiles_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
 ) -> None:
@@ -812,7 +812,7 @@ def terrain_tiles_cmd(
     raise SystemExit(cmd_terrain_tiles(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def terrain_chunk_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     index: Annotated[
@@ -860,7 +860,7 @@ def terrain_chunk_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def terrain_textures_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     sdinfo: Annotated[
@@ -879,7 +879,7 @@ def terrain_textures_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file"})
+@meta(category="world", results=("image",), params={"output": "output-file"})
 def terrain_heightmap_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     output: Annotated[
@@ -896,7 +896,7 @@ def terrain_heightmap_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="world", results=("table",), params={"output": "output-file"})
 def terrain_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/terrain.<region> file")],
     output: Annotated[

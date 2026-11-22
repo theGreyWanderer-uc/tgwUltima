@@ -2459,7 +2459,7 @@ game or world, including installed Exult mods and custom games.
 |---|---|---|
 | [Create a font](#u7-font-create) | `titan u7 font-create` | Turn a TrueType font into U7 font shapes, with colour and custom-text previews. |
 | [PNG to shape/archive](#u7-shape-create) | `titan u7 shape-create` | Convert a PNG or frame directory and save a shape or patch a VGA/Flex archive. |
-| [Render a map](#u7-map-render) | `titan u7 map-render` | Review a 20% preview, then render the full PNG with percentage progress. |
+| [Render a map](#u7-map-render) | `titan u7 map-render` | Review a 20% preview, then render the PNG at the chosen size with percentage progress. |
 | [Browse shapes and properties](#u7-shape-browse) | `titan u7 shape-browse` | Browse graphics and frames; **T** opens properties and **O** filters them. |
 | [Browse palettes](#u7-palette-browse) | `titan u7 palette-browse` | Inspect colour swatches, palette records, cycling colours, and gradient ramps. |
 | [Browse NPCs](#u7-npc-save-browsers) | `titan u7 npc-browse` | Inspect NPC images, stats, schedules, and inventory. |
@@ -2850,19 +2850,24 @@ nearby-flat fill for seamless ground coverage.
 Run `titan u7 map-render` to open the guided wizard. It uses the same arrow-key
 menus and Tab-completed paths as the shape and font wizards. Choose BG/SI,
 the retail game, an Exult mod or standalone world, and a map number; then
-select a superchunk, custom chunk rectangle, or full world. Projection,
+select a superchunk, custom chunk rectangle, or full world (the default when
+no area was supplied), then the saved image size: full, 75%, 50% or 25% (the
+default for the full world; `--resolution` preselects it). Projection,
 saved-game objects, lift limits, grids, palette records, and shape filters
 can be adjusted before rendering. Map and graphics overrides resolve against
 the selected world's own base and patch.
 
 The wizard first renders a PNG at **20% of full width and height** on a reduced
 canvas. It opens the image in the system viewer and asks **“Is this the correct
-map?”**. Accept it, choose a PNG filename, and confirm to start the full render.
+map?”**. Accept it, choose a PNG filename, and confirm to start the final render
+at the chosen size.
 Both passes show percentage progress and the current stage; percentages track
 rendering work, not a time estimate. Existing output files require confirmation.
-Save failures can be retried without repeating a completed full render.
+Save failures can be retried without repeating a completed final render.
 
-Explicit region options keep the existing batch behavior. Add `--interactive`
+Any option other than `--game` keeps the batch behavior. With options but no
+area (`--superchunk`, `--cx0/--cy0` or `--full`), the whole world renders, at
+25% unless `--resolution` says otherwise. Add `--interactive`
 (`-i`) to enter the wizard with supplied options as defaults, for example
 `titan u7 map-render --game si --sc 0x55 --grid --interactive`.
 
@@ -2872,6 +2877,7 @@ titan u7 map-render [static] [--game bg|si]
                     [--map-root DIR]
                     [--map-num N]
                     [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
+                    [--resolution full|75|50|25]
                     [-p PAL] [-o FILE] [--view VIEW]
                     [--save DIR] [--grid] [--exclude FLAG ...]
                     [--zone-profile NAME] [--zone-id ID ...] [--all-zones]
@@ -2884,12 +2890,14 @@ titan u7 map-render [static] [--game bg|si]
 |----------|-------------|
 | `static` | Optional path to a base `STATIC/` or Exult mod `patch/` containing `SHAPES.VGA`, `TFA.DAT`, and related rendering assets. It also supplies map data unless `--map-root` is used. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
 | `--game bg|si` | Select which config section supplies defaults and the base graphics for sparse mod patches (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
+| `--mod NAME` | Render a mod's or Exult game's map (`titan u7 mods` lists them): its own map folder, patch before STATIC as Exult reads it, unless `--map-root` is given; its patch folder's art overrides; an Exult game's own STATIC. A mod without maps renders the base world with its art |
 | `--map-root DIR` | Optional separate map-data root containing shared `U7CHUNKS` and root `U7MAP`/`U7IFIX*` or secondary `mapNN/` data. Rendering assets still come from `static`. When omitted, map data continues to come from `static` |
 | `--superchunk N`, `--sc N` | Superchunk number 0–143 (hex ok, e.g. `0x55`). Renders a 16×16 chunk region |
 | `--cx0`, `--cy0`, `--cx1`, `--cy1` | Chunk-level bounding box (0–191). Alternative to `--superchunk` |
-| `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`) |
+| `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`). Also what renders when options are given but no area |
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX`. Default resolution order: configured game palette, inferred mod base `STATIC/PALETTES.FLX`, then selected `static/PALETTES.FLX` |
-| `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
+| `--resolution full\|75\|50\|25` | Output size in percent of full resolution. Default: `25` for the full world (a full world is about 25000 px square at full size), otherwise `full` |
+| `-o FILE`, `--output FILE` | Output PNG path (default: `<data folder>/u7/exports/map-render/u7_<game>_map<NN>_<region>_<view>[_<P>pct].png`, region `scNN`, `full` or a chunk range, `NN` the map number in hex) |
 | `--view VIEW` | Projection view: `classic` (45° lift, default), `flat` (no lift), `steep` (exaggerated lift) |
 | `--save DIR` | Path to `gamedat/` directory to include IREG dynamic objects |
 | `--grid / --no-grid` | Overlay grid lines (default: off). Blue lines for chunk boundaries (16×16 tiles each, coords e.g. `80,96`) with coordinate labels; red lines for superchunk boundaries (16×16 chunks each) with SC number labels |
@@ -2962,8 +2970,9 @@ titan u7 map-render STATIC/ --sc 85 --exclude no_transparent
 # Include dynamic objects from a savegame's gamedat/
 titan u7 map-render STATIC/ --sc 85 --save gamedat/ --view classic
 
-# Render the entire world map
+# Render the entire world map (25% by default; --resolution full for ~25000 px)
 titan u7 map-render STATIC/ --full -o u7_world.png
+titan u7 map-render STATIC/ --full --resolution 50 -o u7_world_half.png
 
 # Highlight three world-tile regions with per-rectangle colour
 titan u7 map-render STATIC/ --full \
@@ -4580,7 +4589,7 @@ titan u7 map-export-json [static] [--game bg|si] [--map-num N]
 | `static` | Source STATIC/map root containing shared `U7CHUNKS`, graphics metadata, and root map data or a selected `mapNN`; defaults to configured BG/SI STATIC |
 | `--game bg\|si` | Select source format and configured path; default `bg` |
 | `--map-num N` | Export map `0` from the source root or secondary map `N` from `mapNN`; default `0` |
-| `-o FILE`, `--output FILE` | Output JSON path; default `<data folder>/u7/exports/map-export-json/u7_map.json` |
+| `-o FILE`, `--output FILE` | Output JSON path; default `<data folder>/u7/exports/map-export-json/u7_<game>_map<NN>.json` (`NN` the map number in hex) |
 | `--include-fixed`, `--no-fixed` | Include or omit IFIX objects such as mountain faces; included by default |
 | `--shape-metadata`, `--no-shape-metadata` | Include or omit dimensions, origins, names, and frame counts for referenced shapes; included by default |
 | `--wrap-x`, `--wrap-y` | Declare horizontal or vertical wrapping in JSON metadata; both default off and do not alter source map data |

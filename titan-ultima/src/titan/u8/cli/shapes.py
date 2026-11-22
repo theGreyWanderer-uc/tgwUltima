@@ -417,6 +417,7 @@ def cmd_shape_convert_u7_all(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={"output": "output-dir", "palette": "palette", "file": "input-file"},
 )
@@ -444,6 +445,7 @@ def shape_export_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={"output": "output-dir", "palette": "palette", "directory": "input-dir"},
 )
@@ -478,6 +480,7 @@ def shape_batch_cmd(
 
 
 @meta(
+    category="graphics",
     results=("file",),
     params={
         "output": "output-file",
@@ -520,6 +523,7 @@ def shape_import_cmd(
 
 
 @meta(
+    category="graphics",
     results=("file",),
     params={
         "output": "output-file",
@@ -588,6 +592,7 @@ def shape_convert_u7_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={
         "output": "output-dir",

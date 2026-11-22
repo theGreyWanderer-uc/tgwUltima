@@ -318,7 +318,11 @@ def cmd_static_data_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    category="data",
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file"},
+)
 def typeflag_dump_cmd(
     static: Annotated[
         Optional[str],
@@ -354,7 +358,11 @@ def typeflag_dump_cmd(
     )
 
 
-@meta(results=("table", "text"), params={"format": "format", "output": "output-file"})
+@meta(
+    category="data",
+    results=("table", "text"),
+    params={"format": "format", "output": "output-file"},
+)
 def wihh_dump_cmd(
     static: Annotated[
         Optional[str],
@@ -397,6 +405,7 @@ def wihh_dump_cmd(
 
 
 @meta(
+    category="data",
     results=("table",),
     params={"output": "output-file", "exult_flx": "install-file", "file": "input-file"},
 )

@@ -227,7 +227,11 @@ def cmd_unkcoff_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="text",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def credits_decrypt_cmd(
     file: Annotated[str, typer.Argument(help="Path to encrypted .dat file")],
     output: Annotated[
@@ -240,6 +244,7 @@ def credits_decrypt_cmd(
 
 
 @meta(
+    category="models",
     results=("json", "table", "text"),
     params={"output_format": "format", "output": "output-file", "file": "install-file"},
 )
@@ -310,6 +315,7 @@ def anim_dump_cmd(
 
 
 @meta(
+    category="graphics",
     results=("json", "table", "text"),
     params={
         "output_format": "format",
@@ -396,6 +402,7 @@ def wpnovlay_dump_cmd(
 
 
 @meta(
+    category="world",
     results=("json", "table", "text"),
     params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
@@ -452,6 +459,7 @@ def itemcach_dump_cmd(
 
 
 @meta(
+    category="characters",
     results=("json", "table", "text"),
     params={
         "output_format": "format",
@@ -532,6 +540,7 @@ def npcdata_dump_cmd(
 
 
 @meta(
+    category="world",
     results=("json", "table", "text"),
     params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
@@ -617,6 +626,7 @@ def map_items_dump_cmd(
 
 
 @meta(
+    category="data",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "typeflag"},
@@ -633,6 +643,7 @@ def typeflag_dump_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "gumpage"},
@@ -648,7 +659,11 @@ def gumpinfo_dump_cmd(
     raise SystemExit(cmd_gumpinfo_dump(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="data",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def unkcoff_dump_cmd(
     file: Annotated[str, typer.Argument(help="Path to UNKCOFF.DAT")],
     output: Annotated[

@@ -375,7 +375,12 @@ def run_u9_save_browser(
         return exit_code(error)
 
 
-@meta(results=("files",), params={"output": "output-dir"}, interactive=True)
+@meta(
+    category="saves",
+    results=("files",),
+    params={"output": "output-dir"},
+    interactive=True,
+)
 def save_browse_cmd(
     source: Annotated[
         Path | None,

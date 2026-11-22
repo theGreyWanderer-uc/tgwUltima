@@ -110,7 +110,11 @@ def cmd_object_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",), params={"comobj": "install-file", "objects": "install-file"})
+@meta(
+    category="data",
+    results=("text",),
+    params={"comobj": "install-file", "objects": "install-file"},
+)
 def object_info_cmd(
     item_id: Annotated[int, typer.Argument(help="UU2 item ID (0..511)")],
     comobj: Annotated[
@@ -126,6 +130,7 @@ def object_info_cmd(
 
 
 @meta(
+    category="data",
     results=("json", "table"),
     params={
         "output": "output-file",

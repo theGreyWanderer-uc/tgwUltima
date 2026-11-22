@@ -218,7 +218,7 @@ def cmd_u7_flex_add_shape(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("file",), params={"output": "output-file"})
+@meta(category="archives", results=("file",), params={"output": "output-file"})
 def u7_flex_create_cmd(
     output: Annotated[
         str,
@@ -248,6 +248,7 @@ def u7_flex_create_cmd(
 
 
 @meta(
+    category="graphics",
     results=("file",),
     params={
         "output": "output-file",

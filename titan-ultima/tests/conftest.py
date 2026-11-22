@@ -31,3 +31,18 @@ def isolate_cli_config_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep loaded CLI settings from leaking between tests that invoke root commands."""
     monkeypatch.setattr(_config, "_config", {})
     monkeypatch.setattr(_config, "explicit_config_path", None)
+
+
+@pytest.fixture(autouse=True)
+def isolate_store_records(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reads this machine's launcher files or registry, and every test
+    sees the same fixed drives (C-G). ``test_stores.py`` feeds the readers its
+    own files and registry values."""
+    from titan import _stores
+
+    _stores.refresh()
+    for reader in ("steam_roots", "heroic_config_dirs", "lutris_databases"):
+        monkeypatch.setattr(_stores, reader, lambda: [])
+    monkeypatch.setattr(_stores, "_registry_subkeys", lambda path: [])
+    monkeypatch.setattr(_stores, "_registry_values", lambda path: [])
+    monkeypatch.setattr(_stores, "drives", lambda: list("CDEFG"))

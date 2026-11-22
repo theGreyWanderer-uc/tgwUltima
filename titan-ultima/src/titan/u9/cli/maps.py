@@ -46,7 +46,7 @@ from titan.u9.terrain import U9TerrainError
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan.u9.cli import _common
 from titan._meta import meta
-from titan._config import export_output
+from titan._config import DEFAULT_OUTPUT, export_output
 from titan.errors import exit_code
 
 
@@ -367,7 +367,11 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         print(f"ERROR: {error}", file=sys.stderr)
         return exit_code(error)
 
-    output = Path(args.output) if args.output else Path(f"{args.terrain}_map.png")
+    output = Path(
+        export_output(
+            args.output, "u9", "map-render", f"{Path(args.terrain).name}_map.png"
+        )
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     result.image.save(output)
     metadata = Path(args.metadata) if args.metadata else output.with_suffix(".json")
@@ -546,7 +550,11 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
                 "TYPES.DAT was not found beside the terrain file; pass --types"
             )
 
-    output = Path(args.output) if args.output else Path(f"{args.terrain}_map.glb")
+    output = Path(
+        export_output(
+            args.output, "u9", "map-export-glb", f"{Path(args.terrain).name}_map.glb"
+        )
+    )
     try:
         scene = U9RegionScene.from_files(
             args.terrain,
@@ -742,6 +750,7 @@ def cmd_map_render_3d(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="world",
     results=("files",),
     params={"output": "output-dir", "palette": "palette", "metadata": "output-file"},
 )
@@ -1026,6 +1035,7 @@ def map_atlas_cmd(
 
 
 @meta(
+    category="world",
     results=("image",),
     params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
 )
@@ -1076,7 +1086,8 @@ def map_render_cmd(
         typer.Option("--sdinfo", help="Matching sdInfo*.flx (auto-discovered)"),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output PNG path")
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     metadata: Annotated[
         Optional[str],
@@ -1266,6 +1277,7 @@ def map_render_cmd(
 
 
 @meta(
+    category="world",
     results=("file",),
     params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
 )
@@ -1406,7 +1418,11 @@ def map_export_glb_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file", "metadata": "output-file"})
+@meta(
+    category="world",
+    results=("image",),
+    params={"output": "output-file", "metadata": "output-file"},
+)
 def map_render_3d_cmd(
     scene: Annotated[
         str,
@@ -1414,7 +1430,7 @@ def map_render_3d_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output PNG path"),
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     metadata: Annotated[
         Optional[str],

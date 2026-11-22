@@ -102,8 +102,8 @@ def answers(monkeypatch, values):
 
 def initial_prompts():
     # SI, owner, selected world map data, map 0, custom rectangle (one chunk),
-    # classic, no IREG/lift/grid/advanced options.
-    return ["2", "1", "1", "0", "2", "0", "0", "0", "0", "1", "n", "n", "n", "n"]
+    # full size, classic, no IREG/lift/grid/advanced options.
+    return ["2", "1", "1", "0", "2", "0", "0", "0", "0", "1", "1", "n", "n", "n", "n"]
 
 
 def test_bare_and_game_only_commands_open_wizard(monkeypatch):
@@ -127,7 +127,58 @@ def test_explicit_regions_remain_batch_and_interactive_keeps_defaults(monkeypatc
     assert batch[0].superchunk == guided[0].superchunk == 85
     assert guided[0].view == "flat" and guided[0].grid
     result = CliRunner().invoke(cli.u7_app, ["map-render", "--output", "map.png"])
-    assert result.exit_code == 1 and "Specify" in result.output
+    assert result.exit_code == 0 and "rendering the full world" in result.output
+    no_area = batch[-1]
+    assert (no_area.chunk_x0, no_area.chunk_y0, no_area.chunk_x1, no_area.chunk_y1) == (
+        0,
+        0,
+        191,
+        191,
+    )
+    assert no_area.resolution == 0.25
+
+
+def test_wizard_defaults_to_the_full_world_at_a_quarter(monkeypatch):
+    args = options(
+        superchunk=None, chunk_x0=0, chunk_y0=0, chunk_x1=None, chunk_y1=None
+    )
+    answers(monkeypatch, ["", ""])  # accept the default area and size
+    wizard._region(args)
+    assert (args.chunk_x0, args.chunk_y0, args.chunk_x1, args.chunk_y1) == (
+        0,
+        0,
+        191,
+        191,
+    )
+    assert args.wizard_resolution == "25"
+
+
+def test_wizard_keeps_a_size_given_on_the_command_line(monkeypatch):
+    captured = []
+    monkeypatch.setattr(wizard, "run_wizard", lambda args: captured.append(args) or 0)
+    argv = ["map-render", "--sc", "3", "--resolution", "50", "--interactive"]
+    assert CliRunner().invoke(cli.u7_app, argv).exit_code == 0
+    assert captured[0].wizard_resolution == "50"
+    args = options(superchunk=3, wizard_scope="1", wizard_resolution="50")
+    answers(monkeypatch, ["", "", ""])
+    wizard._region(args)
+    assert args.wizard_resolution == "50"
+
+
+def test_wizard_saves_at_the_chosen_size(world, monkeypatch, tmp_path):
+    output = tmp_path / "quarter.png"
+    resolutions = []
+    original = cli.maps.cmd_map_render
+    monkeypatch.setattr(
+        cli.maps,
+        "cmd_map_render",
+        lambda args: resolutions.append(args.resolution) or original(args),
+    )
+    prompts = initial_prompts()
+    prompts[9] = "4"  # 25%
+    answers(monkeypatch, [*prompts, "y", str(output), "y"])
+    assert wizard.run_wizard(options()) == 0
+    assert resolutions == [0.2, 0.25] and output.exists()
 
 
 def test_cancel_after_reduced_preview_never_renders_full(world, monkeypatch, tmp_path):
@@ -167,7 +218,7 @@ def test_acceptance_renders_full_only_after_output_confirmation(
         assert image.getpixel((80, 80))[:3] == (255, 0, 0)
     text = capsys.readouterr().out
     assert "Is this the correct map?" in text
-    assert "20% preview: 100%" in text and "Full render: 100%" in text
+    assert "20% preview: 100%" in text and "Render (full size): 100%" in text
 
 
 def test_declining_save_skips_full_render(world, monkeypatch, tmp_path):
@@ -319,7 +370,7 @@ def test_plain_map_selector_discovers_hex_map_directories(world, monkeypatch):
 
 def test_invalid_region_values_reprompt_without_clamping(monkeypatch):
     args = options()
-    answers(monkeypatch, ["2", "192", "2", "3", "1", "4", "2", "5"])
+    answers(monkeypatch, ["2", "192", "2", "3", "1", "4", "2", "5", "1"])
     wizard._region(args)
     assert (args.chunk_x0, args.chunk_y0, args.chunk_x1, args.chunk_y1) == (2, 3, 4, 5)
 

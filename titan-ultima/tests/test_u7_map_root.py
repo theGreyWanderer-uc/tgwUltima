@@ -266,3 +266,128 @@ def test_map_font_fallback_can_draw_when_arial_is_unavailable(
     image = Image.new("L", (100, 30))
     ImageDraw.Draw(image).text((0, 0), "SC 0", fill=255, font=font)
     assert image.getbbox() is not None
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        (["--full"], 0.25),
+        (["--full", "--resolution", "50"], 0.5),
+        (["--full", "--resolution", "full"], 1.0),
+        (["--sc", "0"], 1.0),
+        (["--sc", "0", "--resolution", "75"], 0.75),
+    ],
+)
+def test_map_render_resolution_defaults_to_a_quarter_for_the_full_world(
+    tmp_path: Path, monkeypatch, arguments: list[str], expected: float
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        u7_cli.maps,
+        "cmd_map_render",
+        lambda args: captured.update(resolution=args.resolution) or 0,
+    )
+
+    result = CliRunner().invoke(
+        u7_cli.u7_app, ["map-render", str(tmp_path), *arguments]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured == {"resolution": expected}
+
+
+def _fake_render(tmp_path: Path, monkeypatch) -> dict[str, object]:
+    """Run cmd_map_render against a stub renderer; return what it was asked."""
+    static = tmp_path / "static"
+    static.mkdir(exist_ok=True)
+    (static / "SHAPES.VGA").write_bytes(b"placeholder")
+    (static / "PALETTES.FLX").write_bytes(b"placeholder")
+    captured: dict[str, object] = {}
+
+    class FakeRenderer:
+        PROJECTIONS: dict[str, dict[str, object]] = {"classic": {}}
+        shapes_vga_base_fill_count = 0
+
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def render_superchunk(self, sc, palette, **options):
+            captured["call"] = ("superchunk", sc)
+            return Image.new("RGBA", (2, 2))
+
+        def render_region(self, cx0, cy0, cx1, cy1, palette, **options):
+            captured["call"] = (
+                "region",
+                (cx0, cy0, cx1, cy1),
+                options.get("resolution"),
+            )
+            return Image.new("RGBA", (2, 2))
+
+    def fake_export_output(value, game, command, default):
+        captured["name"] = default
+        return str(tmp_path / default)
+
+    monkeypatch.setattr("titan.u7.map.U7MapRenderer", FakeRenderer)
+    monkeypatch.setattr(
+        "titan.u7.palette.U7Palette.from_file", staticmethod(lambda path: object())
+    )
+    monkeypatch.setattr(u7_cli.maps, "export_output", fake_export_output)
+    captured["static"] = str(static)
+    return captured
+
+
+def _render_args(static: str, **overrides) -> object:
+    values = dict(
+        static=static,
+        game="si",
+        map_root=None,
+        palette=None,
+        map_num=1,
+        view="classic",
+        output=None,
+        superchunk=None,
+        chunk_x0=0,
+        chunk_y0=0,
+        chunk_x1=None,
+        chunk_y1=None,
+        exclude_flags=None,
+        gamedat=None,
+        grid=False,
+        grid_size=1,
+        max_lift=None,
+    )
+    values.update(overrides)
+    return u7_cli.maps.SimpleNamespace(**values)
+
+
+def test_full_world_default_name_carries_game_map_and_size(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured = _fake_render(tmp_path, monkeypatch)
+    args = _render_args(captured["static"], chunk_x1=191, chunk_y1=191, resolution=0.25)
+
+    assert u7_cli.maps.cmd_map_render(args) == 0
+    assert captured["call"] == ("region", (0, 0, 191, 191), 0.25)
+    assert captured["name"] == "u7_si_map01_full_classic_25pct.png"
+
+
+def test_scaled_superchunk_renders_as_its_chunk_range(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured = _fake_render(tmp_path, monkeypatch)
+    args = _render_args(captured["static"], superchunk=13, resolution=0.5)
+
+    assert u7_cli.maps.cmd_map_render(args) == 0
+    assert captured["call"] == ("region", (16, 16, 31, 31), 0.5)
+    assert captured["name"] == "u7_si_map01_sc0D_classic_50pct.png"
+
+
+def test_full_size_superchunk_keeps_the_superchunk_renderer(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured = _fake_render(tmp_path, monkeypatch)
+    args = _render_args(captured["static"], superchunk=13, map_num=0, game="bg")
+
+    assert u7_cli.maps.cmd_map_render(args) == 0
+    assert captured["call"] == ("superchunk", 13)
+    assert captured["name"] == "u7_bg_map00_sc0D_classic.png"

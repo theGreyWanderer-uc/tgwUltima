@@ -396,7 +396,7 @@ def cmd_color_cube_csv(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="palettes", results=("text",))
 def palette_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/ankh.pal")],
     duplicates: Annotated[
@@ -412,7 +412,7 @@ def palette_info_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="palettes", results=("files",), params={"output": "output-dir"})
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/ankh.pal")],
     output: Annotated[
@@ -434,7 +434,7 @@ def palette_export_cmd(
     )
 
 
-@meta(params={"palette": "palette"})
+@meta(category="palettes", params={"palette": "palette"})
 def shade_info_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
@@ -450,7 +450,11 @@ def shade_info_cmd(
     raise SystemExit(cmd_shade_info(SimpleNamespace(file=file, palette=palette)))
 
 
-@meta(results=("table",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    category="palettes",
+    results=("table",),
+    params={"output": "output-file", "palette": "palette"},
+)
 def shade_csv_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/shade.tbl or static/shadegry.tbl")
@@ -474,7 +478,7 @@ def shade_csv_cmd(
     )
 
 
-@meta(params={"palette": "palette"})
+@meta(category="palettes", params={"palette": "palette"})
 def color_cube_info_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
@@ -492,7 +496,7 @@ def color_cube_info_cmd(
     raise SystemExit(cmd_color_cube_info(SimpleNamespace(file=file, palette=palette)))
 
 
-@meta(results=("text",))
+@meta(category="palettes", results=("text",))
 def color_cube_lookup_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")
@@ -518,7 +522,7 @@ def color_cube_lookup_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="palettes", results=("table",), params={"output": "output-file"})
 def color_cube_csv_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/rgbccube.dat or static/yiqccube.dat")

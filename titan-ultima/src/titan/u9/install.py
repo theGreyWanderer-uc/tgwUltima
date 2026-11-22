@@ -18,6 +18,7 @@ from titan.u9.flx_archive import (
     VERSION_OFFSET,
 )
 from titan.errors import InvalidDataError
+from titan import _stores
 
 U9_RESOURCE_NAMES = {
     "bitmap16": "bitmap16.flx",
@@ -261,8 +262,8 @@ def u9_install_candidates(config: dict) -> list[Path]:
         # Steam's default folder name for a library on a second drive.
         "SteamLibrary/steamapps/common",
     ):
-        launcher_roots.extend(Path(f"{drive}:/") / layout for drive in "CDEFG")
-    launcher_roots += [Path.home() / "GOG Games", Path.home() / "Games/Heroic"]
+        launcher_roots.extend(_stores.guess_roots(layout, home=()))
+    launcher_roots += _stores.guess_roots()
     for launcher in launcher_roots:
         candidates.extend(launcher / name for name in names)
         try:
@@ -279,7 +280,7 @@ def u9_install_candidates(config: dict) -> list[Path]:
                     candidates.append(child)
         except OSError:
             continue
-    candidates.extend(Path(f"{drive}:/Ultima/Ultima9") for drive in "CDEFG")
+    candidates.extend(Path(f"{drive}:/Ultima/Ultima9") for drive in _stores.drives())
     return list(dict.fromkeys(candidates))
 
 

@@ -644,7 +644,9 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
 
 
 @meta(
-    results=("files",), params={"output": "output-dir", "server_profile": "input-file"}
+    category="world",
+    results=("files",),
+    params={"output": "output-dir", "server_profile": "input-file"},
 )
 def house_footprints_cmd(
     client: Annotated[
@@ -692,6 +694,7 @@ def house_footprints_cmd(
 
 
 @meta(
+    category="world",
     results=("files",),
     params={
         "output": "output-dir",

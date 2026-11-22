@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Optional
 
 from titan._meta import Installation
+from titan import _stores
 
 U8_STATIC_FILES = {
     "fixed": "FIXED.DAT",
@@ -330,21 +331,28 @@ def is_u8_folder_name(name: str) -> bool:
     return any(token in lowered for token in ("ultima 8", "ultima8", "viii", "pagan"))
 
 
-def u8_install_candidates() -> list[Path]:
-    """List GOG Galaxy, GOG offline, legacy disc, Heroic and manual U8 folders."""
+def u8_install_candidates(config: dict | None = None) -> list[Path]:
+    """List store-recorded, GOG Galaxy, GOG offline, legacy disc, Heroic and manual U8 folders.
+
+    Folders Steam, GOG, Heroic or Lutris record for U8 (and ``[search] folders``
+    from *config*) come first; see :mod:`titan._stores`.
+    """
     candidates: list[Path] = []
 
     def _add_candidate(path: Path) -> None:
         if path not in candidates:
             candidates.append(path)
 
+    for record in _stores.matching("u8", config):
+        _add_candidate(record.path)
+
     # Windows: GOG Galaxy client (most common current install)
-    for drive in "CDEFG":
+    for drive in _stores.drives():
         _add_candidate(
             Path(f"{drive}:\\Program Files (x86)\\GOG Galaxy\\Games\\Ultima 8")
         )
     # Windows: GOG Offline Installer + common manual redirects
-    for drive in "CDEFG":
+    for drive in _stores.drives():
         for path in [
             Path(f"{drive}:\\GOG Games\\Ultima 8"),
             Path(f"{drive}:\\ULTIMA8"),
@@ -521,7 +529,7 @@ def install_candidates(config: dict) -> list[Path]:
     """Install protocol: ``[u8.game] base``, then :func:`u8_install_candidates`."""
     base = u8_section(config).get("game", {}).get("base")
     configured = [Path(str(base)).expanduser()] if base else []
-    return list(dict.fromkeys([*configured, *u8_install_candidates()]))
+    return list(dict.fromkeys([*configured, *u8_install_candidates(config)]))
 
 
 def discover_installs(path: Path) -> list[Installation]:

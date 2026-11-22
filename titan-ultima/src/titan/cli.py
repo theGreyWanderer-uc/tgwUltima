@@ -786,8 +786,9 @@ def _setup_detect_install(
     print(f"\nSearching for {label} installations...")
     found = find_installs(game_id, existing_config)
     for install in found:
+        where = f" ({install.source.label})" if install.source else ""
         if install.valid:
-            print(f"  Found {label}: {install.root}")
+            print(f"  Found {label}{where}: {install.root}")
             continue
         print(f"  Incomplete or damaged {label} installation: {install.root}")
         for key, status in install.problems.items():
@@ -878,7 +879,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
         print("Verified U7 base corrections will be shown before saving.\n")
 
     # -- Auto-detect standard install locations --------------------
-    candidates = u8_install_candidates()
+    candidates = u8_install_candidates(existing_config)
     # Existing settings and Exult support nonstandard U7 install locations too.
     u7_candidates, exult_hints, exult_statics = u7_install_candidates(existing_config)
 
@@ -1363,7 +1364,7 @@ def cmd_setup(args: SimpleNamespace) -> int:
 
 
 @app.command("flex-info")
-@meta(results=("text",), params={"file": "input-file"})
+@meta(category="archives", results=("text",), params={"file": "input-file"})
 def flex_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
 ) -> None:
@@ -1372,7 +1373,7 @@ def flex_info_cmd(
 
 
 @app.command("flex-list")
-@meta(results=("text",), params={"file": "input-file"})
+@meta(category="archives", results=("text",), params={"file": "input-file"})
 def flex_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
 ) -> None:
@@ -1381,7 +1382,11 @@ def flex_list_cmd(
 
 
 @app.command("flex-extract")
-@meta(results=("files",), params={"output": "output-dir", "file": "input-file"})
+@meta(
+    category="archives",
+    results=("files",),
+    params={"output": "output-dir", "file": "input-file"},
+)
 def flex_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to the .flx file")],
     output: Annotated[
@@ -1399,7 +1404,11 @@ def flex_extract_cmd(
 
 
 @app.command("flex-create")
-@meta(results=("file",), params={"output": "output-file", "directory": "input-dir"})
+@meta(
+    category="archives",
+    results=("file",),
+    params={"output": "output-file", "directory": "input-dir"},
+)
 def flex_create_cmd(
     directory: Annotated[
         str,
@@ -1450,6 +1459,7 @@ def flex_create_cmd(
 
 @app.command("flex-update")
 @meta(
+    category="archives",
     results=("file",),
     params={"output": "output-file", "file": "input-file", "data": "input-file"},
 )
@@ -1488,7 +1498,11 @@ def flex_update_cmd(
 
 
 @app.command("music-export")
-@meta(results=("files",), params={"output": "output-dir", "file": "input-file"})
+@meta(
+    category="audio",
+    results=("files",),
+    params={"output": "output-dir", "file": "input-file"},
+)
 def music_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to .xmi XMIDI file")],
     output: Annotated[
@@ -1501,7 +1515,11 @@ def music_export_cmd(
 
 
 @app.command("music-batch")
-@meta(results=("files",), params={"output": "output-dir", "directory": "input-dir"})
+@meta(
+    category="audio",
+    results=("files",),
+    params={"output": "output-dir", "directory": "input-dir"},
+)
 def music_batch_cmd(
     directory: Annotated[str, typer.Argument(help="Directory containing .xmi files")],
     output: Annotated[
@@ -1523,7 +1541,7 @@ def music_batch_cmd(
 
 
 @app.command("setup")
-@meta(interactive=True)
+@meta(category="data", interactive=True)
 def setup_cmd() -> None:
     """Create titan.toml by detecting Ultima, Martian Dreams and UO installs."""
     try:
@@ -1533,7 +1551,7 @@ def setup_cmd() -> None:
 
 
 @app.command("config")
-@meta(results=("text",))
+@meta(category="data", results=("text",))
 def config_cmd(
     edit: Annotated[
         bool,

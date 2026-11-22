@@ -468,7 +468,7 @@ def cmd_npc_diff(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="characters", results=("text",))
 def npc_list_cmd(
     file: Annotated[
         str,
@@ -517,7 +517,7 @@ def npc_list_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="characters", results=("text",))
 def npc_show_cmd(
     file: Annotated[
         str,
@@ -537,7 +537,7 @@ def npc_show_cmd(
     raise SystemExit(cmd_npc_show(SimpleNamespace(file=file, index=index, save=save)))
 
 
-@meta(results=("text",))
+@meta(category="characters", results=("text",))
 def npc_classes_cmd(
     file: Annotated[
         str,
@@ -562,7 +562,7 @@ def npc_classes_cmd(
     )
 
 
-@meta(params={"save_file": "save"})
+@meta(category="characters", params={"save_file": "save"})
 def npc_diff_cmd(
     file: Annotated[str, typer.Argument(help="Path to the shipped runtime/NPC.FLX")],
     save_file: Annotated[
@@ -578,7 +578,7 @@ def npc_diff_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="characters", results=("table",), params={"output": "output-file"})
 def npc_csv_cmd(
     file: Annotated[
         str,

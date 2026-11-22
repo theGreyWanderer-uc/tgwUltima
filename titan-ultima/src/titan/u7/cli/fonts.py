@@ -27,6 +27,7 @@ def cmd_font_create(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="graphics",
     results=("file",),
     params={
         "output": "output-file",

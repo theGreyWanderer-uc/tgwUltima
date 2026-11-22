@@ -14,6 +14,7 @@ from titan.fonts.exult_cfg import find_exult_cfg, parse_exult_cfg
 from titan.u7.flex import U7FlexArchive
 from titan.u7.palette import U7Palette
 from titan.errors import InvalidDataError
+from titan import _stores
 
 RESOURCE_NAMES = {
     "shapes": "SHAPES.VGA",
@@ -96,15 +97,49 @@ def install_roots(candidate: Path, *, max_depth: int = 2) -> list[Path]:
     return roots
 
 
-def install_game(root: Path) -> str:
-    """Recognize SI roots from their own name or their install wrapper."""
+_SI_MARKERS = ("SISPEECH.SPC", "PAPERDOL.VGA", "SERPENT.OFX")
+_BG_MARKERS = ("ENDGAME.DAT", "ENDSHAPE.FLX", "U7SPEECH.SPC")
+"""STATIC files only one game ships (the Black Gate's endgame and speech; Serpent
+Isle's speech, paperdolls and OFX). Add-ons (Forge of Virtue, Silver Seed) keep them."""
+
+
+def content_game(root: Path) -> str | None:
+    """``"BG"`` or ``"SI"`` from the STATIC files only that game ships; ``None``
+    when neither (or both) kind is there."""
+    static = existing_path(root / "STATIC")
+    si = any(existing_path(static / name).is_file() for name in _SI_MARKERS)
+    bg = any(existing_path(static / name).is_file() for name in _BG_MARKERS)
+    if si == bg:
+        return None
+    return "SI" if si else "BG"
+
+
+def name_game(root: Path) -> str | None:
+    """``"BG"`` or ``"SI"`` from the root's folder names (nearest first), or ``None``."""
     for part in reversed(root.parts):
         name = part.lower()
-        if "serpent" in name or name.endswith("si"):
+        words = [word for word in re.split(r"[^a-z0-9]+", name) if word]
+        if "serpent" in name or any(word.endswith("si") for word in words):
             return "SI"
-        if name == "ultima7" or "black gate" in name or name.endswith("bg"):
+        if (
+            name == "ultima7"
+            or "black gate" in name
+            or "blackgate" in name
+            or any(word.endswith("bg") for word in words)
+        ):
             return "BG"
-    return "BG"
+    return None
+
+
+def detect_game(root: Path, hint: str | None = None) -> str | None:
+    """Which U7 game *root* holds: its files first, then *hint* (Exult's settings
+    for that folder), then its folder names; ``None`` when nothing says."""
+    return content_game(root) or hint or name_game(root)
+
+
+def install_game(root: Path) -> str:
+    """Which U7 game *root* holds (see :func:`detect_game`), BG when nothing says."""
+    return detect_game(root) or "BG"
 
 
 @dataclass
@@ -299,7 +334,7 @@ def is_u7_folder_name(name: str) -> bool:
 def u7_install_candidates(
     config: dict,
 ) -> tuple[list[Path], dict[Path, str], dict[Path, Path]]:
-    """List configured, Exult-registered, GOG, Heroic and manual U7 folders.
+    """List configured, Exult-registered, store-recorded, GOG, Heroic and manual U7 folders.
 
     Also returns the game each configured or Exult base is known to hold, and
     the STATIC folder Exult records for a base, so nonstandard installs are
@@ -326,7 +361,12 @@ def u7_install_candidates(
                 exult_statics[exult_paths["base"].absolute()] = exult_paths["static"]
             _add_candidate(exult_paths["base"])
 
-    for drive in "CDEFG":
+    # Folders Steam, GOG, Heroic or Lutris record for either part (titan._stores).
+    for game_id in ("u7bg", "u7si"):
+        for record in _stores.matching(game_id, config):
+            _add_candidate(record.path)
+
+    for drive in _stores.drives():
         for path in [
             Path(f"{drive}:\\GOG Games\\Ultima VII"),
             Path(f"{drive}:\\GOG Games\\Ultima VII - Complete"),
@@ -372,7 +412,7 @@ def select_u7_install(
     matching = [
         root
         for root in roots
-        if (exult_hints.get(root.absolute()) or install_game(root)) == game
+        if (detect_game(root, exult_hints.get(root.absolute())) or "BG") == game
     ]
     root = next(iter(matching or roots), candidate)
     # Selecting a base explicitly chooses the game even with a custom name.
@@ -618,9 +658,11 @@ def install_candidates(config: dict, game_id: str) -> list[Path]:
 def discover_installs(path: Path, game_id: str) -> list[Installation]:
     """Install protocol: *game_id* roots within two levels of *path*.
 
-    A root's game comes from Exult's settings, then its folder name. When
-    *path* is itself a root that no hint places in either game, it counts as
-    the requested one: choosing a folder explicitly chooses the game.
+    A root's game comes from the files only that game ships, then Exult's
+    settings, then its folder name (:func:`detect_game`). When *path* is
+    itself a root and nothing says which game it is, it counts as the
+    requested one: choosing a folder explicitly chooses the game. A root
+    known to be the other game never counts.
     """
     game = _GAME_LETTERS[game_id]
     hints: dict[Path, str] = {}
@@ -635,10 +677,12 @@ def discover_installs(path: Path, game_id: str) -> list[Installation]:
     roots = [root.absolute() for root in install_roots(candidate)]
     if candidate in statics and not roots:
         roots = [candidate]
-    matching = [
-        root for root in roots if (hints.get(root) or install_game(root)) == game
-    ]
-    if not matching and candidate in roots and candidate not in hints:
+    matching = [root for root in roots if detect_game(root, hints.get(root)) == game]
+    if (
+        not matching
+        and candidate in roots
+        and detect_game(candidate, hints.get(candidate)) is None
+    ):
         matching = [candidate]
     return [
         as_installation(game_id, inspect_install(root, game, static=statics.get(root)))

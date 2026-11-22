@@ -111,6 +111,7 @@ def cmd_xformpal_export(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="palettes",
     results=("files",),
     params={"output": "output-dir", "file": "palette"},
     resources={"file": "palette"},
@@ -127,6 +128,7 @@ def palette_export_cmd(
 
 
 @meta(
+    category="palettes",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "xformpal"},

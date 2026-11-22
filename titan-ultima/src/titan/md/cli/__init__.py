@@ -39,6 +39,7 @@ def martian_dreams_commands() -> None:
 
 @md_app.command("map-render")
 @meta(
+    category="world",
     results=("image",),
     params={"output": "output-file", "palette": "palette", "savegame": "save"},
 )

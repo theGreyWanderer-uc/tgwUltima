@@ -117,7 +117,11 @@ def cmd_book_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="text",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def converse_dump_cmd(
     file: Annotated[
         str,
@@ -161,6 +165,7 @@ def converse_dump_cmd(
 
 
 @meta(
+    category="text",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "look"},
@@ -176,6 +181,7 @@ def look_dump_cmd(
 
 
 @meta(
+    category="text",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "books"},

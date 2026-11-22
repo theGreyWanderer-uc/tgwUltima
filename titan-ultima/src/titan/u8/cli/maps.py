@@ -396,7 +396,9 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     )
     print(f"Output size: {img.width} x {img.height}")
 
-    out_path = args.output or f"map_{map_num:03d}_sample_{scale}.png"
+    out_path = export_output(
+        args.output, "u8", "map-sample", f"map_{map_num:03d}_sample_{scale}.png"
+    )
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path)
     print(f"Saved: {out_path}")
@@ -580,7 +582,9 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     print(f"Canvas size: {img.width} x {img.height}")
 
     if out_path is None:
-        out_path = f"map_{map_num:03d}_{view}.png"
+        out_path = export_output(
+            None, "u8", "map-render", f"map_{map_num:03d}_{view}.png"
+        )
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path)
     print(f"Saved: {out_path}")
@@ -740,6 +744,7 @@ def cmd_map_render_all(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="world",
     results=("image",),
     params={"nonfixed": "save", "output": "output-file", "palette": "palette"},
 )
@@ -761,7 +766,8 @@ def map_render_cmd(
         str, typer.Option("--view", "-V", help="Projection view")
     ] = "iso_classic",
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output PNG path")
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
@@ -847,6 +853,7 @@ def map_render_cmd(
 
 
 @meta(
+    category="world",
     results=("files",),
     params={"nonfixed": "save", "output": "output-dir", "palette": "palette"},
 )
@@ -957,6 +964,7 @@ def map_render_all_cmd(
 
 
 @meta(
+    category="world",
     results=("image",),
     params={"nonfixed": "save", "output": "output-file", "palette": "palette"},
 )
@@ -978,7 +986,8 @@ def map_sample_cmd(
         int, typer.Option("--scale", "-s", help="World units per output pixel")
     ] = 64,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output PNG path")
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
@@ -1064,6 +1073,7 @@ def map_sample_cmd(
 
 
 @meta(
+    category="world",
     results=("files",),
     params={"nonfixed": "save", "output": "output-dir", "palette": "palette"},
 )

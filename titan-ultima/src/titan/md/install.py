@@ -6,6 +6,7 @@ from pathlib import Path
 
 from titan._meta import Installation
 from titan.md.game_profile import resolve_martian_directory
+from titan._stores import guess_roots
 
 MD_RESOURCE_NAMES = {
     "palette": "MDPAL",
@@ -47,17 +48,9 @@ def martian_install_candidates(config: dict) -> list[Path]:
     base = config.get("md", {}).get("game", {}).get("base")
     if base:
         candidates.append(Path(base).expanduser())
-    roots = [
-        Path(f"{drive}:/") / layout
-        for layout in (
-            "Program Files (x86)/GOG Galaxy/Games",
-            "GOG Games",
-            "Ultima",
-            "",
-        )
-        for drive in "CDEFG"
-    ]
-    roots += [Path.home() / "GOG Games", Path.home() / "Games/Heroic"]
+    roots = guess_roots(
+        "Program Files (x86)/GOG Galaxy/Games", "GOG Games", "Ultima", ""
+    )
     for root in roots:
         candidates.extend(root / name for name in ("Martian Dreams", "MARTIAN"))
         try:

@@ -13,6 +13,38 @@ from titan.u7.palette import PaletteRecordEmptyError, U7Palette
 from titan.u7.shape_archive import find_archive
 
 
+RESOLUTIONS = {"full": 1.0, "75": 0.75, "50": 0.5, "25": 0.25}
+"""``map-render --resolution`` choices -> scale factor."""
+
+FULL_WORLD = (0, 0, 191, 191)
+
+
+def default_resolution(full_world: bool) -> str:
+    """A full world is about 25000 px square at full size, so it defaults to 25%."""
+    return "25" if full_world else "full"
+
+
+def render_file_name(
+    game: str,
+    map_num: int,
+    view: str,
+    chunks: tuple[int, int, int, int],
+    *,
+    superchunk: int | None = None,
+    resolution: float = 1.0,
+) -> str:
+    """The default PNG name: game, map number (hex, as ``mapNN``), area, view, size."""
+    if superchunk is not None:
+        area = f"sc{superchunk:02X}"
+    elif tuple(chunks) == FULL_WORLD:
+        area = "full"
+    else:
+        cx0, cy0, cx1, cy1 = chunks
+        area = f"c{cx0}-{cy0}_c{cx1}-{cy1}"
+    size = "" if resolution == 1.0 else f"_{round(resolution * 100)}pct"
+    return f"u7_{game}_map{map_num:02x}_{area}_{view}{size}.png"
+
+
 def resolve_palette(args: SimpleNamespace) -> Path:
     """Select the requested populated palette record, patch first, then owner base."""
     if args.palette:

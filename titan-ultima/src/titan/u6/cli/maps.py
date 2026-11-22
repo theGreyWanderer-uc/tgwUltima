@@ -289,7 +289,11 @@ def cmd_map_audit_zorder(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    category="world",
+    results=("image",),
+    params={"output": "output-file", "palette": "palette"},
+)
 def map_render_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
@@ -353,7 +357,7 @@ def map_render_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def map_audit_zorder_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")

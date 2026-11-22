@@ -460,6 +460,7 @@ def browse_u8_map_session(
 
 
 @meta(
+    category="world",
     results=("files",),
     params={
         "output": "output-dir",

@@ -6,12 +6,15 @@ ZIP comment. Saves are looked for in the install record's ``savegame``
 (``[u7xx.paths] savegame``, else Exult's save folder), the folder holding
 GAMEDAT, and the game folder: Exult's usual save locations.
 
+The original DOS games instead keep ``GAMEnn.U7`` (a Flex archive the same
+reader opens) next to their own ``GAMEDAT``; :func:`list_dos_saves` lists those.
+
 ``slot`` is the save's full path, which every U7 ``--save`` accepts.
 """
 
 from __future__ import annotations
 
-__all__ = ["list_saves", "resolve_save", "save_folders"]
+__all__ = ["list_dos_saves", "list_saves", "resolve_save", "save_folders"]
 
 import re
 from pathlib import Path
@@ -88,6 +91,26 @@ def list_saves(config: dict, game_id: str, mod: Optional[str] = None) -> list[Sa
             slot=str(path), path=path, name=_title(path), modified=path.stat().st_mtime
         )
         for _, path in sorted(found.values(), key=lambda item: (item[0], str(item[1])))
+    ]
+
+
+_DOS_SAVE = re.compile(r"^game(\d{2})\.u7$", re.IGNORECASE)
+
+
+def list_dos_saves(folder: Path) -> list[SaveInfo]:
+    """The DOS game's ``GAMEnn.U7`` saves in its game folder, by slot."""
+    try:
+        files = [path for path in folder.iterdir() if path.is_file()]
+    except OSError:
+        return []
+    found = sorted(
+        (int(match[1]), path) for path in files if (match := _DOS_SAVE.match(path.name))
+    )
+    return [
+        SaveInfo(
+            slot=str(path), path=path, name=_title(path), modified=path.stat().st_mtime
+        )
+        for _, path in found
     ]
 
 

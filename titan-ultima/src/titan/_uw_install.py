@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Mapping
 
 from titan._meta import Installation
+from titan._stores import guess_roots
 
 _SKIP_DIRS = {"data", "saves", "crit", "cuts", "sound", "dosbox"}
 
@@ -114,17 +115,9 @@ def uw_install_candidates(
     base = config.get(section, {}).get("game", {}).get("base")
     if base:
         candidates.append(Path(base).expanduser())
-    roots = [
-        Path(f"{drive}:/") / layout
-        for layout in (
-            "Program Files (x86)/GOG Galaxy/Games",
-            "GOG Games",
-            "Ultima",
-            "",
-        )
-        for drive in "CDEFG"
-    ]
-    roots += [Path.home() / "GOG Games", Path.home() / "Games/Heroic"]
+    roots = guess_roots(
+        "Program Files (x86)/GOG Galaxy/Games", "GOG Games", "Ultima", ""
+    )
     for root in roots:
         candidates.extend(root / name for name in names)
         try:

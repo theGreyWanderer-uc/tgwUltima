@@ -59,7 +59,7 @@ def cmd_model_export(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="models", results=("files",), params={"output": "output-dir"})
 def model_render_cmd(
     output: Annotated[
         Optional[str],
@@ -91,7 +91,7 @@ def model_render_cmd(
     raise SystemExit(cmd_model_render(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="models", results=("files",), params={"output": "output-dir"})
 def model_export_cmd(
     output: Annotated[
         Optional[str],

@@ -326,7 +326,7 @@ def _validate_view_options(
             )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def map_extract_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output-dir", help="Extraction directory")
@@ -343,6 +343,7 @@ def map_extract_cmd(
 
 
 @meta(
+    category="world",
     results=("json", "text"),
     params={"output_format": "format", "output": "output-file"},
 )
@@ -367,7 +368,7 @@ def map_verify_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def map_3d_render_cmd(
     output: Annotated[
         Optional[str], typer.Option("-o", "--output-dir", help=DEFAULT_OUTPUT.strip())
@@ -453,7 +454,7 @@ def map_3d_render_cmd(
     raise SystemExit(cmd_map_3d_render(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def map_stack_cmd(
     output: Annotated[
         Optional[str], typer.Option("-o", "--output-dir", help=DEFAULT_OUTPUT.strip())
@@ -516,7 +517,7 @@ def map_stack_cmd(
     raise SystemExit(cmd_map_stack(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def map_3d_export_cmd(
     output: Annotated[
         Optional[str], typer.Option("-o", "--output-dir", help=DEFAULT_OUTPUT.strip())
@@ -544,7 +545,11 @@ def map_3d_export_cmd(
     raise SystemExit(cmd_map_3d_export(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir", "workdir": "working-dir"})
+@meta(
+    category="world",
+    results=("files",),
+    params={"output": "output-dir", "workdir": "working-dir"},
+)
 def map_render_cmd(
     output: Annotated[
         Optional[str],
@@ -697,7 +702,7 @@ def map_render_cmd(
     raise SystemExit(cmd_map_render(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def map_grid_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output-dir", help="Rendered PNG directory")

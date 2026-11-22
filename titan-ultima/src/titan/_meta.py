@@ -2,13 +2,15 @@
 
 Front ends import this the way they import :mod:`titan._config`: it loads no
 command modules, so it is cheap enough to read before the CLI tree is built.
-Check for each symbol with ``hasattr`` so older titan releases keep working.
+A front end checks :data:`CONTRACT` once instead of probing symbols with ``hasattr``.
 """
 
 from __future__ import annotations
 
 __all__ = [
     "ANY_PARAM",
+    "COMMAND_CATEGORIES",
+    "CONTRACT",
     "PARAM_KINDS",
     "PATH_KINDS",
     "RECIPE_TYPES",
@@ -20,7 +22,10 @@ __all__ = [
     "GAMES",
     "CommandMeta",
     "GameMeta",
+    "InstallSource",
     "Installation",
+    "STORE_LABELS",
+    "StoreInstall",
     "command_meta",
     "command_metas",
     "discover_installs",
@@ -33,6 +38,19 @@ __all__ = [
     "install_candidates",
     "configured_install",
     "install_config",
+    "store_installs",
+    "MapInfo",
+    "has_maps",
+    "list_maps",
+    "map_command",
+    "map_options",
+    "Flavor",
+    "default_flavors",
+    "families",
+    "flavor_config",
+    "flavor_saves",
+    "known_installs",
+    "list_flavors",
     "list_mods",
     "list_saves",
     "meta",
@@ -40,12 +58,24 @@ __all__ = [
     "resolve_save",
 ]
 
+import os
 from dataclasses import dataclass, field, replace
 from functools import lru_cache
 from importlib import import_module
 from pathlib import Path
 from typing import Callable, Iterable, Mapping, Optional, TypeVar
-from titan.errors import InvalidDataError
+from titan.errors import InvalidDataError, TitanError
+
+CONTRACT = 7
+"""Version of the front-end contract: this module, ``titan._config``, ``titan._results``,
+``titan.errors`` exit codes, ``titan._version``'s update check and the ``@meta`` tags.
+
+Bump it in the same change as anything a front end could depend on (an entry in
+``reference/desktop-impact-log.md``), and update that log's "Current contract" line.
+Independent of the package version: a dev build carries a new contract before any
+release, so a front end can require it without one. Releases up to 0.8.0 have no
+``CONTRACT``; treat a missing one as 0.
+"""
 
 
 @dataclass(frozen=True)
@@ -76,6 +106,16 @@ class GameMeta:
     """Module with ``list_mods``, when the game has mods."""
     path_kinds: Optional[str] = None
     """Name of the ``[<section>.paths]`` key -> kind table in :attr:`install`."""
+    family: str = ""
+    """Groups games a front end shows together (U7's two parts are ``"u7"``);
+    empty means the game is its own family (:attr:`game`). See :func:`families`."""
+    flavors: Optional[str] = None
+    """Module with ``list_flavors`` (and optionally ``flavor_saves``) when the
+    game has more flavors than its installs; others get the default
+    (:func:`list_flavors`)."""
+    maps: Optional[str] = None
+    """Module with ``MAP_COMMAND`` and ``list_maps(flavor, config)``, when titan
+    lists the game's maps (:func:`list_maps`)."""
 
 
 GAMES: tuple[GameMeta, ...] = (
@@ -92,22 +132,29 @@ GAMES: tuple[GameMeta, ...] = (
     GameMeta(
         "u7bg", "u7bg", "u7", "dos", "u7bg", game_option="bg",
         install="titan.u7.install", saves="titan.u7.saves", mods="titan.u7.mods",
-        path_kinds="U7_PATH_KINDS",
+        path_kinds="U7_PATH_KINDS", family="u7", flavors="titan.u7.flavors",
+        maps="titan.u7.map_list",
     ),
     GameMeta(
         "u7si", "u7si", "u7", "dos", "u7si", game_option="si",
         install="titan.u7.install", saves="titan.u7.saves", mods="titan.u7.mods",
-        path_kinds="U7_PATH_KINDS",
+        path_kinds="U7_PATH_KINDS", family="u7", flavors="titan.u7.flavors",
+        maps="titan.u7.map_list",
     ),
     GameMeta("uw2", "uw2", "uw2", "dos", "uw2", install="titan.uw2.install"),
     GameMeta(
         "u8", "u8", "u8", "dos", "u8",
         install="titan.u8.install", saves="titan.u8.saves", path_kinds="U8_PATH_KINDS",
+        flavors="titan.u8.flavors", maps="titan.u8.map_list",
     ),
-    GameMeta("uo", "uo", "uo", "windows", "uo", install="titan.uo.installs"),
+    GameMeta(
+        "uo", "uo", "uo", "windows", "uo",
+        install="titan.uo.installs", flavors="titan.uo.flavors",
+    ),
     GameMeta(
         "u9", "u9", "u9", "windows", "u9",
         install="titan.u9.install", saves="titan.u9.saves", path_kinds="U9_PATH_KINDS",
+        maps="titan.u9.map_list",
     ),
 )  # fmt: skip
 """Every game and platform titan supports. A game absent here is unsupported.
@@ -165,6 +212,21 @@ RESULT_KINDS = frozenset(
 )
 """What a command can produce; a ``format`` parameter picks between several."""
 
+COMMAND_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("archives", "Archives"),  # containers: Flex/FLX/LIB extraction and repacking
+    ("palettes", "Palettes & colour"),
+    ("graphics", "Shapes & art"),  # shapes, textures, tiles, fonts, gumps
+    ("models", "Models & animation"),
+    ("audio", "Music & sound"),
+    ("world", "Maps & world"),  # maps, regions, objects, eggs, places
+    ("characters", "Characters"),  # NPCs, monsters, actors, schedules
+    ("saves", "Saves & state"),
+    ("text", "Text & scripts"),  # books, conversations, usecode, scripts
+    ("data", "Data tables"),  # everything else: type tables, flags, lookups
+)
+"""``(id, label)`` for every command category, in display order; each visible
+command's :attr:`CommandMeta.category` is one of these ids."""
+
 _ATTR = "__titan_meta__"
 _F = TypeVar("_F", bound=Callable[..., object])
 
@@ -196,6 +258,9 @@ class CommandMeta:
     game's ``[<section>.paths]``), or ``"root"`` for :attr:`Installation.root`.
     A parameter without one is still from the install; titan just can't name
     which file (any FLX, say)."""
+    category: str = ""
+    """What the command is about, an id from :data:`COMMAND_CATEGORIES`; front
+    ends group commands by it. Every visible command has one."""
 
     def recipe_spec(self) -> Optional[RecipeSpec]:
         """The recipe this command reads, or ``None``. Imports the recipe module."""
@@ -230,6 +295,7 @@ def meta(
     results: Iterable[str] = (),
     recipe: Optional[str] = None,
     resources: Optional[Mapping[str, str]] = None,
+    category: str = "",
 ) -> Callable[[_F], _F]:
     """Attach :class:`CommandMeta` to a command function.
 
@@ -246,6 +312,7 @@ def meta(
         tuple(results),
         recipe,
         dict(resources or {}),
+        category,
     )
 
     def decorate(fn: _F) -> _F:
@@ -509,6 +576,45 @@ def resolve_save(
 
 # --- installs ------------------------------------------------------------
 
+STORE_LABELS = {
+    "steam": "Steam",
+    "gog": "GOG",
+    "lutris": "Lutris",
+    "ea": "EA",
+    "origin": "UO client registry",
+    "windows": "Windows installer",
+    "folder": "search folder",
+}
+""":attr:`InstallSource.store` -> a name to show people."""
+
+
+@dataclass(frozen=True)
+class InstallSource:
+    """Where a store or launcher records a game folder (see :mod:`titan._stores`)."""
+
+    store: str
+    """``"steam"``, ``"gog"``, ``"lutris"`` (a Lutris game from no store) or
+    ``"folder"`` (a ``[search] folders`` entry)."""
+    store_id: str
+    """The store's id for the product (Steam app id, GOG product id), or ``""``."""
+    title: str
+    """The product's name as the store records it (may be a bundle's)."""
+    path: Path
+    """The folder the store records; the game may sit a level or two inside."""
+    found_by: str
+    """The record read: ``"steam-manifest"``, ``"gog-registry"``,
+    ``"heroic-manifest"``, ``"lutris-db"`` or ``"search-folder"``."""
+
+    @property
+    def label(self) -> str:
+        """``"Steam"``, ``"GOG"``, ...; Heroic's GOG installs say ``"GOG (Heroic)"``."""
+        name = STORE_LABELS.get(self.store, self.store)
+        if self.found_by == "heroic-manifest":
+            return f"{name} (Heroic)"
+        if self.found_by == "lutris-db" and self.store != "lutris":
+            return f"{name} (Lutris)"
+        return name
+
 
 @dataclass(frozen=True)
 class Installation:
@@ -529,11 +635,28 @@ class Installation:
     configured: frozenset[str] = frozenset()
     """For :func:`configured_install`: the resource keys ``[<section>.paths]``
     sets explicitly (the rest were detected). Empty for a detected install."""
+    source: Optional[InstallSource] = None
+    """For :func:`find_installs` and :func:`store_installs`: the store record
+    whose folder holds this install; ``None`` when it was found by looking in
+    the usual folders, or for :func:`configured_install`."""
 
     @property
     def valid(self) -> bool:
         """Whether every file the game needs is present and readable."""
         return not self.problems
+
+
+@dataclass(frozen=True)
+class StoreInstall:
+    """A store record that may hold a game, and what titan found there."""
+
+    source: InstallSource
+    status: str
+    """``"verified"`` (a valid install is there), ``"registered"`` (the store
+    lists it but titan found no complete install: :attr:`install` says what's
+    wrong when titan found the game at all) or ``"missing"`` (the folder the
+    store records doesn't exist)."""
+    install: Optional[Installation] = None
 
 
 _INSTALL_PROVIDERS = {
@@ -560,10 +683,41 @@ def _install_provider(game_id: str):
 
 
 def install_candidates(game_id: str, config: Optional[dict] = None) -> list[Path]:
-    """Folders worth checking for *game_id*: configured ones first, then the
-    usual GOG, Steam and manual locations. Most won't exist."""
+    """Folders worth checking for *game_id*: the configured base first, then
+    the folders stores and launchers record for it (:mod:`titan._stores`), then
+    the usual GOG, Steam and manual locations. Most guesses won't exist."""
+    from titan import _stores
+
     provider, extra = _install_provider(game_id)
-    return provider.install_candidates(_loaded_config(config), *extra)
+    loaded = _loaded_config(config)
+    game = get_game(game_id)
+    section = (
+        loaded.get(game.config_section, {}) if game and game.config_section else {}
+    )
+    base = section.get("game", {}).get("base") if isinstance(section, dict) else None
+    configured = [Path(str(base)).expanduser()] if base else []
+    stored = [record.path for record in _stores.matching(game_id, loaded)]
+    return list(
+        dict.fromkeys(
+            [*configured, *stored, *provider.install_candidates(loaded, *extra)]
+        )
+    )
+
+
+def _source_for(root: Path, records: list[InstallSource]) -> Optional[InstallSource]:
+    """The store record whose folder is *root* or holds it (the nearest one)."""
+
+    def key(path: Path) -> str:
+        return os.path.normcase(os.path.abspath(path))
+
+    target = key(root)
+    best: Optional[InstallSource] = None
+    for record in records:
+        folder = key(record.path)
+        if target == folder or target.startswith(folder.rstrip("\\/") + os.sep):
+            if best is None or len(folder) > len(key(best.path)):
+                best = record
+    return best
 
 
 def discover_installs(game_id: str, path: Path) -> list[Installation]:
@@ -583,12 +737,52 @@ def inspect_install(game_id: str, path: Path) -> Optional[Installation]:
 
 
 def find_installs(game_id: str, config: Optional[dict] = None) -> list[Installation]:
-    """Every install of *game_id* in :func:`install_candidates`, each root once."""
+    """Every install of *game_id* in :func:`install_candidates`, each root once.
+
+    An install inside a folder a store records carries that record as
+    :attr:`Installation.source`.
+    """
+    from titan import _stores
+
+    records = _stores.matching(game_id, _loaded_config(config))
     found: dict[Path, Installation] = {}
     for candidate in install_candidates(game_id, config):
         for install in discover_installs(game_id, candidate):
-            found.setdefault(install.root, install)
+            if install.root not in found:
+                found[install.root] = replace(
+                    install, source=_source_for(install.root, records)
+                )
     return list(found.values())
+
+
+def store_installs(game_id: str, config: Optional[dict] = None) -> list[StoreInstall]:
+    """What each store record that may hold *game_id* actually holds.
+
+    One entry per record (a bundle can hold several games, so one folder can
+    appear for several ids). A ``[search] folders`` entry is listed only when
+    the game is there. No network access: records come from the launchers'
+    own files (:mod:`titan._stores`).
+    """
+    from titan import _stores
+
+    results = []
+    for record in _stores.matching(game_id, _loaded_config(config)):
+        if not record.path.is_dir():
+            if record.store != "folder":
+                results.append(StoreInstall(record, "missing"))
+            continue
+        found = [
+            replace(item, source=record)
+            for item in discover_installs(game_id, record.path)
+        ]
+        valid = next((item for item in found if item.valid), None)
+        if valid is not None:
+            results.append(StoreInstall(record, "verified", valid))
+        elif found or record.store != "folder":
+            results.append(
+                StoreInstall(record, "registered", found[0] if found else None)
+            )
+    return results
 
 
 def install_config(install: Installation) -> dict:
@@ -661,6 +855,257 @@ def configured_install(
         if isinstance(value, (str, Path))
     )
     return Installation(game_id, root, resources, problems, settings, configured)
+
+
+# --- flavors ---------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Flavor:
+    """One way a game can be worked on: an install, the engine whose state and
+    saves are used, and the content (a mod, a client). A front end offers these
+    instead of raw installs and options; see :func:`list_flavors`.
+
+    To act on a flavor, run commands with :func:`flavor_config` as their
+    ``titan.toml`` (so every input titan fills from the configured install comes
+    from this flavor) and pass :attr:`args`.
+    """
+
+    game_id: str
+    key: str
+    """Stable within the game, e.g. ``"configured"``, ``"exult"``, ``"dos"``,
+    ``"mod:Keyring"``, ``"client:uof"``, ``"steam:3067560"``."""
+    title: str
+    """A short name without the game's (``"Exult"``, ``"Keyring"``, ``"Steam"``)."""
+    kind: str
+    """``"install"``, ``"engine"``, ``"mod"``, ``"exult-game"`` or ``"client"``."""
+    install: Optional[Installation] = None
+    """The install it reads; its :attr:`~Installation.problems` say what's missing."""
+    engine: str = ""
+    """Whose live state and saves it uses: ``"dos"``, ``"exult"``,
+    ``"pentagram"``, ``"scummvm"``, or ``""`` (the game's own, or none)."""
+    parent: str = ""
+    """The :attr:`key` of the flavor this one belongs under (a mod under Exult)."""
+    args: Mapping[str, str] = field(default_factory=dict)
+    """Command parameter name -> value that selects it (``{"mod": "Keyring"}``,
+    ``{"client": "uof"}``); a command without that parameter ignores it."""
+    config: Mapping[str, object] = field(default_factory=dict)
+    """``titan.toml`` sections to lay over the user's config (see
+    :func:`flavor_config`); empty means the config already selects it."""
+    saves_readable: bool = True
+    """Whether titan can read this flavor's saves; ``False`` when they're in a
+    format titan doesn't decode yet (:attr:`notes` says which)."""
+    notes: tuple[str, ...] = ()
+    """Facts to show people, e.g. why its saves can't be read."""
+    default: bool = False
+    """The flavor plain commands use (the configured install)."""
+
+
+_FLAVOR_PROVIDERS = {
+    entry.id: (entry.flavors, _shared("flavors", entry.flavors))
+    for entry in GAMES
+    if entry.flavors
+}
+"""From :data:`GAMES`: game id -> (module, takes game id)."""
+
+
+def families() -> list[tuple[str, list[GameMeta]]]:
+    """``(family, games)`` in :data:`GAMES` order: games a front end shows together."""
+    grouped: dict[str, list[GameMeta]] = {}
+    for entry in GAMES:
+        grouped.setdefault(entry.family or entry.game, []).append(entry)
+    return list(grouped.items())
+
+
+def known_installs(
+    game_id: str, config: Optional[dict] = None
+) -> list[tuple[Installation, bool]]:
+    """The installs a person pointed titan at: the configured one (``True``),
+    then valid installs a store records or a ``[search] folders`` entry holds,
+    each root once. Never titan's own folder-name guesses."""
+    loaded = _loaded_config(config)
+    found: list[tuple[Installation, bool]] = []
+    seen: set[str] = set()
+
+    def key(path: Path) -> str:
+        return os.path.normcase(os.path.abspath(path))
+
+    try:
+        configured = configured_install(game_id, loaded)
+    except TitanError:
+        configured = None
+    if configured is not None:
+        from titan import _stores
+
+        if configured.source is None:
+            source = _source_for(configured.root, _stores.matching(game_id, loaded))
+            configured = replace(configured, source=source)
+        found.append((configured, True))
+        seen.add(key(configured.root))
+    if has_install_support(game_id):
+        for record in store_installs(game_id, loaded):
+            install = record.install
+            if (
+                record.status == "verified"
+                and install
+                and key(install.root) not in seen
+            ):
+                seen.add(key(install.root))
+                found.append((install, False))
+    return found
+
+
+_PLATFORM_STORES = frozenset({"steam", "gog", "lutris"})
+"""Stores whose name says more than the product's (the product is the game)."""
+
+
+def _install_title(install: Installation, configured: bool) -> str:
+    source = install.source
+    if source is not None:
+        if source.store in _PLATFORM_STORES:
+            return source.label
+        if source.store != "folder" and source.title:
+            return (
+                source.title
+            )  # EA, UO registry, Windows installer: the product's name
+        return install.root.name
+    return "Configured install" if configured else install.root.name
+
+
+def _install_key(install: Installation, configured: bool) -> str:
+    if configured:
+        return "configured"
+    source = install.source
+    if source is not None and source.store != "folder" and source.store_id:
+        return f"{source.store}:{source.store_id}"
+    return "folder:" + install.root.as_posix()
+
+
+def default_flavors(game_id: str, config: Optional[dict] = None) -> list[Flavor]:
+    """One flavor per :func:`known_installs` entry, the configured one first and
+    default. What a game without a flavor provider gets; providers build on it."""
+    flavors = []
+    for install, configured in known_installs(game_id, config):
+        flavors.append(
+            Flavor(
+                game_id,
+                _install_key(install, configured),
+                _install_title(install, configured),
+                "install",
+                install,
+                config={} if configured else install_config(install),
+                default=configured,
+            )
+        )
+    return flavors
+
+
+def list_flavors(game_id: str, config: Optional[dict] = None) -> list[Flavor]:
+    """Every flavor of *game_id* titan can work on: installs, engines, mods and
+    clients, built from what's configured, what stores record and what the
+    engines' own settings say (no folder guessing, no network).
+
+    A game with a flavor provider (:attr:`GameMeta.flavors`) lists its own;
+    every other game gets :func:`default_flavors`. ``[]`` means titan knows no
+    install of the game yet (``titan setup``).
+    """
+    loaded = _loaded_config(config)
+    entry = _FLAVOR_PROVIDERS.get(game_id)
+    if entry is None:
+        return default_flavors(game_id, loaded)
+    module, shared = entry
+    provider = import_module(module)
+    return provider.list_flavors(loaded, *((game_id,) if shared else ()))
+
+
+def flavor_config(flavor: Flavor, config: Optional[dict] = None) -> dict:
+    """The user's config with *flavor*'s sections laid over it, key by key: a
+    key :attr:`Flavor.config` sets (``[u8.paths] savegame``) replaces the
+    user's, and everything else (other paths, U7 ``mods``) stays. Write it as
+    the ``titan.toml`` a command runs with to make the flavor its default."""
+    import copy
+
+    def lay(target: dict, overlay: Mapping) -> None:
+        for name, value in overlay.items():
+            if isinstance(value, Mapping) and isinstance(target.get(name), dict):
+                lay(target[name], value)
+            else:
+                target[name] = copy.deepcopy(value)
+
+    merged = copy.deepcopy(_loaded_config(config))
+    lay(merged, flavor.config)
+    return merged
+
+
+def flavor_saves(flavor: Flavor, config: Optional[dict] = None) -> list[SaveInfo]:
+    """The saves *flavor* plays from, for its ``save`` parameters. ``[]`` when
+    the game lists no saves or the flavor has none; check
+    :attr:`Flavor.saves_readable` before offering them."""
+    loaded = _loaded_config(config)
+    entry = _FLAVOR_PROVIDERS.get(flavor.game_id)
+    if entry is not None:
+        module, shared = entry
+        provider = import_module(module)
+        hook = getattr(provider, "flavor_saves", None)
+        if hook is not None:
+            return hook(flavor, loaded, *((flavor.game_id,) if shared else ()))
+    if not has_saves(flavor.game_id):
+        return []
+    return list_saves(flavor.game_id, flavor_config(flavor, loaded))
+
+
+# --- maps ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MapInfo:
+    """One map a flavor has, and how to render it (see :func:`list_maps`)."""
+
+    key: str
+    """Stable within the flavor: ``"0"``, ``"0x01"``, ``"region:12"``."""
+    title: str
+    """What to call it (``"Main world"``, ``"Map 01"``, ``"Region 12"``)."""
+    args: Mapping[str, str] = field(default_factory=dict)
+    """:func:`map_command` parameter name -> value that renders this map
+    (``{"map_num": "1", "map_root": "..."}``, U9 ``{"terrain": "..."}``); give
+    them to the command's form, then its other inputs come from the flavor."""
+    notes: tuple[str, ...] = ()
+    """Facts to show (e.g. where a mod's map comes from)."""
+
+
+_MAP_PROVIDERS = {entry.id: entry.maps for entry in GAMES if entry.maps}
+"""From :data:`GAMES`: game id -> module with ``MAP_COMMAND``, ``MAP_OPTIONS``
+and ``list_maps(flavor, config)``."""
+
+
+def has_maps(game_id: str) -> bool:
+    """Whether titan lists maps for *game_id* (:func:`list_maps`)."""
+    return game_id in _MAP_PROVIDERS
+
+
+def map_command(game_id: str) -> Optional[tuple[str, ...]]:
+    """The command that renders one of *game_id*'s maps, e.g. ``("u7", "map-render")``."""
+    module = _MAP_PROVIDERS.get(game_id)
+    return tuple(import_module(module).MAP_COMMAND) if module else None
+
+
+def map_options(game_id: str) -> tuple[str, ...]:
+    """The :func:`map_command` parameters worth offering first on a map page
+    (U7 ``full``, ``superchunk``, ``view``, ...); the rest are there too."""
+    module = _MAP_PROVIDERS.get(game_id)
+    return tuple(getattr(import_module(module), "MAP_OPTIONS", ())) if module else ()
+
+
+def list_maps(flavor: Flavor, config: Optional[dict] = None) -> list[MapInfo]:
+    """The maps *flavor* has, in the game's order: what a map picker offers.
+
+    Read from the flavor's own data (a mod's maps come from its patch folder).
+    ``[]`` when the game lists no maps or the flavor has none to show.
+    """
+    module = _MAP_PROVIDERS.get(flavor.game_id)
+    if module is None:
+        return []
+    return import_module(module).list_maps(flavor, _loaded_config(config))
 
 
 # --- config paths --------------------------------------------------------

@@ -574,6 +574,7 @@ def run_u8_npc_browser(
 
 
 @meta(
+    category="characters",
     results=("files",),
     params={
         "output": "output-dir",
