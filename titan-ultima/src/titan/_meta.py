@@ -66,7 +66,7 @@ from pathlib import Path
 from typing import Callable, Iterable, Mapping, Optional, TypeVar
 from titan.errors import InvalidDataError, TitanError
 
-CONTRACT = 7
+CONTRACT = 8
 """Version of the front-end contract: this module, ``titan._config``, ``titan._results``,
 ``titan.errors`` exit codes, ``titan._version``'s update check and the ``@meta`` tags.
 
@@ -261,6 +261,18 @@ class CommandMeta:
     category: str = ""
     """What the command is about, an id from :data:`COMMAND_CATEGORIES`; front
     ends group commands by it. Every visible command has one."""
+    option_groups: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """``{parameter: options that only matter once it is set}`` (a flag on, a
+    value given), e.g. ``{"grid": ("grid_size",)}``. Front ends show them under
+    it, and only while it is set."""
+    option_alternatives: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """``{flag: options used instead of it}``, shown while the flag is off, e.g.
+    ``{"full": ("superchunk", ...)}``."""
+    defaults: Mapping[str, str] = field(default_factory=dict)
+    """``{parameter: what leaving it out amounts to}``, where the signature's
+    default can't say because the command works it out (``"true"``/``"false"``
+    for a flag). Within an :attr:`option_groups` entry, the value while its
+    parent is set."""
 
     def recipe_spec(self) -> Optional[RecipeSpec]:
         """The recipe this command reads, or ``None``. Imports the recipe module."""
@@ -296,6 +308,9 @@ def meta(
     recipe: Optional[str] = None,
     resources: Optional[Mapping[str, str]] = None,
     category: str = "",
+    option_groups: Optional[Mapping[str, Iterable[str]]] = None,
+    option_alternatives: Optional[Mapping[str, Iterable[str]]] = None,
+    defaults: Optional[Mapping[str, str]] = None,
 ) -> Callable[[_F], _F]:
     """Attach :class:`CommandMeta` to a command function.
 
@@ -313,6 +328,9 @@ def meta(
         recipe,
         dict(resources or {}),
         category,
+        {key: tuple(names) for key, names in (option_groups or {}).items()},
+        {key: tuple(names) for key, names in (option_alternatives or {}).items()},
+        dict(defaults or {}),
     )
 
     def decorate(fn: _F) -> _F:

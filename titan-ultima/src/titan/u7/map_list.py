@@ -18,8 +18,9 @@ from typing import Optional
 from titan._meta import Flavor, MapInfo, configured_install, flavor_config, list_mods
 
 MAP_COMMAND = ("u7", "map-render")
-MAP_OPTIONS = ("full", "resolution", "superchunk", "view", "grid", "max_lift")
-"""The options worth showing first. With no area chosen, the full world renders at 25%."""
+MAP_OPTIONS = ("full", "view", "grid", "max_lift")
+"""The options worth showing first; ``full``'s resolution and area options come with it
+(``option_groups``/``option_alternatives``). With no area chosen, the full world renders at 25%."""
 
 _MAP_DIR = re.compile(r"^map([0-9a-f]{2})$", re.IGNORECASE)
 _MAP_FILE = re.compile(r"^(u7map|u7chunks|u7ifix[0-9a-f]{2})$", re.IGNORECASE)

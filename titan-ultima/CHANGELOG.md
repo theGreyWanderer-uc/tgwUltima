@@ -185,6 +185,11 @@ work for the next release.
 
 ### Added (front ends)
 
+- **Option layout:** `@meta` can say which options belong under another
+  (`option_groups`), which replace a switch while it is off
+  (`option_alternatives`) and what an omitted option amounts to (`defaults`),
+  so front ends can nest them. `u7 map-render` is the first command tagged.
+
 - **Run results file:** set `TITAN_RESULTS_FILE` to a path and titan writes
   `{"outputs": [...], "exit_code": N}` there when a command ends, listing what
   it wrote. `flex-extract` and `uw1 texture-export` report so far; more

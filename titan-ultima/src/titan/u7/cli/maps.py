@@ -842,6 +842,22 @@ def map_render_json_cmd(
     },
     interactive=True,
     batch_with=(ANY_PARAM,),
+    option_groups={
+        "full": ("resolution",),
+        "grid": ("grid_size",),
+        "highlight_tile_rect": (
+            "highlight_width",
+            "highlight_lift",
+            "highlight_fill_alpha",
+            "highlight_labels",
+        ),
+        "zone_profile": ("zone_id", "all_zones"),
+    },
+    option_alternatives={
+        "full": ("superchunk", "chunk_x0", "chunk_y0", "chunk_x1", "chunk_y1"),
+    },
+    # No area renders the full world, at 25%.
+    defaults={"full": "true", "resolution": "25", "view": "classic"},
 )
 def map_render_cmd(
     ctx: typer.Context,

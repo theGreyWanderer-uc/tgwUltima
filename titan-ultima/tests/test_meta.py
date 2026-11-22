@@ -125,6 +125,51 @@ def test_every_visible_command_is_tagged() -> None:
     assert not missing, "commands without @meta: " + ", ".join(missing)
 
 
+def test_option_layout_names_real_parameters() -> None:
+    """``option_groups``/``option_alternatives``/``defaults`` name the command's own
+    parameters; alternatives hang off flags; an option sits under one parent at most."""
+    root = typer.main.get_command(app)
+    problems = []
+    for path, info in _meta.command_metas().items():
+        command = root
+        for name in path:
+            command = command.commands[name]
+        params = {p.name: p for p in command.params}
+        children = [
+            child
+            for table in (info.option_groups, info.option_alternatives)
+            for kids in table.values()
+            for child in kids
+        ]
+        named = [
+            *info.option_groups,
+            *info.option_alternatives,
+            *info.defaults,
+            *children,
+        ]
+        problems += [
+            f"{' '.join(path)}: no parameter {n!r}" for n in named if n not in params
+        ]
+        problems += [
+            f"{' '.join(path)}: {flag!r} has alternatives but is not a flag"
+            for flag in info.option_alternatives
+            if flag in params and not params[flag].is_flag
+        ]
+        problems += [
+            f"{' '.join(path)}: {child!r} has two parents"
+            for child in set(children)
+            if children.count(child) > 1
+        ]
+    assert not problems, "\n".join(problems)
+
+
+def test_map_render_lays_out_its_options() -> None:
+    info = _meta.command_meta("u7", "map-render")
+    assert info.option_groups["grid"] == ("grid_size",)
+    assert "superchunk" in info.option_alternatives["full"]
+    assert info.defaults["full"] == "true" and info.defaults["resolution"] == "25"
+
+
 def test_every_visible_command_has_a_category() -> None:
     """Front ends group commands by ``@meta(category=...)``; a new command needs one."""
     ids = [cid for cid, _label in _meta.COMMAND_CATEGORIES]
