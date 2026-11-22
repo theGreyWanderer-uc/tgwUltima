@@ -912,8 +912,8 @@ def map_render_cmd(
         typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     view: Annotated[
-        Optional[str],
-        typer.Option("--view", help="Projection view: classic, flat, steep"),
+        Optional[Literal["classic", "flat", "steep"]],
+        typer.Option("--view", help="Projection view (default: classic)"),
     ] = None,
     gamedat: Annotated[
         Optional[str],
@@ -1043,7 +1043,8 @@ def map_render_cmd(
             "--resolution",
             help=(
                 "Output size in percent of full resolution "
-                "(default: 25 with --full, otherwise full)"
+                "(default: 25 for the full world, which is also what renders "
+                "with no area set; otherwise full)"
             ),
         ),
     ] = None,
