@@ -122,6 +122,24 @@ CLI flags always win over config values. If a required path is missing from
 both the command line and the config, TITAN prints an error pointing to
 `titan setup`.
 
+Whole-map renderers share `--resolution full|75|50|25`: the output size in percent
+of full resolution. A whole map defaults to `25` (full-size maps run to tens of
+thousands of pixels); a crop (`--region`, a U7 superchunk) defaults to `full`. File
+names say the size (`map_004_iso_classic_25pct.png`). It applies to `u6`, `md`,
+`u7` and `u8 map-render`, `u8 map-render-all`, `uw2 map-render`, `uo map-export`,
+and `u9 map-render`/`map-atlas` (whose presets are pixels per cell). The minimap
+samplers keep their `--scale`, and fixed-size views their `--size`.
+
+`titan config` ends with any problems in titan's config (a copy that shadows
+your main config, entries only an older setup wrote, paths that no longer
+resolve), each with its fix. `titan config --fix` applies the automatic ones:
+a shadowing copy is renamed to `.old`, an edited file is backed up to `.bak`
+first, and nothing is deleted.
+
+`titan setup` also extracts what U8's maps read (`U8SHAPES.FLX` into `shapes/`,
+`GLOB.FLX` into `globs/`) into titan's data folder when those are empty, so the
+first render doesn't have to.
+
 U6 and Martian Dreams commands that accept `-g`/`--game-dir` are
 config-aware the same way, falling back to `[u6.game] base` / `[md.game] base`
 (both written by `titan setup`).
@@ -213,7 +231,7 @@ titan uw2 map-verify -g "C:/UW2"
 ### `uw2 map-render`
 
 ```text
-titan uw2 map-render [--slots N ...] [-o DIR] [--workdir DIR]
+titan uw2 map-render [--slots N ...] [--resolution full|75|50|25] [-o DIR] [--workdir DIR]
     [--keep-intermediates | --reuse-workdir] [--tick N]
     [projection and display options] [-g DIR]
 ```
@@ -1560,7 +1578,8 @@ titan u8 map-render [path flags] --map N [--view VIEW] [-o FILE] [filter flags] 
 |----------|----------|-------------|
 | `--map N`, `-m N` | **yes** | Map number (0–255) |
 | `--view VIEW`, `-V VIEW` | no | Projection view (default: `iso_classic`) |
-| `-o FILE`, `--output FILE` | no | Output PNG path (default: `map_<N>_<view>.png`) |
+| `--resolution full\|75\|50\|25` | no | Output size in percent of full resolution (default: `25`) |
+| `-o FILE`, `--output FILE` | no | Output PNG path (default: `<data folder>/u8/exports/map-render/map_<N>_<view>[_<P>pct].png`) |
 
 **Examples**
 
@@ -5633,7 +5652,8 @@ titan u6 map-render [-g DIR] [-p FILE] [--region x,y,w,h] [--dungeon N]
 | `--tick N` | Animation tick, for water/animated tiles (default: `0`) |
 | `--objects` | Overlay world objects (furniture, items, etc.) from `LZOBJBLK`/`LZDNGBLK` |
 | `--show-invisible` | Include invisible world objects; requires `--objects`; default is hidden |
-| `-o FILE`, `--output FILE` | Output PNG path |
+| `--resolution full\|75\|50\|25` | Output size in percent of full resolution (default: `25` for the surface or a dungeon, `full` for a `--region` crop) |
+| `-o FILE`, `--output FILE` | Output PNG path (default: `<data folder>/u6/exports/map-render/surface[_<P>pct].png` or `dungeon_N[_<P>pct].png`) |
 
 **Examples**
 ```bash
@@ -9270,8 +9290,8 @@ selected frame, and visible water cells/pixels. Missing textures are shown as
 magenta diagnostic tiles and listed in that report; Titan does not synthesize
 replacement ground.
 
-The default `--resolution full` uses 28 pixels per terrain cell, producing a
-28,672x28,672 Region 9 image. The `75`, `50`, and `25` presets use 21, 14, and
+`--resolution full` uses 28 pixels per terrain cell, producing a
+28,672x28,672 Region 9 image; the default, `25`, uses 7. The `75`, `50`, and `25` presets use 21, 14, and
 7 pixels per cell, producing 21,504x21,504, 14,336x14,336, and 7,168x7,168
 Region 9 images. An explicit `--pixels-per-cell` value overrides the preset.
 
@@ -9363,8 +9383,8 @@ Use `--pixels-per-cell` to select a smaller preview scale for exploratory
 batches. The manifest records the chosen value under
 `layout.pixels_per_cell`. A 28,672-pixel RGBA render requires several GiB of
 working memory even when its compressed PNG is much smaller.
-The equivalent named scales are `--resolution full`, `75`, `50`, and `25`,
-mapping to 28, 21, 14, and 7 pixels per cell. `--pixels-per-cell` remains an
+The equivalent named scales are `--resolution full`, `75`, `50`, and `25` (the
+default), mapping to 28, 21, 14, and 7 pixels per cell. `--pixels-per-cell` remains an
 explicit override.
 The contact-sheet title and enabled grid legend entries wrap to the available
 sheet width, so focused one-column atlases do not clip their header text.

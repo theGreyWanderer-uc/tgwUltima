@@ -173,3 +173,24 @@ def test_map_commands_extract_into_the_data_folder_without_asking(
         str(mine), ".shp", "Shapes", "U8SHAPES.FLX", "shapes"
     )
     assert not mine.exists()
+
+
+def test_setup_prepares_u8_map_data_in_the_working_folders(workspace, monkeypatch):
+    from titan.u8.install import has_working_files, prepare_working_dirs
+
+    monkeypatch.setenv(_config.DATA_ENV, str(workspace / "data"))
+    config = _config.load_config(str(_u8_config(workspace)))
+    static = workspace / "Ultima8" / "ENGLISH" / "STATIC"
+    assert prepare_working_dirs(config) == []  # no archives yet: nothing to do
+    _flex(static / "U8SHAPES.FLX")
+    _flex(static / "GLOB.FLX")
+    data = workspace / "data" / "u8"
+    done = prepare_working_dirs(config)
+    assert [(name, folder, count) for name, folder, count in done] == [
+        ("shapes", data / "shapes", 2),
+        ("globs", data / "globs", 2),
+    ]
+    assert has_working_files(data / "shapes", "shapes") and has_working_files(
+        data / "globs", "globs"
+    )
+    assert prepare_working_dirs(config) == []  # already extracted: left alone

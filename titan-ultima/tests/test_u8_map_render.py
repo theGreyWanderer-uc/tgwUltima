@@ -107,6 +107,8 @@ def test_all_map_commands_merge_before_selection_expand_both_sources_and_filter_
         "-o",
         str(output),
     ]
+    if command.startswith("map-render"):
+        args.extend(["--resolution", "full"])  # exact pixels are checked below
     if not command.endswith("-all"):
         args.extend(["--map", "8"])  # No FIXED world placements in this map.
     if command == "map-render-all":

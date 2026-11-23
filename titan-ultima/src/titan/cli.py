@@ -94,6 +94,7 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def _global_options(
+    ctx: typer.Context,
     version: Annotated[
         bool,
         typer.Option(
@@ -113,6 +114,16 @@ def _global_options(
 
     _config_mod.explicit_config_path = config
     _config_mod.load_config(config)
+    if config is None and ctx.invoked_subcommand not in (None, "config", "setup"):
+        from titan._config_health import shadowing_config
+
+        shadow = shadowing_config()
+        if shadow is not None:
+            print(
+                f"titan: reading {shadow}, not your main config; "
+                "`titan config` says why and `titan config --fix` sets it aside.",
+                file=sys.stderr,
+            )
 
 
 # ============================================================================
@@ -583,6 +594,9 @@ def cmd_config(args: SimpleNamespace) -> int:
     explicit = getattr(args, "config", None) or _config_mod.explicit_config_path
     path = Path(explicit).expanduser() if explicit else find_config()
 
+    if getattr(args, "fix", False):
+        return _fix_config(explicit)
+
     if getattr(args, "edit", False):
         if path is None:
             print("No titan.toml found. Run `titan setup` to create one.")
@@ -762,6 +776,7 @@ def cmd_config(args: SimpleNamespace) -> int:
         _print_kv_section("[exult.paths]", exult.get("paths", {}), check_exists=True)
     else:
         print("No game settings in this file; `titan setup` finds your installs.")
+    _print_config_issues(explicit)  # last, where a terminal leaves them in view
     return 0
 
 
@@ -1355,7 +1370,25 @@ def cmd_setup(args: SimpleNamespace) -> int:
     else:
         print(f"\n  Created: {toml_path.absolute()}")
 
+    _prepare_u8_working_data(toml_path)
     return 0
+
+
+def _prepare_u8_working_data(toml_path: Path) -> None:
+    """Extract what U8's maps read (its shapes and globs) into titan's working folders
+    now, so neither the CLI nor a front end has to on the first render."""
+    from titan._config import load_config
+    from titan.u8.install import prepare_working_dirs
+
+    try:
+        done = prepare_working_dirs(load_config(str(toml_path)))
+    except (OSError, ValueError) as exc:
+        print(
+            f"  Could not extract U8's map data yet ({exc}); map commands will on first use."
+        )
+        return
+    for working_dir, folder, written in done:
+        print(f"  Extracted U8 {working_dir}: {written} files -> {folder}")
 
 
 # ============================================================================
@@ -1550,6 +1583,39 @@ def setup_cmd() -> None:
         raise SystemExit(ui.cancelled("Setup cancelled.")) from None
 
 
+def _print_config_issues(explicit: Optional[str]) -> None:
+    """Config drift (titan._config_health), before the settings themselves."""
+    from titan._config_health import config_report
+
+    issues = config_report(explicit)
+    if not issues:
+        return
+    print()
+    print("Problems with titan's config:")
+    for issue in issues:
+        print(f"  [{issue.severity}] {issue.title}")
+        print(f"      {issue.message}")
+        if issue.fix:
+            how = " (titan config --fix)" if issue.fixable else ""
+            print(f"      Fix: {issue.fix}{how}")
+
+
+def _fix_config(explicit: Optional[str]) -> int:
+    """Apply the automatic fixes for titan's config drift and say what changed."""
+    from titan._config_health import config_report, fix_config
+
+    issues = config_report(explicit)
+    done = fix_config(issues, explicit)
+    for line in done:
+        print(f"  {line}")
+    left = [issue for issue in config_report(explicit) if issue.severity == "warning"]
+    if not done and not left:
+        print("titan's config has nothing to fix.")
+    for issue in left:
+        print(f"  Still to do: {issue.title}: {issue.fix or issue.message}")
+    return 0
+
+
 @app.command("config")
 @meta(category="data", results=("text",))
 def config_cmd(
@@ -1557,8 +1623,17 @@ def config_cmd(
         bool,
         typer.Option("--edit", help="Open titan.toml in the system default editor"),
     ] = False,
+    fix: Annotated[
+        bool,
+        typer.Option(
+            "--fix",
+            help="Fix config drift titan knows how to: set aside a copy that shadows the "
+            "main config (renamed .old), drop entries only an older setup wrote "
+            "(backed up .bak), extract U8 map data",
+        ),
+    ] = False,
 ) -> None:
-    """Show or edit the active titan.toml settings."""
+    """Show or edit the active titan.toml settings, and any problems with them."""
     import titan._config as _config_mod
 
     raise SystemExit(
@@ -1566,6 +1641,7 @@ def config_cmd(
             SimpleNamespace(
                 config=_config_mod.explicit_config_path,
                 edit=edit,
+                fix=fix,
             )
         )
     )

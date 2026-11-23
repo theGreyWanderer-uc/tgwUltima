@@ -137,7 +137,11 @@ def test_option_layout_names_real_parameters() -> None:
         params = {p.name: p for p in command.params}
         children = [
             child
-            for table in (info.option_groups, info.option_alternatives)
+            for table in (
+                info.option_groups,
+                info.option_alternatives,
+                info.option_sets,
+            )
             for kids in table.values()
             for child in kids
         ]

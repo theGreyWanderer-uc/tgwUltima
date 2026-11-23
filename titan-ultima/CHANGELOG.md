@@ -10,6 +10,20 @@ work for the next release.
 
 ### Added
 
+- **One map size option everywhere:** `--resolution full|75|50|25` on U6,
+  Martian Dreams and U8 `map-render`, U8 `map-render-all`, UW2 `map-render`
+  and UO `map-export`, as on U7. Whole maps now default to 25% (a crop with
+  `--region` stays full size), and file names say the size (`_25pct`). U9's
+  `map-render` and `map-atlas` presets now default to `25` too. Pass
+  `--resolution full` for the old size.
+- **Config problems, found and fixed:** `titan config` now ends with what's
+  wrong with titan's config: an older copy that titan reads instead of your
+  main config (e.g. a `titan.toml` in the folder you run titan from),
+  entries only an older `titan setup` wrote, and paths that no longer
+  resolve. `titan config --fix` applies the fixes titan knows: it renames a
+  shadowing copy to `.old`, edits a file only after backing it up (`.bak`),
+  and extracts U8's map data; it never deletes anything. Other commands print
+  one warning line while a copy shadows your main config.
 - **`u7 map-render --resolution full|75|50|25`:** renders at a fraction of
   full size. A full-world render (`--full`) now defaults to 25%, about 6000
   px square instead of 25000; pass `--resolution full` for the old size.
@@ -29,6 +43,10 @@ work for the next release.
   flavor has and how to render each: Ultima 7's main world and Exult's
   extra maps (a mod's own maps included), Ultima 8's maps with items and
   Ultima 9's regions.
+  Ultima 6 and Martian Dreams (the surface and each underground level),
+  Ultima Underworld II (each level in `LEV.ARK`, by name) and Ultima Online
+  (each facet the client ships, exported whole by `uo map-export`) are listed
+  too. The command category "Maps & world" is now called "World".
   Each of a mod's maps says what the mod does to it: edits the base game's
   map (with how many superchunks of layout and objects, and terrain chunks,
   it changes), replaces it, or adds a new one.
@@ -111,6 +129,15 @@ work for the next release.
 
 ### Changed
 
+- **`titan setup` prepares U8's maps:** it extracts U8SHAPES.FLX and GLOB.FLX
+  into titan's `u8/shapes` and `u8/globs` working folders when they're empty,
+  so map commands (and front ends) find them ready.
+- **U6 and Martian Dreams `map-render` write into titan's exports:** an
+  omitted `-o` used to mean a file in the current folder; it is now
+  `<data folder>/<game>/exports/map-render/` and is reported to front ends.
+- **UW2 `map-render` and UO `map-export` report each PNG:** front ends that
+  read `TITAN_RESULTS_FILE` get the images, not just the folder, also when
+  the folder is titan's own default.
 - **U7 map file names name the map:** `u7 map-render` and `u7 map-export-json`
   now name an omitted output after the game and map number
   (`u7_si_map01_full_classic_25pct.png`, `u7_bg_map00.json`), so renders of
@@ -188,6 +215,13 @@ work for the next release.
 
 ### Added (front ends)
 
+- **Option sets:** `@meta(option_sets={title: options})` groups options with
+  no parent of their own behind one titled switch (U8's `--no-*` type-flag
+  exclusions, UW2's geometry tuning). U8, U9, UW2, UO and Martian Dreams map
+  commands now lay their options out like U7's; U8 `map-render --view`, UW2's
+  orientation, texture transform, model style, solid fill and grid
+  coordinate options, and U9's object source and footprint style are now
+  Choices.
 - **Option layout:** `@meta` can say which options belong under another
   (`option_groups`), which replace a switch while it is off
   (`option_alternatives`) and what an omitted option amounts to (`defaults`),
@@ -200,6 +234,11 @@ work for the next release.
   default export folder.
 
 ### Fixed
+
+- **U8 maps with an old setup's default save:** early `titan setup` releases
+  wrote `[u8.paths] nonfixed = "U8SAVE.000"` whether or not that save
+  existed, so map commands failed with "No such file" on installs without
+  slot 0. That default now means the base world unless the save is there.
 
 - **Map commands wrote into the current folder or the game install:** with no
   `--output`, Ultima 7's `map-render`, `map-render-json` and `map-sample`,

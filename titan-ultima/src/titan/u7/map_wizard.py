@@ -13,8 +13,8 @@ from titan.u7.palette import PaletteRecordEmptyError, U7Palette
 from titan.u7.shape_archive import find_archive
 
 
-RESOLUTIONS = {"full": 1.0, "75": 0.75, "50": 0.5, "25": 0.25}
-"""``map-render --resolution`` choices -> scale factor."""
+# ``--resolution`` choices -> factor; re-exported for map_wizard_ui.
+from titan._resolution import RESOLUTIONS as RESOLUTIONS
 
 FULL_WORLD = (0, 0, 191, 191)
 

@@ -10,7 +10,7 @@ __all__ = ["MAP_COMMAND", "MAP_OPTIONS", "list_maps"]
 from titan._meta import Flavor, MapInfo, configured_install, flavor_config
 
 MAP_COMMAND = ("u8", "map-render")
-MAP_OPTIONS = ("view", "grid")
+MAP_OPTIONS = ("resolution", "view", "grid")
 
 
 def list_maps(flavor: Flavor, config: dict) -> list[MapInfo]:

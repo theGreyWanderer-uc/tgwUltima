@@ -339,6 +339,73 @@ def test_u7_mod_maps_say_what_the_mod_does_to_the_base_map(tmp_path) -> None:
     )
 
 
+def _only_flavor(game_id: str, config: dict):
+    flavors = _meta.list_flavors(game_id, config)
+    assert flavors, f"{game_id}: no flavor for {config}"
+    return flavors[0]
+
+
+def test_u6_and_md_maps_are_the_surface_and_five_levels(workspace) -> None:
+    u6 = workspace / "Ultima6"
+    u6.mkdir()
+    for name in ("U6PAL", "CHUNKS", "MAPTILES.VGA", "MAP"):
+        (u6 / name).write_bytes(b"\0")
+    config = {"u6": {"game": {"base": str(u6)}}}
+    maps = _meta.list_maps(_only_flavor("u6", config), config)
+    assert [(m.title, dict(m.args)) for m in maps[:2]] == [
+        ("Surface", {"full": "true"}),
+        ("Dungeon level 0", {"full": "false", "dungeon": "0"}),
+    ]
+    assert len(maps) == 6 and _meta.map_command("u6") == ("u6", "map-render")
+
+    md = _martian(workspace / "md")
+    config = {"md": {"game": {"base": str(md)}}}
+    maps = _meta.list_maps(_only_flavor("md", config), config)
+    assert [m.title for m in maps] == ["Surface"] + [
+        f"Underground level {n}" for n in range(5)
+    ]
+    assert maps[3].args == {"full": "false", "dungeon": "2"}
+
+
+def test_uw2_maps_are_the_populated_lev_ark_slots(workspace) -> None:
+    import struct
+
+    data = workspace / "UW2" / "DATA"
+    data.mkdir(parents=True)
+    for name in ("PALS.DAT", "T64.TR"):
+        (data / name).write_bytes(b"\0")
+    count = 320  # 80 level slots, then their texture, automap and notes blocks
+    tables = [[0] * count for _ in range(4)]  # offsets, flags, sizes, available sizes
+    for slot in (0, 9):  # Castle of Lord British, the Prison Tower basement
+        tables[0][slot], tables[2][slot], tables[3][slot] = 6 + 16 * count, 4, 4
+    ark = struct.pack("<HI", count, 0) + b"".join(
+        struct.pack(f"<{count}I", *t) for t in tables
+    )
+    (data / "LEV.ARK").write_bytes(ark + bytes(4))
+    config = {"uw2": {"game": {"base": str(data.parent)}}}
+    maps = _meta.list_maps(_only_flavor("uw2", config), config)
+    assert [(m.key, m.title, dict(m.args)) for m in maps] == [
+        ("slot:0", "Britannia - Castle of Lord British", {"slots": "0"}),
+        ("slot:9", "Prison Tower - First Floor", {"slots": "9"}),
+    ]
+
+
+def test_uo_maps_are_the_facets_the_client_ships(workspace) -> None:
+    client = workspace / "Classic"
+    client.mkdir()
+    (client / "tiledata.mul").write_bytes(b"\0")
+    for name in ("staidx0.mul", "staidx2.mul", "staidx7.mul", "statics0.mul"):
+        (client / name).write_bytes(b"\0")
+    config = {"uo": {"game": {"base": str(client)}}}
+    maps = _meta.list_maps(_only_flavor("uo", config), config)
+    assert [(m.title, dict(m.args)) for m in maps] == [
+        ("Felucca", {"facet": "0"}),
+        ("Ilshenar", {"facet": "2"}),
+        ("Facet 7", {"facet": "7"}),
+    ]
+    assert _meta.map_command("uo") == ("uo", "map-export")  # the whole facet, no centre
+
+
 def test_u8_maps_are_the_fixed_slots_with_items(workspace) -> None:
     from titan.flex import FlexArchive
 

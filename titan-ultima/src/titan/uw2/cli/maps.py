@@ -6,7 +6,9 @@ import json
 import struct
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
+
+from titan._resolution import Resolution
 
 import typer
 
@@ -268,6 +270,7 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             "slots",
             "reuse_workdir",
             "keep_intermediates",
+            "resolution",
         }
     }
     try:
@@ -300,8 +303,14 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     except (OSError, KeyError, ValueError) as error:
         typer.echo(f"ERROR: {error}", err=True)
         return exit_code(error)
+    from titan._results import record_output
+    from titan._resolution import resolution_factor, scale_file
+
+    factor = resolution_factor(getattr(args, "resolution", "full"))
     for path in written:
+        scale_file(path, factor)  # renders at full size, then shrinks
         typer.echo(f"Rendered UU2 map: {path}")
+        record_output(path)  # the folder may be titan's own: report each PNG
     return 0
 
 
@@ -549,6 +558,31 @@ def map_3d_export_cmd(
     category="world",
     results=("files",),
     params={"output": "output-dir", "workdir": "working-dir"},
+    # drawn only while the matching "no ..." switch is off
+    option_alternatives={
+        "no_objects": ("tick", "object_scale"),
+        "no_models": ("model_style", "model_icon_scale", "model_scale"),
+        "no_lighting": ("min_brightness",),
+    },
+    option_groups={
+        "debug_grid": ("grid_label_step", "grid_coordinate_mode"),
+        "solid_fill": ("solid_fill_texture", "solid_fill_brightness"),
+    },
+    option_sets={
+        "Geometry": (
+            "tile_size",
+            "lift_pixels",
+            "floor_height_per_lift",
+            "wall_height_scale",
+            "max_wall_height",
+            "no_obstruction_clip",
+            "margin",
+            "background",
+            "orientation",
+            "floor_texture_transform",
+        ),
+        "Intermediate files": ("workdir", "keep_intermediates", "reuse_workdir"),
+    },
 )
 def map_render_cmd(
     output: Annotated[
@@ -557,6 +591,10 @@ def map_render_cmd(
             "-o", "--output-dir", help="Rendered PNG directory" + DEFAULT_OUTPUT
         ),
     ] = None,
+    resolution: Annotated[
+        Resolution,
+        typer.Option("--resolution", help="Output size in percent of full resolution"),
+    ] = "25",
     slots: SlotsOption = None,
     workdir: Annotated[
         Optional[str],
@@ -587,10 +625,10 @@ def map_render_cmd(
     margin: Annotated[int, typer.Option("--margin")] = 96,
     background: Annotated[str, typer.Option("--background")] = "#08090b",
     orientation: Annotated[
-        str, typer.Option("--orientation", help="display or raw")
+        Literal["display", "raw"], typer.Option("--orientation", help="display or raw")
     ] = "display",
     floor_texture_transform: Annotated[
-        str,
+        Literal["auto", "none", "flip-y", "flip-x", "rotate-180"],
         typer.Option(
             "--floor-texture-transform",
             help="auto, none, flip-y, flip-x, or rotate-180",
@@ -618,7 +656,7 @@ def map_render_cmd(
         typer.Option("--no-models", help="Do not draw model-based common objects"),
     ] = False,
     model_style: Annotated[
-        str,
+        Literal["icons", "geometry"],
         typer.Option(
             "--model-style",
             help="icons (OBJECTS.GR, default) or geometry (UW2.EXE)",
@@ -639,11 +677,12 @@ def map_render_cmd(
         ),
     ] = 1.0,
     solid_fill: Annotated[
-        str,
+        Literal["none", "between", "adjacent", "interior", "bbox"],
         typer.Option("--solid-fill", help="none, between, adjacent, interior, or bbox"),
     ] = "none",
     solid_fill_texture: Annotated[
-        str, typer.Option("--solid-fill-texture", help="wall or floor")
+        Literal["wall", "floor"],
+        typer.Option("--solid-fill-texture", help="wall or floor"),
     ] = "wall",
     solid_fill_brightness: Annotated[
         float, typer.Option("--solid-fill-brightness")
@@ -653,7 +692,8 @@ def map_render_cmd(
     debug_grid: Annotated[bool, typer.Option("--debug-grid")] = False,
     grid_label_step: Annotated[int, typer.Option("--grid-label-step")] = 1,
     grid_coordinate_mode: Annotated[
-        str, typer.Option("--grid-coordinate-mode", help="display, raw, or both")
+        Literal["display", "raw", "both"],
+        typer.Option("--grid-coordinate-mode", help="display, raw, or both"),
     ] = "display",
     name_files: Annotated[bool, typer.Option("--name-files")] = False,
     gamedir: GameDirOption = None,

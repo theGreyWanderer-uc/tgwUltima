@@ -822,7 +822,7 @@ def map_atlas_cmd(
             "--resolution",
             help="2D scale preset: full=28, 75=21, 50=14, 25=7 pixels/cell",
         ),
-    ] = "full",
+    ] = "25",
     pixels_per_cell: Annotated[
         Optional[int],
         typer.Option(
@@ -924,7 +924,7 @@ def map_atlas_cmd(
         ),
     ] = False,
     object_footprint_source: Annotated[
-        str,
+        Literal["all", "fixed", "nonfixed"],
         typer.Option(
             "--object-source", help="Object source filter: all, fixed, or nonfixed"
         ),
@@ -938,7 +938,7 @@ def map_atlas_cmd(
         typer.Option("--object-model", help="sappear model ID filter (repeatable)"),
     ] = None,
     object_footprint_style: Annotated[
-        str,
+        Literal["outline", "fill"],
         typer.Option(
             "--object-footprint-style", help="Footprint style: outline or fill"
         ),
@@ -1038,6 +1038,21 @@ def map_atlas_cmd(
     category="world",
     results=("image",),
     params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
+    option_groups={
+        "hillshade": ("hillshade_strength",),
+        "water": ("water_frame",),
+        "fixed_markers": ("fixed_marker_radius",),
+        "nonfixed_markers": ("nonfixed_marker_radius", "include_unlinked_nonfixed"),
+        "objects": ("object_lod",),
+        "object_footprints": (
+            "object_footprint_source",
+            "object_type_ids",
+            "object_model_ids",
+            "object_footprint_style",
+            "object_legend",
+        ),
+    },
+    option_sets={"Detail": ("pixels_per_cell",)},
 )
 def map_render_cmd(
     terrain: Annotated[
@@ -1099,7 +1114,7 @@ def map_render_cmd(
             "--resolution",
             help="2D scale preset: full=28, 75=21, 50=14, 25=7 pixels/cell",
         ),
-    ] = "full",
+    ] = "25",
     pixels_per_cell: Annotated[
         Optional[int],
         typer.Option(
@@ -1195,7 +1210,7 @@ def map_render_cmd(
         ),
     ] = False,
     object_footprint_source: Annotated[
-        str,
+        Literal["all", "fixed", "nonfixed"],
         typer.Option(
             "--object-source",
             help="Object source filter: all, fixed, or nonfixed",
@@ -1216,7 +1231,7 @@ def map_render_cmd(
         ),
     ] = None,
     object_footprint_style: Annotated[
-        str,
+        Literal["outline", "fill"],
         typer.Option(
             "--object-footprint-style",
             help="Footprint polygon style: outline or fill",

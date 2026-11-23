@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import typer
 
@@ -25,6 +25,7 @@ from titan.uo.render import UOMapRenderer
 from titan.uo.tiles import FacetTileJob, build_facet_tiles
 from titan.uo.cli import _common
 from titan._meta import meta
+from titan._results import record_output
 from titan.errors import exit_code
 
 
@@ -125,12 +126,21 @@ def cmd_map_export(args: SimpleNamespace) -> int:
             print(f"ERROR: facet {facet}: {exc}", file=sys.stderr)
             return exit_code(exc)
 
-        stem = f"map{facet}{args.suffix}"
-        facet_map.render_radar(radar, statics=not args.no_statics).save(
+        from titan._resolution import resolution_factor, scaled, size_tag
+
+        factor = resolution_factor(getattr(args, "resolution", "full"))
+        stem = f"map{facet}{args.suffix}{size_tag(factor)}"
+        scaled(facet_map.render_radar(radar, statics=not args.no_statics), factor).save(
             outdir / f"{stem}.png"
         )
+        record_output(
+            outdir / f"{stem}.png"
+        )  # the folder may be titan's own: report each PNG
         if args.heightmap:
-            facet_map.render_heightmap().save(outdir / f"{stem}_height.png")
+            scaled(facet_map.render_heightmap(), factor).save(
+                outdir / f"{stem}_height.png"
+            )
+            record_output(outdir / f"{stem}_height.png")
 
         source = facet_map.source
         summary = facet_map.static_index_summary()
@@ -399,7 +409,12 @@ def radar_export_cmd(
     raise SystemExit(cmd_radar_export(SimpleNamespace(**locals())))
 
 
-@meta(category="world", results=("files",), params={"output": "output-dir"})
+@meta(
+    category="world",
+    results=("files",),
+    params={"output": "output-dir"},
+    option_sets={"Source files": ("container", "suffix", "patches")},
+)
 def map_export_cmd(
     client: Annotated[
         Optional[str],
@@ -424,7 +439,7 @@ def map_export_cmd(
         ),
     ] = None,
     container: Annotated[
-        Optional[str],
+        Optional[Literal["auto", "uop", "mul"]],
         typer.Option(
             "--container",
             help="Terrain source: auto (mapNLegacyMUL.uop, else mapN.mul), uop or mul. Default: the install's maps setting, else auto.",
@@ -451,8 +466,14 @@ def map_export_cmd(
         bool,
         typer.Option("--heightmap", help="Also write a greyscale land-altitude PNG."),
     ] = False,
+    resolution: Annotated[
+        Literal["full", "75", "50", "25"],
+        typer.Option(
+            "--resolution", help="Output size in percent of one pixel per tile"
+        ),
+    ] = "25",
 ) -> None:
-    """Render UO facets as one-pixel-per-tile radar map PNGs."""
+    """Render UO facets as radar map PNGs (one pixel per tile at full size)."""
     raise SystemExit(cmd_map_export(SimpleNamespace(**locals())))
 
 
@@ -493,7 +514,7 @@ def map_render_cmd(
         typer.Option("--name", help="Output file stem. Default: mapN_X_Y."),
     ] = None,
     container: Annotated[
-        Optional[str],
+        Optional[Literal["auto", "uop", "mul"]],
         typer.Option(
             "--container",
             help="Terrain source: auto (mapNLegacyMUL.uop, else mapN.mul), uop or mul. Default: the install's maps setting, else auto.",
@@ -570,7 +591,7 @@ def map_tiles_cmd(
         typer.Option("--quality", help="JPEG quality for tiles."),
     ] = 85,
     container: Annotated[
-        Optional[str],
+        Optional[Literal["auto", "uop", "mul"]],
         typer.Option(
             "--container",
             help="Terrain source: auto (mapNLegacyMUL.uop, else mapN.mul), uop or mul. Default: the install's maps setting, else auto.",
@@ -635,7 +656,7 @@ def map_inventory_cmd(
         ),
     ] = None,
     container: Annotated[
-        Optional[str],
+        Optional[Literal["auto", "uop", "mul"]],
         typer.Option(
             "--container",
             help="Terrain source: auto (mapNLegacyMUL.uop, else mapN.mul), uop or mul. Default: the install's maps setting, else auto.",
@@ -699,7 +720,7 @@ def multi_export_cmd(
         typer.Option("--range-end", help="Last multi ID, exclusive."),
     ] = None,
     container: Annotated[
-        Optional[str],
+        Optional[Literal["auto", "uop", "mul"]],
         typer.Option(
             "--container",
             help="Multi source: auto (MultiCollection.uop, else multi.mul), uop or mul. Default: the install's multis setting, else auto.",

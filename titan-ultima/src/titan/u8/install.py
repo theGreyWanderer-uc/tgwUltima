@@ -8,13 +8,16 @@ __all__ = [
     "U8_STATIC_FILES",
     "U8_WORKING_DIRS",
     "U8_WORKING_DIR_ARCHIVES",
+    "U8_WORKING_DIR_EXTS",
     "discover_installs",
     "discover_u8_installs",
     "expand_u8_paths",
     "find_u8_engine_save",
     "install_candidates",
     "install_config",
+    "has_working_files",
     "is_u8_folder_name",
+    "prepare_working_dirs",
     "prune_stale_u8_save_default",
     "resolve_u8_save",
     "resolve_u8_working_dir",
@@ -168,6 +171,51 @@ def _u8_paths(config: dict) -> dict:
     return u8_section(config).get("paths", {})
 
 
+U8_WORKING_DIR_EXTS = {"shapes": ".shp", "globs": ".dat"}
+"""Working folder -> the file extension its extracted records have."""
+
+
+def has_working_files(folder: Path, working_dir: str) -> bool:
+    """Whether *folder* already holds extracted records for *working_dir*."""
+    ext = U8_WORKING_DIR_EXTS[working_dir]
+    try:
+        return any(child.suffix.lower() == ext for child in folder.iterdir())
+    except OSError:
+        return False
+
+
+def prepare_working_dirs(config: Optional[dict] = None) -> list[tuple[str, Path, int]]:
+    """Extract every empty U8 working folder (``shapes`` from U8SHAPES.FLX, ``globs``
+    from GLOB.FLX) into where the config puts it, so map commands and front ends find
+    them ready. Folders that already hold files are left alone.
+
+    Returns ``(working_dir, folder, records written)`` for each folder extracted.
+    """
+    from titan._meta import configured_install
+    from titan.flex import FlexArchive
+
+    install = configured_install("u8", config)
+    if install is None:
+        return []
+    done = []
+    for working_dir in U8_WORKING_DIRS:
+        folder = install.resources.get(working_dir)
+        archive = u8_working_archive(working_dir, config)
+        if (
+            folder is None
+            or archive is None
+            or has_working_files(Path(folder), working_dir)
+        ):
+            continue
+        folder = Path(folder)
+        folder.mkdir(parents=True, exist_ok=True)
+        written = FlexArchive.from_file(str(archive)).extract_all(
+            str(folder), flex_name=archive.name
+        )
+        done.append((working_dir, folder, written))
+    return done
+
+
 def u8_working_archive(
     working_dir: str, config: Optional[dict] = None
 ) -> Optional[Path]:
@@ -271,7 +319,8 @@ def resolve_u8_save(value: Optional[str], config: dict) -> Optional[Path]:
     *value* comes from the command line: a slot number (``3``), a file name
     (``U8SAVE.003``) or a path. A relative path that exists from the current
     folder is used as given; a bare name or slot is looked up in the save
-    folder. With no *value*, ``[u8.paths] nonfixed`` is the default save.
+    folder. With no *value*, ``[u8.paths] nonfixed`` is the default save (the
+    ``U8SAVE.000`` old setups wrote counts only when that file exists).
 
     Raises ``ValueError`` for a slot number when no save folder is known.
     """
@@ -283,6 +332,15 @@ def resolve_u8_save(value: Optional[str], config: dict) -> Optional[Path]:
         value = _str_value(_u8_paths(config), "nonfixed")
         if not value:
             return None
+        if Path(value).name.upper() == U8_LEGACY_SAVE_DEFAULT:
+            # Old `titan setup` runs wrote this default whether or not the save existed
+            # (loading expands it to a path in the save folder); it meant the base world.
+            # Use it only when that save is really there.
+            save_dir = u8_save_dir(config)
+            legacy = Path(value).expanduser()
+            if not legacy.is_absolute() and save_dir is not None:
+                legacy = _save_in_folder(value, save_dir)
+            return legacy if legacy.is_file() else None
     save_dir = u8_save_dir(config)
     if save_dir is not None and (value.isdigit() or len(Path(value).parts) == 1):
         return _save_in_folder(value, save_dir)

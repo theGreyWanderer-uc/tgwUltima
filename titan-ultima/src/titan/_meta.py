@@ -123,10 +123,12 @@ GAMES: tuple[GameMeta, ...] = (
     GameMeta(
         "u6", "u6", "u6", "dos", "u6",
         install="titan.u6.install", saves="titan.u6.saves", path_kinds="U6_PATH_KINDS",
+        maps="titan.u6.map_list",
     ),
     GameMeta(
         "md", "md", "md", "dos", "md",
         install="titan.md.install", saves="titan.md.saves", path_kinds="MD_PATH_KINDS",
+        maps="titan.md.map_list",
     ),
     GameMeta("uw1", "uw1", "uw1", "dos", "uw1", install="titan.uw1.install"),
     GameMeta(
@@ -141,7 +143,8 @@ GAMES: tuple[GameMeta, ...] = (
         path_kinds="U7_PATH_KINDS", family="u7", flavors="titan.u7.flavors",
         maps="titan.u7.map_list",
     ),
-    GameMeta("uw2", "uw2", "uw2", "dos", "uw2", install="titan.uw2.install"),
+    GameMeta("uw2", "uw2", "uw2", "dos", "uw2", install="titan.uw2.install",
+             maps="titan.uw2.map_list"),
     GameMeta(
         "u8", "u8", "u8", "dos", "u8",
         install="titan.u8.install", saves="titan.u8.saves", path_kinds="U8_PATH_KINDS",
@@ -149,7 +152,7 @@ GAMES: tuple[GameMeta, ...] = (
     ),
     GameMeta(
         "uo", "uo", "uo", "windows", "uo",
-        install="titan.uo.installs", flavors="titan.uo.flavors",
+        install="titan.uo.installs", flavors="titan.uo.flavors", maps="titan.uo.map_list",
     ),
     GameMeta(
         "u9", "u9", "u9", "windows", "u9",
@@ -218,7 +221,10 @@ COMMAND_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("graphics", "Shapes & art"),  # shapes, textures, tiles, fonts, gumps
     ("models", "Models & animation"),
     ("audio", "Music & sound"),
-    ("world", "Maps & world"),  # maps, regions, objects, eggs, places
+    (
+        "world",
+        "World",
+    ),  # maps, regions, objects, eggs, places (rendering also has a Maps page)
     ("characters", "Characters"),  # NPCs, monsters, actors, schedules
     ("saves", "Saves & state"),
     ("text", "Text & scripts"),  # books, conversations, usecode, scripts
@@ -276,6 +282,10 @@ class CommandMeta:
     labels: Mapping[str, str] = field(default_factory=dict)
     """``{parameter: what a form calls it}`` where the option's name doesn't say it
     well (``{"exclude": "Render exclusions"}``)."""
+    option_sets: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    """``{title: options}`` shown together behind one switch of that title, for
+    options with no parent of their own (U8's ``--no-*`` type-flag exclusions, UW2's
+    geometry tuning). Off, none of them is sent."""
 
     def recipe_spec(self) -> Optional[RecipeSpec]:
         """The recipe this command reads, or ``None``. Imports the recipe module."""
@@ -315,6 +325,7 @@ def meta(
     option_alternatives: Optional[Mapping[str, Iterable[str]]] = None,
     defaults: Optional[Mapping[str, str]] = None,
     labels: Optional[Mapping[str, str]] = None,
+    option_sets: Optional[Mapping[str, Iterable[str]]] = None,
 ) -> Callable[[_F], _F]:
     """Attach :class:`CommandMeta` to a command function.
 
@@ -336,6 +347,7 @@ def meta(
         {key: tuple(names) for key, names in (option_alternatives or {}).items()},
         dict(defaults or {}),
         dict(labels or {}),
+        {title: tuple(names) for title, names in (option_sets or {}).items()},
     )
 
     def decorate(fn: _F) -> _F:

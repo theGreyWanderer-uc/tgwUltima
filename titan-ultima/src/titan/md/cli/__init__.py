@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated, Optional
 
+from titan._resolution import RESOLUTION_HELP, Resolution
+
 import typer
 
 from titan.md.map_render import MartianMapRenderer
@@ -42,6 +44,10 @@ def martian_dreams_commands() -> None:
     category="world",
     results=("image",),
     params={"output": "output-file", "palette": "palette", "savegame": "save"},
+    option_groups={"objects": ("show_markers", "show_invisible")},  # need --objects
+    # the area, when not the whole surface; DOS lighting needs a region
+    option_alternatives={"full": ("region", "dungeon", "lighting")},
+    defaults={"resolution": "25"},  # a whole map; a --region crop is full size
 )
 def map_render_cmd(
     gamedir: Annotated[
@@ -132,6 +138,10 @@ def map_render_cmd(
             help="Include invisible world objects (requires --objects)",
         ),
     ] = False,
+    resolution: Annotated[
+        Optional[Resolution],
+        typer.Option("--resolution", help=RESOLUTION_HELP),
+    ] = None,
     output: Annotated[
         Optional[str], typer.Option("-o", "--output", help="Output PNG path")
     ] = None,
@@ -179,10 +189,19 @@ def map_render_cmd(
             show_markers=show_markers,
             show_invisible=show_invisible,
         )
+        from titan._resolution import resolution_factor, scaled, size_tag
+
+        factor = resolution_factor(resolution, whole_map=region is None)
+        image = scaled(image, factor)
         filename = (
-            "md_surface.png" if dungeon is None else f"md_underground_{dungeon}.png"
-        )
-        destination = Path(output or filename).expanduser()
+            "md_surface" if dungeon is None else f"md_underground_{dungeon}"
+        ) + f"{size_tag(factor)}.png"
+        from titan._config import export_output
+
+        # An omitted output goes to titan's export folder and is reported to front ends.
+        destination = Path(
+            export_output(output, "md", "map-render", filename)
+        ).expanduser()
         destination.parent.mkdir(parents=True, exist_ok=True)
         image.save(destination, format="PNG")
     except (

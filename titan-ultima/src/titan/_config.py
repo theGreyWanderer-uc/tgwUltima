@@ -184,6 +184,15 @@ def load_config(config_path: Optional[str] = None) -> dict:
         _config = {}
         return _config
 
+    _config = read_config(path)
+    return _config
+
+
+def read_config(path: Path) -> dict:
+    """Parse the titan.toml at *path* as :func:`load_config` does (legacy layout
+    migrated, U8 paths expanded) without making it titan's loaded config."""
+    if _tomllib is None:
+        return {}
     try:
         with open(path, "rb") as f:
             data = _tomllib.load(f)
@@ -200,9 +209,7 @@ def load_config(config_path: Optional[str] = None) -> dict:
         from titan.u8.install import expand_u8_paths
 
         expand_u8_paths(data["u8"])
-
-    _config = data
-    return _config
+    return data
 
 
 LEGACY_U8_TABLES = ("game", "paths")
