@@ -29,6 +29,9 @@ work for the next release.
   flavor has and how to render each: Ultima 7's main world and Exult's
   extra maps (a mod's own maps included), Ultima 8's maps with items and
   Ultima 9's regions.
+  Each of a mod's maps says what the mod does to it: edits the base game's
+  map (with how many superchunks of layout and objects, and terrain chunks,
+  it changes), replaces it, or adds a new one.
 - **Flavors, for front ends:** `titan._meta.list_flavors()` lists every way
   a game can be worked on: for Ultima 7, each install as played by Exult
   or by the original DOS game, with Exult's mods and custom games under

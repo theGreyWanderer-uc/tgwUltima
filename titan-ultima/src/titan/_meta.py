@@ -273,6 +273,9 @@ class CommandMeta:
     default can't say because the command works it out (``"true"``/``"false"``
     for a flag). Within an :attr:`option_groups` entry, the value while its
     parent is set."""
+    labels: Mapping[str, str] = field(default_factory=dict)
+    """``{parameter: what a form calls it}`` where the option's name doesn't say it
+    well (``{"exclude": "Render exclusions"}``)."""
 
     def recipe_spec(self) -> Optional[RecipeSpec]:
         """The recipe this command reads, or ``None``. Imports the recipe module."""
@@ -311,6 +314,7 @@ def meta(
     option_groups: Optional[Mapping[str, Iterable[str]]] = None,
     option_alternatives: Optional[Mapping[str, Iterable[str]]] = None,
     defaults: Optional[Mapping[str, str]] = None,
+    labels: Optional[Mapping[str, str]] = None,
 ) -> Callable[[_F], _F]:
     """Attach :class:`CommandMeta` to a command function.
 
@@ -331,6 +335,7 @@ def meta(
         {key: tuple(names) for key, names in (option_groups or {}).items()},
         {key: tuple(names) for key, names in (option_alternatives or {}).items()},
         dict(defaults or {}),
+        dict(labels or {}),
     )
 
     def decorate(fn: _F) -> _F:

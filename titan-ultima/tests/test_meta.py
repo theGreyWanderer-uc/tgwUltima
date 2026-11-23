@@ -145,6 +145,7 @@ def test_option_layout_names_real_parameters() -> None:
             *info.option_groups,
             *info.option_alternatives,
             *info.defaults,
+            *info.labels,
             *children,
         ]
         problems += [
@@ -168,6 +169,7 @@ def test_map_render_lays_out_its_options() -> None:
     assert info.option_groups["grid"] == ("grid_size",)
     assert "superchunk" in info.option_alternatives["full"]
     assert info.defaults["full"] == "true" and info.defaults["resolution"] == "25"
+    assert info.labels["exclude"] == "Render exclusions"
 
 
 def test_every_visible_command_has_a_category() -> None:

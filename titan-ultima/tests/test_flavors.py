@@ -287,8 +287,56 @@ def test_u7_maps_come_from_static_and_a_mods_own_folders(
     assert mod_maps[2].args == {
         "map_num": "2"
     }  # map-render --mod finds the mod's folder
-    assert mod_maps[2].notes == ("From this mod",)
+    assert mod_maps[2].notes == (
+        "New map from this mod",
+    )  # the base game has no map 02
     assert _meta.map_command("u7si") == ("u7", "map-render")
+
+
+def test_u7_mod_maps_say_what_the_mod_does_to_the_base_map(tmp_path) -> None:
+    import struct
+
+    from titan.u7.map_list import mod_map_note
+
+    static = tmp_path / "STATIC"
+    static.mkdir()
+    layout = bytearray(144 * 256 * 2)  # every slot uses chunk 0, superchunk 0 chunk 1
+    struct.pack_into("<H", layout, 0, 1)
+    (static / "U7MAP").write_bytes(layout)
+    base_chunks = struct.pack("<256H", *([5] * 256)) * 2  # 2-byte tiles: shape 5
+    (static / "U7CHUNKS").write_bytes(base_chunks)
+
+    edited = tmp_path / "edited"
+    edited.mkdir()
+    (edited / "u7map").write_bytes(layout)  # a copy of the base layout
+    (edited / "u7ifix00").write_bytes(b"\0")
+    (edited / "u7ifix01").write_bytes(b"\0")
+    tile = bytes((5, 0, 0))  # Exult's 3-byte tiles: chunk 0 the same, chunk 1 changed
+    exult = b"\xff\xff\xff\xffexlt\x00\x00" + tile * 256 + bytes((6, 0, 0)) * 256
+    (edited / "u7chunks").write_bytes(exult)
+    assert mod_map_note([edited], static, 0, "u7si") == (
+        "Serpent Isle, edited by this mod: 2 superchunks of objects, 1 terrain chunk"
+    )
+
+    moved = tmp_path / "moved"
+    moved.mkdir()
+    changed = bytearray(layout)
+    struct.pack_into("<H", changed, 512 * 3, 1)  # one superchunk laid out differently
+    (moved / "U7MAP").write_bytes(changed)
+    assert mod_map_note([moved], static, 0, "u7bg") == (
+        "The Black Gate, edited by this mod: 1 superchunk of layout"
+    )
+
+    replaced = tmp_path / "replaced"
+    replaced.mkdir()
+    (replaced / "U7MAP").write_bytes(bytes([1, 0]) * (144 * 256))
+    assert (
+        mod_map_note([replaced], static, 0, "u7bg") == "Replaces The Black Gate's world"
+    )
+    assert mod_map_note([replaced], static, 4, "u7bg") == "New map from this mod"
+    assert mod_map_note([tmp_path / "empty"], static, 0, "u7si") == (
+        "Serpent Isle, unchanged by this mod"
+    )
 
 
 def test_u8_maps_are_the_fixed_slots_with_items(workspace) -> None:

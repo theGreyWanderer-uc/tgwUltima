@@ -15,6 +15,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from enum import Enum
 from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
@@ -22,6 +23,7 @@ import typer
 
 from titan.u7 import install
 from titan.u7.cli import _common
+from titan.u7.zones import available_zone_profiles
 from titan._meta import ANY_PARAM, meta
 from titan._config import DEFAULT_OUTPUT, export_output
 from titan.errors import exit_code
@@ -584,6 +586,20 @@ _EXCLUDE_FLAG_CHOICES = [
     "no_building",
 ]
 
+ExcludeFlag = Enum(
+    "ExcludeFlag", {name: name for name in _EXCLUDE_FLAG_CHOICES}, type=str
+)
+"""``--exclude``'s TFA flags as a Choice: Typer takes a list of an Enum, not of a
+Literal, and front ends list its values."""
+
+
+def _flag_names(flags) -> list[str] | None:
+    """``--exclude`` values as the plain flag names the commands use."""
+    return [getattr(flag, "value", flag) for flag in flags] if flags else None
+
+
+ZoneProfile = Literal[tuple(available_zone_profiles())]  # type: ignore[valid-type]
+
 
 @meta(
     category="world",
@@ -858,6 +874,7 @@ def map_render_json_cmd(
     },
     # No area renders the full world, at 25%.
     defaults={"full": "true", "resolution": "25", "view": "classic"},
+    labels={"exclude": "Render exclusions"},
 )
 def map_render_cmd(
     ctx: typer.Context,
@@ -959,12 +976,8 @@ def map_render_cmd(
         ),
     ] = False,
     exclude: Annotated[
-        Optional[list[str]],
-        typer.Option(
-            "--exclude",
-            help=f"Exclude shapes by TFA flag. "
-            f"Repeatable. Choices: {', '.join(_EXCLUDE_FLAG_CHOICES)}",
-        ),
+        Optional[list[ExcludeFlag]],
+        typer.Option("--exclude", help="Exclude shapes by TFA flag (repeatable)"),
     ] = None,
     max_lift: Annotated[
         Optional[int],
@@ -1014,13 +1027,10 @@ def map_render_cmd(
         ),
     ] = True,
     zone_profile: Annotated[
-        Optional[str],
+        Optional[ZoneProfile],
         typer.Option(
             "--zone-profile",
-            help=(
-                "Load named zone profile overlay data and convert it to "
-                "highlight rectangles (e.g. si_zones, bg_zones)"
-            ),
+            help="Load named zone profile overlay data and convert it to highlight rectangles",
         ),
     ] = None,
     zone_id: Annotated[
@@ -1190,7 +1200,7 @@ def map_render_cmd(
         gamedat=gamedat,
         grid=grid,
         grid_size=grid_size,
-        exclude_flags=exclude,
+        exclude_flags=_flag_names(exclude),
         max_lift=max_lift,
         map_num=map_num,
         highlight_rects=parsed_highlights,
@@ -1218,6 +1228,7 @@ def map_render_cmd(
     category="world",
     results=("image",),
     params={"output": "output-file", "palette": "palette"},
+    labels={"exclude": "Render exclusions"},
 )
 def map_sample_cmd(
     static: Annotated[
@@ -1265,7 +1276,7 @@ def map_sample_cmd(
         typer.Option("--sc", help="Only sample these superchunks (repeatable)"),
     ] = None,
     exclude: Annotated[
-        Optional[list[str]],
+        Optional[list[ExcludeFlag]],
         typer.Option("--exclude", help="Exclude shapes by TFA flag (repeatable)"),
     ] = None,
 ) -> None:
@@ -1281,7 +1292,7 @@ def map_sample_cmd(
                 grid=grid,
                 grid_size=grid_size,
                 superchunks=superchunks,
-                exclude_flags=exclude,
+                exclude_flags=_flag_names(exclude),
             )
         )
     )
