@@ -10,6 +10,14 @@ work for the next release.
 
 ### Added
 
+- **Saves started before the Forgotten World patch:** `save-check` and the
+  save browser now say when a save misses part of the 1.19G/1.19H fan patch.
+  `FWP01` (INFO): the installed maps have the companion fix but the save's own
+  copy of the main map does not, so Mariah and Jaana will not come. `FWP02`
+  (INFO): Runes and virtue items still at their old floating heights, by
+  shrine. Both advise a new game for every fix; neither changes the verdict,
+  because the save loads normally. Read from the maps, not from file hashes
+  (`titan.u9.fan_patch`).
 - **One map size option everywhere:** `--resolution full|75|50|25` on U6,
   Martian Dreams and U8 `map-render`, U8 `map-render-all`, UW2 `map-render`
   and UO `map-export`, as on U7. Whole maps now default to 25% (a crop with

@@ -20,6 +20,7 @@ from typing import cast
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from titan.u9.fan_patch import COMPANION_MAP, installed_state, save_state
 from titan.u9.fixed import U9Fixed, U9FixedError
 from titan.u9.nonfixed import U9Nonfixed, U9NonfixedError
 from titan.u9.process_data import (
@@ -761,6 +762,52 @@ def _check_nonfixed(
     return nonfixed
 
 
+def _check_fan_patch(
+    report: IntegrityReport,
+    archive_nonfixed: dict[int, U9Nonfixed],
+    runtime: Path,
+    archive_path: Path,
+) -> None:
+    """FWP01/FWP02: the save predates a Forgotten World patch's map changes.
+
+    Raised only when the installation carries the change and the save holds its
+    own copy of the map without it. A save with no copy of the map loads it from
+    runtime and gets the change, so it raises nothing.
+    """
+    installed = installed_state(runtime)
+    saved = save_state(archive_nonfixed)
+    if installed.companions and saved.companions is False:
+        report.add(
+            "FWP01",
+            "compatibility",
+            "INFO",
+            "the installed maps carry the Forgotten World companion fix (1.19G and "
+            "later), but this save's own copy of map 9 predates it: Mariah and "
+            "Jaana will not come to Moonglow and Yew after their shrines; the "
+            "patch's other fixes work in this save",
+            path=f"{archive_path}!nonfixed.{COMPANION_MAP}",
+            maps=[COMPANION_MAP],
+        )
+    lowered = set(installed.lowered_shrines())
+    floating = [item for item in saved.stock_shrines() if item in lowered]
+    if floating:
+        shrines = sorted({item.shrine for item in floating})
+        maps = sorted({item.map_number for item in floating})
+        report.add(
+            "FWP02",
+            "compatibility",
+            "INFO",
+            "the installed maps carry the Forgotten World 1.19H Rune fix, but this "
+            f"save's own maps still hold {len(floating)} Runes and virtue items at "
+            f"their old floating heights, at {len(shrines)} shrines: "
+            + ", ".join(shrines),
+            path=f"{archive_path}!" + ", ".join(f"nonfixed.{m}" for m in maps),
+            count=len(shrines),
+            shrine_names=", ".join(shrines),
+            maps=maps,
+        )
+
+
 def _check_fixed(
     report: IntegrityReport, path: Path, map_number: int
 ) -> U9Fixed | None:
@@ -1348,6 +1395,10 @@ def _check_save_archive(
         )
         if parsed is not None and member.map_number is not None:
             archive_nonfixed[member.map_number] = parsed
+    if static_path is not None:
+        _check_fan_patch(
+            report, archive_nonfixed, static_path.parent / "runtime", archive_path
+        )
     for map_number, path in sorted(loose_nonfixed.items()):
         try:
             working_data = path.read_bytes()
