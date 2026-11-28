@@ -24,6 +24,7 @@ from titan.flex import FlexArchive
 from titan.u8.palette import U8Palette
 from titan.u8.shape import U8Shape
 from titan.u8.shape_names import (
+    u8_flex_has_class_names as _u8_flex_has_class_names,
     u8_shape_export_stem as _u8_shape_stem,
     u8_shape_stem_from_path as _u8_shape_stem_from_path,
 )
@@ -104,6 +105,7 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
 
     if os.path.isfile(srcpath):
         archive = FlexArchive.from_file(srcpath)
+        class_names = _u8_flex_has_class_names(srcpath)
         for shape_num, record in enumerate(archive.records):
             if not record:
                 skipped_empty += 1
@@ -114,7 +116,7 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
                     skipped_empty += 1
                     continue
 
-                base = _u8_shape_stem(shape_num)
+                base = _u8_shape_stem(shape_num) if class_names else f"{shape_num:04d}"
                 images = shape.to_pngs(pal, transparent=True)
                 saved = 0
                 for i, img in enumerate(images):
@@ -150,7 +152,7 @@ def cmd_shape_batch(args: SimpleNamespace) -> int:
             if not shape.frames:
                 continue
 
-            base = _u8_shape_stem_from_path(shp_file)
+            base = _u8_shape_stem_from_path(shp_path)
             images = shape.to_pngs(pal, transparent=True)
             saved = 0
             for i, img in enumerate(images):

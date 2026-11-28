@@ -1163,23 +1163,28 @@ titan u8 shape-export shapes/0001.shp -p U8PAL.PAL -o out/
 #### `u8 shape-batch`
 
 Batch-export all `.shp` files in a directory to PNG, or export every
-non-empty shape directly from `U8SHAPES.FLX`.
+non-empty shape directly from a U8 Flex shape archive such as
+`U8SHAPES.FLX` or `U8GUMPS.FLX`.
 
 ```
-titan u8 shape-batch <directory-or-u8shapes.flx> [-p PAL] [-o DIR]
+titan u8 shape-batch <directory-or-archive.flx> [-p PAL] [-o DIR]
 ```
 
 | Argument | Description |
 |----------|-------------|
-| `directory-or-u8shapes.flx` | Directory containing `.shp` files, or a `U8SHAPES.FLX` archive |
+| `directory-or-archive.flx` | Directory containing `.shp` files, or a U8 Flex shape archive |
 | `-p FILE`, `--palette FILE` | Path to `.pal` palette (default: greyscale) |
 | `-o DIR`, `--output-dir DIR` | Output directory (default: `<dir>/png/` for directory input, `<name>_png/` for FLX input) |
 
+Class names apply only to world shapes. For `U8SHAPES.FLX` input, each
+exported shape uses its slot number plus bundled class name when available
+(for example `0068_DOOR_NS_f0000.png`), with numeric fallback for unmapped
+shapes. Any other archive, such as `U8GUMPS.FLX`, gets plain slot numbers
+(`0037_f0000.png`), because its numbers are not usecode class IDs.
+
 For directory input, Titan uses the same numeric-stem class-name expansion as
-`shape-export` when a `.shp` filename stem is numeric. For `U8SHAPES.FLX`
-input, each exported shape uses its slot number plus bundled class name when
-available (for example `0068_DOOR_NS_f0000.png`), with numeric fallback for
-unmapped shapes.
+`shape-export`, except for files whose `NNNN.meta.txt` sidecar (written when
+an archive is extracted) names an archive other than `U8SHAPES.FLX`.
 
 **Example**
 ```bash
@@ -1187,6 +1192,9 @@ titan u8 shape-batch shapes/ -p U8PAL.PAL -o shapes_png/
 
 # Directly from the archive
 titan u8 shape-batch STATIC/U8SHAPES.FLX -p STATIC/U8PAL.PAL -o u8shapes_png/
+
+# Gumps (paperdoll, containers, spellbook, menus)
+titan u8 shape-batch STATIC/U8GUMPS.FLX -p STATIC/U8PAL.PAL -o u8gumps_png/
 ```
 
 ---

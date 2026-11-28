@@ -167,6 +167,77 @@ class U8ShapeExportNamingTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(sorted(os.listdir(outdir)), ["0005_FLOATORS_f0000.png"])
 
+    def _fake_shape(self):
+        image = Image.new("RGBA", (2, 2), (0, 0, 255, 255))
+        return type(
+            "FakeShape",
+            (),
+            {
+                "frames": [object()],
+                "to_pngs": lambda self, pal, transparent=True: [image],
+            },
+        )()
+
+    def test_shape_batch_gives_other_archives_plain_numbers(self) -> None:
+        # Gump 37 is spellbook text; usecode class 37 is FLOOR.
+        flx_path = os.path.join(self.tmpdir.name, "U8GUMPS.FLX")
+        with open(flx_path, "wb") as f:
+            f.write(b"dummy")
+
+        outdir = os.path.join(self.tmpdir.name, "png")
+        records = [b""] * 37 + [b"\x01"]
+        fake_archive = type("FakeArchive", (), {"records": records})()
+
+        with (
+            patch(
+                "titan.u8.cli.shapes.FlexArchive.from_file", return_value=fake_archive
+            ),
+            patch(
+                "titan.u8.cli.shapes.U8Shape.from_data",
+                return_value=self._fake_shape(),
+            ),
+        ):
+            rc = cmd_shape_batch(
+                SimpleNamespace(directory=flx_path, palette=None, output=outdir)
+            )
+
+        self.assertEqual(rc, 0)
+        self.assertEqual(sorted(os.listdir(outdir)), ["0037_f0000.png"])
+
+    def _batch_dir_with_sidecar(self, flex_source: str | None) -> list[str]:
+        srcdir = os.path.join(self.tmpdir.name, "shp")
+        os.makedirs(srcdir)
+        with open(os.path.join(srcdir, "0037.shp"), "wb") as f:
+            f.write(b"dummy")
+        if flex_source is not None:
+            with open(
+                os.path.join(srcdir, "0037.meta.txt"), "w", encoding="utf-8"
+            ) as f:
+                f.write(f"Flex source:    {flex_source}\nRecord index:   37\n")
+
+        outdir = os.path.join(self.tmpdir.name, "png")
+        with patch(
+            "titan.u8.cli.shapes.U8Shape.from_file", return_value=self._fake_shape()
+        ):
+            rc = cmd_shape_batch(
+                SimpleNamespace(directory=srcdir, palette=None, output=outdir)
+            )
+        self.assertEqual(rc, 0)
+        return sorted(os.listdir(outdir))
+
+    def test_shape_batch_dir_extracted_from_gumps_keeps_plain_numbers(self) -> None:
+        self.assertEqual(
+            self._batch_dir_with_sidecar("U8GUMPS.FLX"), ["0037_f0000.png"]
+        )
+
+    def test_shape_batch_dir_extracted_from_u8shapes_gets_class_names(self) -> None:
+        self.assertEqual(
+            self._batch_dir_with_sidecar("u8shapes.flx"), ["0037_FLOOR_f0000.png"]
+        )
+
+    def test_shape_batch_dir_without_sidecar_keeps_class_names(self) -> None:
+        self.assertEqual(self._batch_dir_with_sidecar(None), ["0037_FLOOR_f0000.png"])
+
 
 if __name__ == "__main__":
     unittest.main()
