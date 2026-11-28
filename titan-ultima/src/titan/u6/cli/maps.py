@@ -7,6 +7,8 @@ import sys
 from types import SimpleNamespace
 from typing import Annotated, Optional
 
+from titan._resolution import RESOLUTION_HELP, Resolution
+
 import typer
 
 from titan._meta import meta
@@ -155,7 +157,19 @@ def cmd_map_render(args: SimpleNamespace) -> int:
                     drawn_records.add(cell.record_index)
         print(f"  overlaid {len(drawn_records)} object(s)")
 
-    out_path = args.output or default_name
+    from titan._config import export_output
+
+    # An omitted output goes to titan's export folder and is reported to front ends.
+    from titan._resolution import resolution_factor, scaled, size_tag
+
+    factor = resolution_factor(
+        getattr(args, "resolution", None), whole_map=args.region is None
+    )
+    img = scaled(img, factor)
+    stem, dot, ext = default_name.rpartition(".")
+    out_path = export_output(
+        args.output, "u6", "map-render", f"{stem}{size_tag(factor)}.{ext}"
+    )
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path)
     print(f"Saved: {out_path}  ({img.width}x{img.height})")
@@ -289,7 +303,16 @@ def cmd_map_audit_zorder(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    category="world",
+    results=("image",),
+    params={"output": "output-file", "palette": "palette"},
+    option_groups={"objects": ("show_invisible",)},  # needs --objects
+    option_alternatives={
+        "full": ("region", "dungeon")
+    },  # the area, when not the whole surface
+    defaults={"resolution": "25"},  # a whole map; a --region crop is full size
+)
 def map_render_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
@@ -331,6 +354,10 @@ def map_render_cmd(
             help="Include invisible world objects (requires --objects)",
         ),
     ] = False,
+    resolution: Annotated[
+        Optional[Resolution],
+        typer.Option("--resolution", help=RESOLUTION_HELP),
+    ] = None,
     output: Annotated[
         Optional[str], typer.Option("-o", "--output", help="Output PNG path")
     ] = None,
@@ -347,13 +374,14 @@ def map_render_cmd(
                 tick=tick,
                 objects=objects,
                 show_invisible=show_invisible,
+                resolution=resolution,
                 output=output,
             )
         )
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def map_audit_zorder_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")

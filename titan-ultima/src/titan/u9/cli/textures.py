@@ -592,7 +592,7 @@ def cmd_texture_import(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="graphics", results=("text",))
 def texture_info_cmd(
     textures: Annotated[
         str,
@@ -608,7 +608,11 @@ def texture_info_cmd(
     )
 
 
-@meta(results=("json", "table"), params={"fmt": "format", "output": "output-file"})
+@meta(
+    category="graphics",
+    results=("json", "table"),
+    params={"fmt": "format", "output": "output-file"},
+)
 def texture_frame_report_cmd(
     source: Annotated[
         str,
@@ -666,7 +670,11 @@ def texture_frame_report_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="graphics",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def texture_export_cmd(
     textures: Annotated[
         str,
@@ -711,7 +719,11 @@ def texture_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="graphics",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def texture_export_all_cmd(
     source: Annotated[
         str,
@@ -773,7 +785,7 @@ def texture_export_all_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="graphics", results=("text",))
 def icon_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
@@ -792,7 +804,11 @@ def icon_list_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="graphics",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def icon_export_cmd(
     textures: Annotated[
         str,
@@ -833,7 +849,11 @@ def icon_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="graphics",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def icon_export_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
@@ -867,7 +887,7 @@ def icon_export_all_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="graphics", results=("text",))
 def sdinfo_list_cmd(
     file: Annotated[
         str,
@@ -887,7 +907,7 @@ def sdinfo_list_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="graphics", results=("text",))
 def sdinfo_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
     index: Annotated[
@@ -899,7 +919,7 @@ def sdinfo_show_cmd(
     raise SystemExit(cmd_sdinfo_show(SimpleNamespace(file=file, index=index)))
 
 
-@meta(results=("text",))
+@meta(category="graphics", results=("text",))
 def sdinfo_verify_cmd(
     file: Annotated[str, typer.Argument(help="Path to a static/sdInfo*.flx table")],
     textures: Annotated[
@@ -911,6 +931,7 @@ def sdinfo_verify_cmd(
 
 
 @meta(
+    category="graphics",
     results=("file",),
     params={
         "output": "output-file",

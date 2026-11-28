@@ -48,6 +48,7 @@ from pathlib import Path
 from titan._config import get_config
 from titan.errors import InstallNotFoundError
 from titan._meta import Installation
+from titan import _stores
 
 _CORE_FILES = {
     "art": "artLegacyMUL.uop",
@@ -191,7 +192,7 @@ def looks_like_uo_root(path: Path) -> bool:
 def uo_install_candidates() -> list[Path]:
     """List the standard EA installer and manual Classic Client folders."""
     candidates: list[Path] = []
-    for drive in "CDEFG":
+    for drive in _stores.drives():
         for path in [
             Path(
                 f"{drive}:\\Program Files (x86)\\Electronic Arts\\Ultima Online Classic"

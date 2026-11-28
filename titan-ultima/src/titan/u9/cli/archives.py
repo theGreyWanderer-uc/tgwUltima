@@ -183,7 +183,7 @@ def cmd_flx_repack(args: SimpleNamespace) -> int:
     return 0 if (equivalent or replacements) else 1
 
 
-@meta(results=("text",))
+@meta(category="archives", results=("text",))
 def flx_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
 ) -> None:
@@ -191,7 +191,7 @@ def flx_list_cmd(
     raise SystemExit(cmd_flx_list(SimpleNamespace(file=file)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="archives", results=("files",), params={"output": "output-dir"})
 def flx_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
     index: Annotated[int, typer.Argument(help="Entry index to extract")],
@@ -206,7 +206,7 @@ def flx_extract_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="archives", results=("files",), params={"output": "output-dir"})
 def flx_extract_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U9 .flx/.FLX file")],
     output: Annotated[
@@ -220,7 +220,11 @@ def flx_extract_all_cmd(
     raise SystemExit(cmd_flx_extract_all(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("file",), params={"output": "output-file", "directory": "input-dir"})
+@meta(
+    category="archives",
+    results=("file",),
+    params={"output": "output-file", "directory": "input-dir"},
+)
 def flx_pack_cmd(
     directory: Annotated[
         str, typer.Argument(help="Directory of NNNNN.bin entry files")
@@ -247,7 +251,11 @@ def flx_pack_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file", "replace": "input-dir"})
+@meta(
+    category="archives",
+    results=("file",),
+    params={"output": "output-file", "replace": "input-dir"},
+)
 def flx_repack_cmd(
     file: Annotated[str, typer.Argument(help="Path to an existing U9 FLX archive")],
     output: Annotated[

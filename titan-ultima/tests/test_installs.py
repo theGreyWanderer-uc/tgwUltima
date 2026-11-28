@@ -226,6 +226,45 @@ def test_u7_games_are_kept_apart(workspace: Path) -> None:
     assert section["paths"]["gamedat"] == "gamedat/"
 
 
+def _mark(root: Path, *names: str) -> Path:
+    for name in names:
+        (root / "STATIC" / name).write_bytes(b"\0")
+    return root
+
+
+def test_u7_game_comes_from_files_only_that_game_ships(workspace: Path) -> None:
+    """A Serpent Isle copy is never a Black Gate install (and the reverse), whatever
+    the folder is called: SISPEECH.SPC / PAPERDOL.VGA vs ENDGAME.DAT / U7SPEECH.SPC."""
+    from titan.u7.install import detect_game
+
+    si = _mark(_u7(workspace / "copy one"), "SISPEECH.SPC", "PAPERDOL.VGA")
+    bg = _mark(_u7(workspace / "copy two"), "ENDGAME.DAT", "U7SPEECH.SPC")
+    assert (detect_game(si), detect_game(bg)) == ("SI", "BG")
+    assert _meta.discover_installs("u7bg", si) == []
+    assert _meta.discover_installs("u7si", bg) == []
+    assert [i.root for i in _meta.discover_installs("u7si", si)] == [si.absolute()]
+    # Files outrank a misleading folder name.
+    named_bg = _mark(_u7(workspace / "ultima7bg_copy"), "SISPEECH.SPC")
+    assert detect_game(named_bg) == "SI"
+    assert _meta.discover_installs("u7bg", named_bg) == []
+
+
+def test_u7_names_with_a_suffix_and_unknown_folders(workspace: Path) -> None:
+    from titan.u7.install import detect_game
+
+    # "si"/"bg" ending a word anywhere in the name, as in C:\Ultima\ultima7si_no_exult.
+    si = _u7(workspace / "ultima7si_no_exult")
+    bg = _u7(workspace / "ultima7bg_no_exult")
+    assert (detect_game(si), detect_game(bg)) == ("SI", "BG")
+    assert _meta.discover_installs("u7bg", si) == []
+    assert _meta.discover_installs("u7si", bg) == []
+    # Nothing says which game: choosing the folder chooses the game.
+    odd = _u7(workspace / "my copy")
+    assert detect_game(odd) is None
+    assert [i.root for i in _meta.discover_installs("u7bg", odd)] == [odd.absolute()]
+    assert [i.root for i in _meta.discover_installs("u7si", odd)] == [odd.absolute()]
+
+
 def test_install_functions_load_no_command_tree() -> None:
     code = (
         "import sys, titan._meta as m; "

@@ -644,6 +644,7 @@ def run_u8_save_browser(
 
 
 @meta(
+    category="saves",
     results=("files",),
     params={
         "compare": "save",

@@ -1019,7 +1019,7 @@ def _serve_dialogue(
 
 
 @dialogue_app.command("prepare")
-@meta(results=("files",), params={"workdir": "output-dir"})
+@meta(category="text", results=("files",), params={"workdir": "output-dir"})
 def prepare_cmd(
     usecode: Optional[Path] = typer.Option(
         None, "--usecode", help="Path to EUSECODE.FLX"
@@ -1058,7 +1058,7 @@ def prepare_cmd(
 
 
 @dialogue_app.command("copy")
-@meta(interactive=True, batch_with=("destination",))
+@meta(category="text", interactive=True, batch_with=("destination",))
 def copy_cmd(
     workdir: Optional[Path] = typer.Option(
         None, "--workdir", help="Runtime output directory"
@@ -1083,7 +1083,7 @@ def copy_cmd(
 
 
 @dialogue_app.command("validate")
-@meta(results=("text",), params={"workdir": "working-dir"})
+@meta(category="text", results=("text",), params={"workdir": "working-dir"})
 def validate_cmd(
     workdir: Optional[Path] = typer.Option(
         None, "--workdir", help="Runtime output directory"
@@ -1105,7 +1105,7 @@ def validate_cmd(
 
 
 @dialogue_app.command("launch")
-@meta(params={"workdir": "working-dir"})
+@meta(category="text", params={"workdir": "working-dir"})
 def launch_cmd(
     usecode: Optional[Path] = typer.Option(
         None, "--usecode", help="Path to EUSECODE.FLX"

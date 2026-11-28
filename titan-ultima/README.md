@@ -771,6 +771,9 @@ si_flx  = "<Exult install>/data/exult_si.flx"
 
 [uo.game]
 base    = "<Ultima Online Classic Client install>"
+
+[search]
+folders = ["D:/Old Games", "E:/Ultima"]   # optional: extra folders setup looks in
 ```
 
 Notes:
@@ -781,6 +784,15 @@ Notes:
   updating an existing file, it saves the original (including comments) as
   `<file>.bak`, or `<file>.bak.1`, etc. if a backup already exists. The updated
   TOML is reformatted; use `titan config --edit` to change existing settings.
+- Setup first asks the stores where games are installed: Steam (every library
+  in `libraryfolders.vdf` and the app manifests), GOG (the Windows registry
+  entries GOG Galaxy and the offline installers write, confirmed by each
+  game's `goggame-*.info`), EA's installer, the classic UO client registration
+  that freeshard installers such as UO Forever write, Windows' installed-programs
+  list, and Heroic and Lutris on Linux. Then it looks in each
+  `[search] folders` entry and in the usual install folders on every fixed
+  drive. Everything is read locally; nothing goes online. Setup says where it
+  found an install, for example `Found Ultima 9 (Steam): ...`.
 - Setup detects both language-folder and flat U8 layouts, and recognizes
   Roman-numeral U7 folder names such as `Ultima VII - Complete`.
 - U8 relative paths expand from the configured U8 install and language folder,
@@ -846,8 +858,10 @@ shape.to_pngs(palette)[0].save("shape_150_frame0.png")
 ## Game Files
 
 TITAN requires the original game files. You must own a legitimate copy of the
-games. `titan setup` checks common GOG, EA/Origin, manual, Pentagram, ScummVM,
-and Exult paths.
+games. `titan setup` reads where Steam, GOG, EA, Heroic, Lutris and Windows
+installers put them,
+then checks common GOG, EA/Origin, manual, Pentagram, ScummVM and Exult paths
+and any `[search] folders` you list.
 
 Typical GOG, EA/Origin, manual, ScummVM/Pentagram, and Exult folders are
 auto-detected where possible. If setup cannot find a game, enter the game's

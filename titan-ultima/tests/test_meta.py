@@ -16,6 +16,17 @@ from titan.cli import app
 SRC = Path(titan.__file__).parent
 
 
+def test_contract_matches_the_desktop_impact_log() -> None:
+    log = (SRC.parents[1] / "reference" / "desktop-impact-log.md").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"^Current contract: `CONTRACT = (\d+)`", log, re.MULTILINE)
+    assert match, (
+        "desktop-impact-log.md needs a 'Current contract: `CONTRACT = N`' line"
+    )
+    assert int(match.group(1)) == _meta.CONTRACT
+
+
 def test_meta_imports_without_typer_or_cli() -> None:
     code = (
         "import sys, titan._meta; "
@@ -112,6 +123,80 @@ def test_every_visible_command_is_tagged() -> None:
         if path not in tagged
     ]
     assert not missing, "commands without @meta: " + ", ".join(missing)
+
+
+def test_option_layout_names_real_parameters() -> None:
+    """``option_groups``/``option_alternatives``/``defaults`` name the command's own
+    parameters; alternatives hang off flags; an option sits under one parent at most."""
+    root = typer.main.get_command(app)
+    problems = []
+    for path, info in _meta.command_metas().items():
+        command = root
+        for name in path:
+            command = command.commands[name]
+        params = {p.name: p for p in command.params}
+        children = [
+            child
+            for table in (
+                info.option_groups,
+                info.option_alternatives,
+                info.option_sets,
+            )
+            for kids in table.values()
+            for child in kids
+        ]
+        named = [
+            *info.option_groups,
+            *info.option_alternatives,
+            *info.defaults,
+            *info.labels,
+            *children,
+        ]
+        problems += [
+            f"{' '.join(path)}: no parameter {n!r}" for n in named if n not in params
+        ]
+        problems += [
+            f"{' '.join(path)}: {flag!r} has alternatives but is not a flag"
+            for flag in info.option_alternatives
+            if flag in params and not params[flag].is_flag
+        ]
+        problems += [
+            f"{' '.join(path)}: {child!r} has two parents"
+            for child in set(children)
+            if children.count(child) > 1
+        ]
+    assert not problems, "\n".join(problems)
+
+
+def test_map_render_lays_out_its_options() -> None:
+    info = _meta.command_meta("u7", "map-render")
+    assert info.option_groups["grid"] == ("grid_size",)
+    assert "superchunk" in info.option_alternatives["full"]
+    assert info.defaults["full"] == "true" and info.defaults["resolution"] == "25"
+    assert info.labels["exclude"] == "Render exclusions"
+
+
+def test_every_visible_command_has_a_category() -> None:
+    """Front ends group commands by ``@meta(category=...)``; a new command needs one."""
+    ids = [cid for cid, _label in _meta.COMMAND_CATEGORIES]
+    assert len(ids) == len(set(ids))
+
+    def visible(command, path):
+        children = getattr(command, "commands", None)
+        if children:
+            for name, child in children.items():
+                if not child.hidden:
+                    yield from visible(child, (*path, name))
+        else:
+            yield path
+
+    metas = _meta.command_metas()
+    wrong = [
+        f"{' '.join(path)} ({metas[path].category!r})"
+        for path in visible(typer.main.get_command(app), ())
+        if path in metas and metas[path].category not in ids
+    ]
+    assert not wrong, "commands without a known category: " + ", ".join(wrong)
 
 
 def test_interactive_commands_are_tagged() -> None:

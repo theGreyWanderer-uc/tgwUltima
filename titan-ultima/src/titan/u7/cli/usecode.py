@@ -215,6 +215,7 @@ def cmd_usecode_disasm(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="text",
     results=("table", "text"),
     params={"format": "format", "output": "output-file", "file": "install-file"},
 )
@@ -265,6 +266,7 @@ def usecode_scan_intrinsic_cmd(
 
 
 @meta(
+    category="text",
     results=("text",),
     params={
         "output": "output-file",

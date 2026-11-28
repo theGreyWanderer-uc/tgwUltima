@@ -255,6 +255,7 @@ def run_u8_palette_browser(
 
 
 @meta(
+    category="palettes",
     results=("files",),
     params={"output": "output-dir", "source": "palette"},
     interactive=True,

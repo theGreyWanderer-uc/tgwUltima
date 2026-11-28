@@ -714,6 +714,7 @@ def cmd_shape_cycle_scan(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="graphics",
     results=("file",),
     params={
         "output": "output-file",
@@ -823,6 +824,7 @@ def shape_create_cmd(
 
 
 @meta(
+    category="graphics",
     params={
         "palette": "palette",
         "archive": "install-file",
@@ -879,6 +881,7 @@ def shape_browse_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={
         "output": "output-dir",
@@ -987,6 +990,7 @@ def shape_export_cmd(
 
 
 @meta(
+    category="graphics",
     results=("file",),
     params={"output": "output-file", "palette": "palette", "directory": "input-dir"},
 )
@@ -1054,6 +1058,7 @@ def shape_import_cmd(
 
 
 @meta(
+    category="graphics",
     results=("json", "table"),
     params={
         "format": "format",
@@ -1112,6 +1117,7 @@ def shape_frame_report_cmd(
 
 
 @meta(
+    category="graphics",
     results=("image",),
     params={
         "output": "output-file",
@@ -1216,6 +1222,7 @@ def shape_animate_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={
         "output": "output-dir",
@@ -1300,6 +1307,7 @@ def shape_batch_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files", "json", "table"),
     params={
         "format": "format",

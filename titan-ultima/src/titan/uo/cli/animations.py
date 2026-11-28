@@ -491,7 +491,7 @@ def cmd_animation_body_names_export(args: SimpleNamespace) -> int:
     return 1
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="models", results=("files",), params={"output": "output-dir"})
 def animation_export_cmd(
     client: Annotated[
         Optional[str],
@@ -532,7 +532,7 @@ def animation_export_cmd(
     raise SystemExit(cmd_animation_export(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="models", results=("files",), params={"output": "output-dir"})
 def animation_resolution_export_cmd(
     client: Annotated[
         Optional[str],
@@ -573,7 +573,7 @@ def animation_resolution_export_cmd(
     raise SystemExit(cmd_animation_resolution_export(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="models", results=("files",), params={"output": "output-dir"})
 def animation_body_names_export_cmd(
     client: Annotated[
         Optional[str],

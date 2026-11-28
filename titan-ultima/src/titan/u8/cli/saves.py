@@ -82,7 +82,7 @@ def cmd_save_extract(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",), params={"file": "save"})
+@meta(category="saves", results=("text",), params={"file": "save"})
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8 save file")],
 ) -> None:
@@ -90,7 +90,11 @@ def save_list_cmd(
     raise SystemExit(cmd_save_list(SimpleNamespace(file=file)))
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "save"})
+@meta(
+    category="saves",
+    results=("files",),
+    params={"output": "output-dir", "file": "save"},
+)
 def save_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to U8 save file")],
     output: Annotated[

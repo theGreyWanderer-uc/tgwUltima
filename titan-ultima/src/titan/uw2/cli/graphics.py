@@ -212,7 +212,11 @@ def cmd_terrain_export(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "palette"})
+@meta(
+    category="palettes",
+    results=("files",),
+    params={"output": "output-dir", "file": "palette"},
+)
 def palette_export_cmd(
     file: Annotated[str, typer.Argument(help="PALS.DAT path/name")] = "PALS.DAT",
     index: Annotated[int, typer.Option("--index", help="Palette index")] = 0,
@@ -239,6 +243,7 @@ def palette_export_cmd(
 
 
 @meta(
+    category="graphics",
     results=("json", "text"),
     params={
         "output_format": "format",
@@ -277,6 +282,7 @@ def shape_info_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={
         "output": "output-dir",
@@ -306,6 +312,7 @@ def shape_export_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={
         "output": "output-dir",
@@ -337,7 +344,7 @@ def shape_batch_cmd(
     raise SystemExit(cmd_shape_batch(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="graphics", results=("files",), params={"output": "output-dir"})
 def terrain_export_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output-dir", help="Terrain PNG directory")

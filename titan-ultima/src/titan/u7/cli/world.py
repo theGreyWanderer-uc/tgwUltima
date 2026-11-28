@@ -17,7 +17,11 @@ from titan._meta import meta
 from titan.errors import exit_code
 
 
-@meta(results=("json",), params={"output": "output-file", "file": "input-file"})
+@meta(
+    category="world",
+    results=("json",),
+    params={"output": "output-file", "file": "input-file"},
+)
 def ireg_dump_cmd(
     file: Annotated[str, typer.Argument(help="Raw U7IREG stream to inspect")],
     static: Annotated[
@@ -91,6 +95,7 @@ def ireg_dump_cmd(
 
 
 @meta(
+    category="world",
     results=("table", "text"),
     params={
         "format": "format",
@@ -380,6 +385,7 @@ def world_query_cmd(
 
 
 @meta(
+    category="world",
     results=("table", "text"),
     params={
         "format": "format",
@@ -657,6 +663,7 @@ def container_browse_cmd(
 
 
 @meta(
+    category="world",
     results=("table", "text"),
     params={"format": "format", "gamedat": "save", "output": "output-file"},
     interactive=True,

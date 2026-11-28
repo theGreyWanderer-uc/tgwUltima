@@ -13,7 +13,9 @@ import copy
 import os
 import sys
 from types import SimpleNamespace
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
+
+from titan._resolution import Resolution
 
 import typer
 
@@ -24,6 +26,9 @@ from titan.u8.map import U8MapRenderer, U8MapSampler
 from titan._meta import meta, resolve_save
 from titan._config import DEFAULT_OUTPUT, export_output
 from titan.errors import exit_code
+
+U8View = Literal[tuple(U8MapRenderer.PROJECTIONS)]  # type: ignore[valid-type]
+"""A U8 map projection, as a Choice (front ends list them)."""
 
 _NONFIXED_HELP = (
     "Save to overlay: slot number (3), file name (U8SAVE.003) or path; raw"
@@ -396,7 +401,9 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
     )
     print(f"Output size: {img.width} x {img.height}")
 
-    out_path = args.output or f"map_{map_num:03d}_sample_{scale}.png"
+    out_path = export_output(
+        args.output, "u8", "map-sample", f"map_{map_num:03d}_sample_{scale}.png"
+    )
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path)
     print(f"Saved: {out_path}")
@@ -578,9 +585,15 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         typeflag_path=typeflag_sort,
     )
     print(f"Canvas size: {img.width} x {img.height}")
+    from titan._resolution import resolution_factor, scaled, size_tag
+
+    factor = resolution_factor(getattr(args, "resolution", "full"))
+    img = scaled(img, factor)
 
     if out_path is None:
-        out_path = f"map_{map_num:03d}_{view}.png"
+        out_path = export_output(
+            None, "u8", "map-render", f"map_{map_num:03d}_{view}{size_tag(factor)}.png"
+        )
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path)
     print(f"Saved: {out_path}")
@@ -601,8 +614,12 @@ def _render_all_shared(
     grid: bool = False,
     grid_size: int = 2,
     typeflag_path: Optional[str] = None,
+    resolution: Optional[str] = None,
 ) -> int:
     """Shared logic for rendering multiple maps and/or views."""
+    from titan._resolution import resolution_factor, scaled, size_tag
+
+    factor = resolution_factor(resolution)
     pal = U8Palette.from_file(palette_path)
 
     with open(fixed_path, "rb") as f:
@@ -657,7 +674,8 @@ def _render_all_shared(
                 grid_size=grid_size,
                 typeflag_path=typeflag_path,
             )
-            out_name = f"map_{map_num:03d}_{view}.png"
+            img = scaled(img, factor)
+            out_name = f"map_{map_num:03d}_{view}{size_tag(factor)}.png"
             img.save(os.path.join(out_dir, out_name))
             done += 1
             print(f"  [{done}/{total}] {out_name}  ({img.width}x{img.height})")
@@ -736,12 +754,35 @@ def cmd_map_render_all(args: SimpleNamespace) -> int:
         grid=getattr(args, "grid", False),
         grid_size=getattr(args, "grid_size", 2),
         typeflag_path=typeflag_sort,
+        resolution=getattr(args, "resolution", "full"),
     )
 
 
 @meta(
+    category="world",
     results=("image",),
     params={"nonfixed": "save", "output": "output-file", "palette": "palette"},
+    option_groups={"grid": ("grid_size",)},
+    option_sets={
+        "Render exclusions": (
+            "no_fixed",
+            "no_solid",
+            "no_sea",
+            "no_land",
+            "no_occl",
+            "no_bag",
+            "no_damaging",
+            "no_noisy",
+            "no_draw",
+            "no_ignore",
+            "no_roof",
+            "no_transl",
+            "no_editor",
+            "no_explode",
+            "no_unk46",
+            "no_unk47",
+        )
+    },
 )
 def map_render_cmd(
     map_num: Annotated[
@@ -758,10 +799,11 @@ def map_render_cmd(
         Optional[str], typer.Option("--palette", "-p", help="Path to .pal palette file")
     ] = None,
     view: Annotated[
-        str, typer.Option("--view", "-V", help="Projection view")
+        U8View, typer.Option("--view", "-V", help="Projection view")
     ] = "iso_classic",
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output PNG path")
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
@@ -811,6 +853,10 @@ def map_render_cmd(
     grid_size: Annotated[
         int, typer.Option("--grid-size", help="Grid line thickness in pixels")
     ] = 2,
+    resolution: Annotated[
+        Resolution,
+        typer.Option("--resolution", help="Output size in percent of full resolution"),
+    ] = "25",
 ) -> None:
     """Render a single U8 map to PNG."""
     args = _build_map_namespace(
@@ -841,14 +887,37 @@ def map_render_cmd(
         no_unk47=no_unk47,
         grid=grid,
         grid_size=grid_size,
+        resolution=resolution,
         config=None,
     )
     raise SystemExit(cmd_map_render(args))
 
 
 @meta(
+    category="world",
     results=("files",),
     params={"nonfixed": "save", "output": "output-dir", "palette": "palette"},
+    option_groups={"grid": ("grid_size",)},
+    option_sets={
+        "Render exclusions": (
+            "no_fixed",
+            "no_solid",
+            "no_sea",
+            "no_land",
+            "no_occl",
+            "no_bag",
+            "no_damaging",
+            "no_noisy",
+            "no_draw",
+            "no_ignore",
+            "no_roof",
+            "no_transl",
+            "no_editor",
+            "no_explode",
+            "no_unk46",
+            "no_unk47",
+        )
+    },
 )
 def map_render_all_cmd(
     fixed: Annotated[Optional[str], typer.Option(help="Path to FIXED.DAT")] = None,
@@ -920,6 +989,10 @@ def map_render_all_cmd(
     grid_size: Annotated[
         int, typer.Option("--grid-size", help="Grid line thickness in pixels")
     ] = 2,
+    resolution: Annotated[
+        Resolution,
+        typer.Option("--resolution", help="Output size in percent of full resolution"),
+    ] = "25",
 ) -> None:
     """Render all non-empty maps in all (or selected) projection views."""
     output = export_output(output, "u8", "map-render-all")
@@ -957,6 +1030,7 @@ def map_render_all_cmd(
 
 
 @meta(
+    category="world",
     results=("image",),
     params={"nonfixed": "save", "output": "output-file", "palette": "palette"},
 )
@@ -978,7 +1052,8 @@ def map_sample_cmd(
         int, typer.Option("--scale", "-s", help="World units per output pixel")
     ] = 64,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output PNG path")
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     typeflag: Annotated[
         Optional[str], typer.Option(help="Path to TYPEFLAG.DAT")
@@ -1064,6 +1139,7 @@ def map_sample_cmd(
 
 
 @meta(
+    category="world",
     results=("files",),
     params={"nonfixed": "save", "output": "output-dir", "palette": "palette"},
 )

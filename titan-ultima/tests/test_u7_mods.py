@@ -89,6 +89,17 @@ def test_mods_are_found_from_descriptions_folders_and_exult(world) -> None:
     assert game.static == world.custom / "static"
 
 
+def test_an_exult_custom_game_belongs_to_the_part_its_data_is_from(world) -> None:
+    """A custom game built on Serpent Isle data (its STATIC has SI's paperdolls)
+    is SI's, not BG's; one whose data names neither part stays under both."""
+    si_config = {"u7si": {"game": {"base": world.base.as_posix()}}}
+    assert "mygame" in _by_key(world.config)  # neutral data: listed for both
+    assert "mygame" in {m.key for m in configured_u7_mods(si_config, "u7si")}
+    (world.custom / "static" / "paperdol.vga").write_bytes(b"\0")
+    assert "mygame" not in _by_key(world.config)
+    assert "mygame" in {m.key for m in configured_u7_mods(si_config, "u7si")}
+
+
 def test_configured_paths_win_and_missing_ones_are_reported(world) -> None:
     world.config["u7bg"]["mods"] = {
         "islefaq": {"paths": {"gamedat": "C:/no/such/gamedat", "saves": "elsewhere"}},

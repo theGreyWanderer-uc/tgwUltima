@@ -695,7 +695,7 @@ def cmd_save_schedules(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(params={"source": "save"}, interactive=True)
+@meta(category="saves", params={"source": "save"}, interactive=True)
 def save_browse_cmd(
     source: Annotated[
         Optional[str], typer.Argument(help="Initial save file or GAMEDAT folder")
@@ -711,6 +711,7 @@ def save_browse_cmd(
 
 
 @meta(
+    category="saves",
     results=("table", "text"),
     params={
         "format": "format",
@@ -810,7 +811,7 @@ def cmd_mods(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(params={"output_format": "format"}, results=("text", "json"))
+@meta(category="data", params={"output_format": "format"}, results=("text", "json"))
 def mods_cmd(
     game: Annotated[
         Literal["bg", "si"],
@@ -829,7 +830,11 @@ def mods_cmd(
     )
 
 
-@meta(params={"output_format": "format", "file": "save"}, results=("json", "text"))
+@meta(
+    category="saves",
+    params={"output_format": "format", "file": "save"},
+    results=("json", "text"),
+)
 def save_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     strict: Annotated[
@@ -855,7 +860,11 @@ def save_list_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "save"})
+@meta(
+    category="saves",
+    results=("files",),
+    params={"output": "output-dir", "file": "save"},
+)
 def save_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
@@ -890,6 +899,7 @@ def save_extract_cmd(
 
 
 @meta(
+    category="saves",
     results=("table", "text"),
     params={"format": "format", "output": "output-file", "file": "input-file"},
 )
@@ -918,7 +928,11 @@ def gflag_dump_cmd(
     )
 
 
-@meta(results=("text",), params={"output": "output-file", "file": "save"})
+@meta(
+    category="saves",
+    results=("text",),
+    params={"output": "output-file", "file": "save"},
+)
 def save_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to Exult .sav file")],
     output: Annotated[
@@ -938,6 +952,7 @@ def save_info_cmd(
 
 
 @meta(
+    category="saves",
     results=("table", "text"),
     params={"format": "format", "output": "output-file", "file": "save"},
 )
@@ -980,6 +995,7 @@ def save_npcs_cmd(
 
 
 @meta(
+    category="saves",
     results=("table", "text"),
     params={"format": "format", "output": "output-file", "file": "save"},
 )
@@ -1021,6 +1037,7 @@ def save_schedules_cmd(
 
 
 @meta(
+    category="saves",
     results=("file",),
     params={"output": "output-file", "file": "input-file", "plan": "input-file"},
 )

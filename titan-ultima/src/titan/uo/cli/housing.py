@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import numpy as np
 import typer
@@ -644,7 +644,9 @@ def cmd_house_capacity(args: SimpleNamespace) -> int:
 
 
 @meta(
-    results=("files",), params={"output": "output-dir", "server_profile": "input-file"}
+    category="world",
+    results=("files",),
+    params={"output": "output-dir", "server_profile": "input-file"},
 )
 def house_footprints_cmd(
     client: Annotated[
@@ -676,7 +678,7 @@ def house_footprints_cmd(
         ),
     ] = None,
     container: Annotated[
-        Optional[str],
+        Optional[Literal["auto", "uop", "mul"]],
         typer.Option(
             "--container",
             help="Multi source: auto, uop or mul. Default: the install's multis setting, else auto.",
@@ -692,6 +694,7 @@ def house_footprints_cmd(
 
 
 @meta(
+    category="world",
     results=("files",),
     params={
         "output": "output-dir",
@@ -762,7 +765,7 @@ def house_capacity_cmd(
         ),
     ] = None,
     container: Annotated[
-        Optional[str],
+        Optional[Literal["auto", "uop", "mul"]],
         typer.Option(
             "--container",
             help="Multi source: auto, uop or mul. Default: the install's multis setting.",

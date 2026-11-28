@@ -50,7 +50,7 @@ def _require_game_directory(explicit: str | None) -> Path:
 
 
 @uw1_app.command("texture-info")
-@meta(params={"output_format": "format"}, results=("json", "text"))
+@meta(category="graphics", params={"output_format": "format"}, results=("json", "text"))
 def texture_info_cmd(
     gamedir: Annotated[
         Optional[str],
@@ -86,7 +86,7 @@ def texture_info_cmd(
 
 
 @uw1_app.command("texture-export")
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="graphics", results=("files",), params={"output": "output-dir"})
 def texture_export_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output-dir", help="Texture export directory")

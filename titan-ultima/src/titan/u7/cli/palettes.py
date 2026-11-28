@@ -198,7 +198,12 @@ def cmd_palette_info(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(interactive=True, params={"file": "palette"}, resources={"file": "palette"})
+@meta(
+    category="palettes",
+    interactive=True,
+    params={"file": "palette"},
+    resources={"file": "palette"},
+)
 def palette_browse_cmd(
     file: Annotated[
         Optional[str],
@@ -222,6 +227,7 @@ def palette_browse_cmd(
 
 
 @meta(
+    category="palettes",
     results=("files",),
     params={"output": "output-dir", "file": "palette"},
     resources={"file": "palette"},
@@ -260,6 +266,7 @@ def palette_export_cmd(
 
 
 @meta(
+    category="palettes",
     results=("json", "table", "text"),
     params={"format": "format", "output": "output-file", "file": "palette"},
     resources={"file": "palette"},

@@ -46,6 +46,18 @@ def test_config_nonfixed_slot_and_name_resolve_in_save_folder(tmp_path: Path) ->
     assert resolve_u8_save(None, by_name) == saves / "U8SAVE.002"
 
 
+def test_old_setups_default_save_counts_only_when_it_exists(tmp_path: Path) -> None:
+    saves = tmp_path / "saves"
+    section = _section(tmp_path, savegame=saves.as_posix(), nonfixed="U8SAVE.000")
+    assert (
+        resolve_u8_save(None, section) is None
+    )  # missing: the base world, as it meant
+    saves.mkdir()
+    (saves / "U8SAVE.000").write_bytes(b"")
+    assert resolve_u8_save(None, section) == saves / "U8SAVE.000"
+    assert resolve_u8_save("0", section) == saves / "U8SAVE.000"  # asked for: as given
+
+
 def test_flag_wins_over_config_default(tmp_path: Path) -> None:
     saves = tmp_path / "saves"
     section = _section(tmp_path, savegame=saves.as_posix(), nonfixed="3")

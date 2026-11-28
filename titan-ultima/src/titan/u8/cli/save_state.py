@@ -26,6 +26,7 @@ from titan.errors import exit_code
 
 
 @meta(
+    category="saves",
     results=("json", "table", "text"),
     params={
         "output_format": "format",
@@ -107,6 +108,7 @@ def flags_dump_cmd(
 
 
 @meta(
+    category="saves",
     results=("json", "text"),
     params={"output_format": "format", "output": "output-file", "file": "save"},
 )
@@ -137,6 +139,7 @@ def save_info_cmd(
 
 
 @meta(
+    category="saves",
     results=("json", "text"),
     params={
         "output_format": "format",
@@ -195,6 +198,7 @@ def save_diff_cmd(
 
 
 @meta(
+    category="characters",
     results=("json", "table", "text"),
     params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
@@ -222,6 +226,7 @@ def avatar_dump_cmd(
 
 
 @meta(
+    category="saves",
     results=("json", "table", "text"),
     params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )
@@ -255,6 +260,7 @@ def gumps_dump_cmd(
 
 
 @meta(
+    category="saves",
     results=("json", "table", "text"),
     params={"output_format": "format", "output": "output-file", "file": "input-file"},
 )

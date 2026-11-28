@@ -16,6 +16,10 @@ from titan.u7.install import existing_path
 from titan.u7.shape_archive import discover_base_archive
 from titan.u7.target_picker import game_targets, select_map, select_target
 from titan.u7.map_wizard import (
+    FULL_WORLD,
+    RESOLUTIONS,
+    default_resolution,
+    render_file_name,
     resolve_palette,
     save_preview,
     validate_sources,
@@ -137,7 +141,11 @@ def _choose_map(args: SimpleNamespace) -> None:
 def _region(args: SimpleNamespace) -> None:
     while True:
         default = getattr(args, "wizard_scope", None) or (
-            "1" if args.superchunk is not None or args.chunk_x1 is None else "2"
+            "1"
+            if args.superchunk is not None
+            else "2"
+            if args.chunk_x1 is not None
+            else "3"  # nothing supplied: the whole world
         )
         scope = _menu(
             "Render area:",
@@ -192,14 +200,40 @@ def _region(args: SimpleNamespace) -> None:
         else:
             args.superchunk = None
             args.chunk_x0, args.chunk_y0, args.chunk_x1, args.chunk_y1 = 0, 0, 191, 191
-        width = (args.chunk_x1 - args.chunk_x0 + 1) * 128 + 128
-        height = (args.chunk_y1 - args.chunk_y0 + 1) * 128 + 128
-        print(f"  Image size: {width} x {height} pixels (includes border).")
-        if width * height > 16_000_000:
-            print(
-                f"  Full render: the RGBA canvas alone needs about {width * height * 4 / 1024**3:.2f} GiB; rendering uses additional memory."
-            )
+        _size(args)
         return
+
+
+_SIZES = {"1": "full", "2": "75", "3": "50", "4": "25"}
+
+
+def _size(args: SimpleNamespace) -> None:
+    """Choose the saved image's size; a full world defaults to 25%."""
+    full_width = (args.chunk_x1 - args.chunk_x0 + 1) * 128 + 128
+    full_height = (args.chunk_y1 - args.chunk_y0 + 1) * 128 + 128
+    supplied = getattr(args, "wizard_resolution", None)
+    default = supplied or default_resolution(
+        (args.chunk_x0, args.chunk_y0, args.chunk_x1, args.chunk_y1) == FULL_WORLD
+    )
+    labels = {
+        key: f"{'Full size' if value == 'full' else value + '%'} "
+        f"({round(full_width * RESOLUTIONS[value])} x "
+        f"{round(full_height * RESOLUTIONS[value])} px)"
+        for key, value in _SIZES.items()
+    }
+    key = _menu(
+        "Saved image size:",
+        labels,
+        next(key for key, value in _SIZES.items() if value == default),
+    )
+    args.wizard_resolution = _SIZES[key]
+    scale = RESOLUTIONS[args.wizard_resolution]
+    width, height = round(full_width * scale), round(full_height * scale)
+    print(f"  Image size: {width} x {height} pixels (includes border).")
+    if width * height > 16_000_000:
+        print(
+            f"  Large render: the RGBA canvas alone needs about {width * height * 4 / 1024**3:.2f} GiB; rendering uses additional memory."
+        )
 
 
 def _options(args: SimpleNamespace, target: ArchiveTarget) -> None:
@@ -356,9 +390,18 @@ def render_map(
 
 
 def _save(preview: Path, args: SimpleNamespace) -> bool:
-    default = (
-        args.output
-        or f"u7_{args.game}_map{args.map_num:02x}_c{args.chunk_x0}-{args.chunk_y0}_{args.view}.png"
+    size = getattr(args, "wizard_resolution", None) or "full"
+    resolution = RESOLUTIONS[size]
+    label = "full size" if size == "full" else f"{size}%"
+    default = args.output or render_file_name(
+        args.game,
+        args.map_num,
+        args.view,
+        (args.chunk_x0, args.chunk_y0, args.chunk_x1, args.chunk_y1),
+        superchunk=args.superchunk
+        if getattr(args, "wizard_scope", None) == "1"
+        else None,
+        resolution=resolution,
     )
     while True:
         output = Path(
@@ -379,21 +422,23 @@ def _save(preview: Path, args: SimpleNamespace) -> bool:
                 continue
             if (
                 ui.choice(
-                    f"  Render at full resolution and save to {output}? [y/N] ",
+                    f"  Render at {label} and save to {output}? [y/N] ",
                     ["Y", "N"],
                     "N",
                 )
                 != "Y"
             ):
                 return False
-            full = preview.parent / "full.png"
-            if not full.exists():
+            final = preview.parent / "final.png"
+            if not final.exists():
                 try:
-                    render_map(args, full, resolution=1.0, label="Full render")
+                    render_map(
+                        args, final, resolution=resolution, label=f"Render ({label})"
+                    )
                 except BaseException:
-                    full.unlink(missing_ok=True)
+                    final.unlink(missing_ok=True)
                     raise
-            save_preview(full, output, replace=replace)
+            save_preview(final, output, replace=replace)
             print(f"  Saved map: {output.resolve()}")
             return True
         except (OSError, ValueError, MemoryError) as error:
@@ -460,7 +505,7 @@ def run_wizard(defaults: SimpleNamespace) -> int:
                 action = _menu(
                     "Is this the correct map?",
                     {
-                        "Y": "Yes — continue to full render",
+                        "Y": "Yes — continue to the final render",
                         "R": "Change render settings",
                         "W": "Change game/world",
                         "Q": "Quit",

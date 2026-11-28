@@ -1022,7 +1022,7 @@ def cmd_areas_csv(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def highway_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
 ) -> None:
@@ -1030,7 +1030,7 @@ def highway_info_cmd(
     raise SystemExit(cmd_highway_info(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def highway_points_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
@@ -1046,7 +1046,7 @@ def highway_points_cmd(
     raise SystemExit(cmd_highway_points(SimpleNamespace(file=file, id=id, limit=limit)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def highway_routes_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/highway.dat")],
     id: Annotated[
@@ -1068,7 +1068,7 @@ def highway_routes_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def spaces_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
 ) -> None:
@@ -1076,7 +1076,7 @@ def spaces_info_cmd(
     raise SystemExit(cmd_spaces_info(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def spaces_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
     id: Annotated[int, typer.Argument(help="Space ID (the FLX entry index)")],
@@ -1085,7 +1085,7 @@ def spaces_show_cmd(
     raise SystemExit(cmd_spaces_show(SimpleNamespace(file=file, id=id)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def spaces_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/spaces.flx")],
     output: Annotated[
@@ -1101,7 +1101,7 @@ def spaces_csv_cmd(
     raise SystemExit(cmd_spaces_csv(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def treedat_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
     spaces: Annotated[
@@ -1113,7 +1113,7 @@ def treedat_info_cmd(
     raise SystemExit(cmd_treedat_info(SimpleNamespace(file=file, spaces=spaces)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def treedat_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
     id: Annotated[int, typer.Argument(help="Map ID (the FLX entry index)")],
@@ -1122,7 +1122,7 @@ def treedat_show_cmd(
     raise SystemExit(cmd_treedat_show(SimpleNamespace(file=file, id=id)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def treedat_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/treedat.flx")],
     output: Annotated[
@@ -1140,7 +1140,7 @@ def treedat_csv_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def areas_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
 ) -> None:
@@ -1148,7 +1148,7 @@ def areas_info_cmd(
     raise SystemExit(cmd_areas_info(SimpleNamespace(file=file)))
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def areas_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
     id: Annotated[int, typer.Argument(help="Gameplay-zone ID (FLX entry index)")],
@@ -1157,7 +1157,7 @@ def areas_show_cmd(
     raise SystemExit(cmd_areas_show(SimpleNamespace(file=file, id=id)))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="world", results=("files",), params={"output": "output-dir"})
 def areas_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/areas.flx")],
     output: Annotated[

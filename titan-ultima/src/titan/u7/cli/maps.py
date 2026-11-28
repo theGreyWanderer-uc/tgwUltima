@@ -15,12 +15,15 @@ import json
 import os
 import sys
 from pathlib import Path
+from enum import Enum
 from types import SimpleNamespace
 from typing import Annotated, Literal, Optional
 
 import typer
 
 from titan.u7 import install
+from titan.u7.cli import _common
+from titan.u7.zones import available_zone_profiles
 from titan._meta import ANY_PARAM, meta
 from titan._config import DEFAULT_OUTPUT, export_output
 from titan.errors import exit_code
@@ -184,17 +187,34 @@ def cmd_map_render(args: SimpleNamespace) -> int:
     highlight_labels = bool(getattr(args, "highlight_labels", True))
     ml = getattr(args, "max_lift", None)
     render_options = {}
-    if hasattr(args, "resolution"):
-        render_options["resolution"] = args.resolution
+    resolution = float(getattr(args, "resolution", 1.0) or 1.0)
+    if resolution != 1.0:
+        render_options["resolution"] = resolution
+    from titan.u7.map_wizard import render_file_name
+
+    # Default names carry the game and map so renders of different maps don't collide.
+    def default_name(chunks, superchunk=None) -> str:
+        return render_file_name(
+            game, map_num, view, chunks, superchunk=superchunk, resolution=resolution
+        )
+
     progress = getattr(args, "progress", None)
     if progress is not None:
         render_options["progress"] = progress
 
-    if args.superchunk is not None:
-        sc = args.superchunk
-        if sc < 0 or sc > 143:
-            print(f"ERROR: Superchunk must be 0–143 (got {sc})", file=sys.stderr)
-            return 1
+    superchunk = args.superchunk
+    if superchunk is not None and not 0 <= superchunk <= 143:
+        print(f"ERROR: Superchunk must be 0–143 (got {superchunk})", file=sys.stderr)
+        return 1
+    named_superchunk = None
+    if superchunk is not None and resolution != 1.0:
+        # Only the region renderer scales: draw the superchunk as its 16x16 chunks.
+        args.chunk_x0, args.chunk_y0 = (superchunk % 12) * 16, (superchunk // 12) * 16
+        args.chunk_x1, args.chunk_y1 = args.chunk_x0 + 15, args.chunk_y0 + 15
+        named_superchunk, superchunk = superchunk, None
+
+    if superchunk is not None:
+        sc = superchunk
 
         scx = sc % 12
         scy = sc // 12
@@ -219,7 +239,9 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             highlight_labels=highlight_labels,
         )
 
-        out_path = args.output or f"u7_sc{sc:02X}_{view}.png"
+        out_path = export_output(
+            args.output, "u7", "map-render", default_name((0, 0, 0, 0), superchunk=sc)
+        )
     else:
         cx0 = args.chunk_x0
         cy0 = args.chunk_y0
@@ -248,7 +270,12 @@ def cmd_map_render(args: SimpleNamespace) -> int:
             **render_options,
         )
 
-        out_path = args.output or f"u7_c{cx0}-{cy0}_c{cx1}-{cy1}_{view}.png"
+        out_path = export_output(
+            args.output,
+            "u7",
+            "map-render",
+            default_name((cx0, cy0, cx1, cy1), superchunk=named_superchunk),
+        )
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     if progress:
@@ -389,7 +416,12 @@ def cmd_map_render_json(args: SimpleNamespace) -> int:
                 grid=args.grid,
                 grid_size=args.grid_size,
             )
-            output = args.output or f"u7_json_sc{args.superchunk:02X}.png"
+            output = export_output(
+                args.output,
+                "u7",
+                "map-render-json",
+                f"u7_json_sc{args.superchunk:02X}.png",
+            )
             os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
             image.save(output)
             print(f"Output: {image.width}x{image.height} -> {output}")
@@ -529,7 +561,9 @@ def cmd_map_sample(args: SimpleNamespace) -> int:
         exclude_shapes=exclude,
     )
 
-    out_path = args.output or f"u7_minimap_s{scale}.png"
+    out_path = export_output(
+        args.output, "u7", "map-sample", f"u7_minimap_s{scale}.png"
+    )
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     img.save(out_path)
     print(f"Output: {img.width}×{img.height} -> {out_path}")
@@ -552,8 +586,23 @@ _EXCLUDE_FLAG_CHOICES = [
     "no_building",
 ]
 
+ExcludeFlag = Enum(
+    "ExcludeFlag", {name: name for name in _EXCLUDE_FLAG_CHOICES}, type=str
+)
+"""``--exclude``'s TFA flags as a Choice: Typer takes a list of an Enum, not of a
+Literal, and front ends list its values."""
+
+
+def _flag_names(flags) -> list[str] | None:
+    """``--exclude`` values as the plain flag names the commands use."""
+    return [getattr(flag, "value", flag) for flag in flags] if flags else None
+
+
+ZoneProfile = Literal[tuple(available_zone_profiles())]  # type: ignore[valid-type]
+
 
 @meta(
+    category="world",
     results=("files",),
     params={
         "output_root": "output-dir",
@@ -636,7 +685,7 @@ def map_create_cmd(
     )
 
 
-@meta(results=("json",), params={"output": "output-file"})
+@meta(category="world", results=("json",), params={"output": "output-file"})
 def map_export_json_cmd(
     static: Annotated[
         Optional[str],
@@ -684,7 +733,9 @@ def map_export_json_cmd(
     ] = False,
 ) -> None:
     """Export a complete U7 map to universal JSON."""
-    output = export_output(output, "u7", "map-export-json", "u7_map.json")
+    output = export_output(
+        output, "u7", "map-export-json", f"u7_{game}_map{map_num:02x}.json"
+    )
     raise SystemExit(
         cmd_map_export_json(
             SimpleNamespace(
@@ -703,6 +754,7 @@ def map_export_json_cmd(
 
 
 @meta(
+    category="world",
     results=("image",),
     params={
         "output": "output-file",
@@ -795,15 +847,34 @@ def map_render_json_cmd(
 
 
 @meta(
+    category="world",
     results=("image",),
     params={
         "gamedat": "save",
         "output": "output-file",
         "palette": "palette",
         "map_root": "install-dir",
+        "mod": "mod",
     },
     interactive=True,
     batch_with=(ANY_PARAM,),
+    option_groups={
+        "full": ("resolution",),
+        "grid": ("grid_size",),
+        "highlight_tile_rect": (
+            "highlight_width",
+            "highlight_lift",
+            "highlight_fill_alpha",
+            "highlight_labels",
+        ),
+        "zone_profile": ("zone_id", "all_zones"),
+    },
+    option_alternatives={
+        "full": ("superchunk", "chunk_x0", "chunk_y0", "chunk_x1", "chunk_y1"),
+    },
+    # No area renders the full world, at 25%.
+    defaults={"full": "true", "resolution": "25", "view": "classic"},
+    labels={"exclude": "Render exclusions"},
 )
 def map_render_cmd(
     ctx: typer.Context,
@@ -871,11 +942,11 @@ def map_render_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output PNG path"),
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     view: Annotated[
-        Optional[str],
-        typer.Option("--view", help="Projection view: classic, flat, steep"),
+        Optional[Literal["classic", "flat", "steep"]],
+        typer.Option("--view", help="Projection view (default: classic)"),
     ] = None,
     gamedat: Annotated[
         Optional[str],
@@ -905,12 +976,8 @@ def map_render_cmd(
         ),
     ] = False,
     exclude: Annotated[
-        Optional[list[str]],
-        typer.Option(
-            "--exclude",
-            help=f"Exclude shapes by TFA flag. "
-            f"Repeatable. Choices: {', '.join(_EXCLUDE_FLAG_CHOICES)}",
-        ),
+        Optional[list[ExcludeFlag]],
+        typer.Option("--exclude", help="Exclude shapes by TFA flag (repeatable)"),
     ] = None,
     max_lift: Annotated[
         Optional[int],
@@ -960,13 +1027,10 @@ def map_render_cmd(
         ),
     ] = True,
     zone_profile: Annotated[
-        Optional[str],
+        Optional[ZoneProfile],
         typer.Option(
             "--zone-profile",
-            help=(
-                "Load named zone profile overlay data and convert it to "
-                "highlight rectangles (e.g. si_zones, bg_zones)"
-            ),
+            help="Load named zone profile overlay data and convert it to highlight rectangles",
         ),
     ] = None,
     zone_id: Annotated[
@@ -999,6 +1063,17 @@ def map_render_cmd(
             ),
         ),
     ] = 0,
+    resolution: Annotated[
+        Optional[Literal["full", "75", "50", "25"]],
+        typer.Option(
+            "--resolution",
+            help=(
+                "Output size in percent of full resolution "
+                "(default: 25 for the full world, which is also what renders "
+                "with no area set; otherwise full)"
+            ),
+        ),
+    ] = None,
     interactive: Annotated[
         bool,
         typer.Option(
@@ -1007,25 +1082,56 @@ def map_render_cmd(
             help="Open the map-render wizard using supplied options as defaults",
         ),
     ] = False,
+    mod: Annotated[
+        Optional[str],
+        typer.Option(
+            "--mod",
+            help="Render this mod's or Exult game's map: its own map folder (patch first) "
+            "and art overrides; see `titan u7 mods`",
+            autocompletion=_common.complete_mod,
+        ),
+    ] = None,
 ) -> None:
     """Render a U7 map to PNG. With no render options, open the guided wizard."""
     from titan.u7.cli._common import gamedat_option
 
     gamedat = gamedat_option(gamedat)  # a save file is unpacked to a GAMEDAT folder
+    patch_dir: str | None = None
+    if mod:
+        from titan._config import get_config
+        from titan.u7.map_list import mod_map_root
+        from titan.u7.mods import configured_u7_mods, find_u7_mod
+
+        game_id = "u7si" if game == "si" else "u7bg"
+        found = find_u7_mod(configured_u7_mods(get_config() or {}, game_id), mod)
+        if found is None:
+            print(_common.mod_gamedat_error(game, mod), file=sys.stderr)
+            raise SystemExit(1)
+        if map_root is None:
+            root = mod_map_root(found, map_num)
+            map_root = str(root) if root is not None else None
+        if static is None and found.kind == "exult-game" and found.static is not None:
+            static = str(found.static)
+        if found.patch is not None:
+            patch_dir = str(found.patch)
     wizard_mode = interactive or not any(
         source is not None and source.name == "COMMANDLINE"
         for name in ctx.params
         if name not in {"game", "interactive"}
         for source in [ctx.get_parameter_source(name)]
     )
+    from titan.u7.map_wizard import RESOLUTIONS, default_resolution
+
+    supplied_resolution = resolution  # the wizard asks for the size when this is None
+    if not wizard_mode and superchunk is None and chunk_x0 is None and not full:
+        print(
+            "No area given (--superchunk, --cx0/--cy0 or --full): rendering the full world."
+        )
+        full = True
     if full:
         chunk_x0, chunk_y0, chunk_x1, chunk_y1 = 0, 0, 191, 191
-    if not wizard_mode and superchunk is None and chunk_x0 is None:
-        print(
-            "ERROR: Specify --superchunk N, --full, or --cx0/--cy0 chunk range.",
-            file=sys.stderr,
-        )
-        raise SystemExit(1)
+    if resolution is None:
+        resolution = default_resolution(full)
 
     sc_int: int | None = None
     if superchunk is not None:
@@ -1094,7 +1200,7 @@ def map_render_cmd(
         gamedat=gamedat,
         grid=grid,
         grid_size=grid_size,
-        exclude_flags=exclude,
+        exclude_flags=_flag_names(exclude),
         max_lift=max_lift,
         map_num=map_num,
         highlight_rects=parsed_highlights,
@@ -1103,6 +1209,14 @@ def map_render_cmd(
         highlight_fill_alpha=highlight_fill_alpha,
         highlight_labels=highlight_labels,
     )
+    if wizard_mode:  # the wizard previews small and asks for the saved size
+        render_args.wizard_resolution = supplied_resolution
+    else:
+        render_args.resolution = RESOLUTIONS[resolution]
+    if patch_dir is not None:
+        render_args.patch_dir = (
+            patch_dir  # the mod's art overrides (cmd_map_render reads it)
+        )
     if wizard_mode:
         from titan.u7.map_wizard_ui import run_wizard
 
@@ -1110,7 +1224,12 @@ def map_render_cmd(
     raise SystemExit(cmd_map_render(render_args))
 
 
-@meta(results=("image",), params={"output": "output-file", "palette": "palette"})
+@meta(
+    category="world",
+    results=("image",),
+    params={"output": "output-file", "palette": "palette"},
+    labels={"exclude": "Render exclusions"},
+)
 def map_sample_cmd(
     static: Annotated[
         Optional[str],
@@ -1132,7 +1251,7 @@ def map_sample_cmd(
     ] = None,
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output PNG path"),
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     scale: Annotated[
         int,
@@ -1157,7 +1276,7 @@ def map_sample_cmd(
         typer.Option("--sc", help="Only sample these superchunks (repeatable)"),
     ] = None,
     exclude: Annotated[
-        Optional[list[str]],
+        Optional[list[ExcludeFlag]],
         typer.Option("--exclude", help="Exclude shapes by TFA flag (repeatable)"),
     ] = None,
 ) -> None:
@@ -1173,13 +1292,14 @@ def map_sample_cmd(
                 grid=grid,
                 grid_size=grid_size,
                 superchunks=superchunks,
-                exclude_flags=exclude,
+                exclude_flags=_flag_names(exclude),
             )
         )
     )
 
 
 @meta(
+    category="world",
     results=("files",),
     params={
         "gamedat": "save",

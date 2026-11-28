@@ -482,6 +482,7 @@ def run_u8_world_search(
 
 def _make_u8_search_command(eggs: bool) -> Callable[..., None]:
     @meta(
+        category="world",
         results=("files", "json", "table", "text"),
         params={
             "output_format": "format",

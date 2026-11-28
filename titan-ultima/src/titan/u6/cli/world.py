@@ -348,7 +348,7 @@ def cmd_schedule_dump(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def object_list_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
@@ -373,7 +373,7 @@ def object_list_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="world", results=("text",))
 def egg_list_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
@@ -398,7 +398,7 @@ def egg_list_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="characters", results=("text",))
 def actor_list_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
@@ -414,7 +414,7 @@ def actor_list_cmd(
     raise SystemExit(cmd_actor_list(SimpleNamespace(gamedir=gamedir, all=all)))
 
 
-@meta(results=("text",))
+@meta(category="saves", results=("text",))
 def gamestate_dump_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
@@ -424,7 +424,7 @@ def gamestate_dump_cmd(
     raise SystemExit(cmd_gamestate_dump(SimpleNamespace(gamedir=gamedir)))
 
 
-@meta(results=("text",), params={"source": "input-dir"})
+@meta(category="saves", results=("text",), params={"source": "input-dir"})
 def flags_dump_cmd(
     source: Annotated[
         str,
@@ -441,7 +441,11 @@ def flags_dump_cmd(
     raise SystemExit(cmd_flags_dump(SimpleNamespace(source=source, all=all)))
 
 
-@meta(results=("text",), params={"source_a": "input-dir", "source_b": "input-dir"})
+@meta(
+    category="saves",
+    results=("text",),
+    params={"source_a": "input-dir", "source_b": "input-dir"},
+)
 def flags_compare_cmd(
     source_a: Annotated[str, typer.Argument(help="First gamedir or SAVEGAME folder")],
     source_b: Annotated[str, typer.Argument(help="Second gamedir or SAVEGAME folder")],
@@ -452,7 +456,11 @@ def flags_compare_cmd(
     )
 
 
-@meta(results=("file",), params={"output": "output-file", "savegame": "save"})
+@meta(
+    category="saves",
+    results=("file",),
+    params={"output": "output-file", "savegame": "save"},
+)
 def flags_set_cmd(
     savegame: Annotated[
         str, typer.Argument(help="A save's SAVEGAME folder (containing OBJLIST)")
@@ -511,6 +519,7 @@ def flags_set_cmd(
 
 
 @meta(
+    category="characters",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "schedule"},

@@ -784,6 +784,7 @@ def browse_u8_npc_shape(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={
         "output": "output-dir",

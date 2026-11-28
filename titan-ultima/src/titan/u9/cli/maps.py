@@ -46,7 +46,7 @@ from titan.u9.terrain import U9TerrainError
 from titan.u9.types_dat import U9TypesDat, U9TypesDatError
 from titan.u9.cli import _common
 from titan._meta import meta
-from titan._config import export_output
+from titan._config import DEFAULT_OUTPUT, export_output
 from titan.errors import exit_code
 
 
@@ -367,7 +367,11 @@ def cmd_map_render(args: SimpleNamespace) -> int:
         print(f"ERROR: {error}", file=sys.stderr)
         return exit_code(error)
 
-    output = Path(args.output) if args.output else Path(f"{args.terrain}_map.png")
+    output = Path(
+        export_output(
+            args.output, "u9", "map-render", f"{Path(args.terrain).name}_map.png"
+        )
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     result.image.save(output)
     metadata = Path(args.metadata) if args.metadata else output.with_suffix(".json")
@@ -546,7 +550,11 @@ def cmd_map_export_glb(args: SimpleNamespace) -> int:
                 "TYPES.DAT was not found beside the terrain file; pass --types"
             )
 
-    output = Path(args.output) if args.output else Path(f"{args.terrain}_map.glb")
+    output = Path(
+        export_output(
+            args.output, "u9", "map-export-glb", f"{Path(args.terrain).name}_map.glb"
+        )
+    )
     try:
         scene = U9RegionScene.from_files(
             args.terrain,
@@ -742,6 +750,7 @@ def cmd_map_render_3d(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="world",
     results=("files",),
     params={"output": "output-dir", "palette": "palette", "metadata": "output-file"},
 )
@@ -813,7 +822,7 @@ def map_atlas_cmd(
             "--resolution",
             help="2D scale preset: full=28, 75=21, 50=14, 25=7 pixels/cell",
         ),
-    ] = "full",
+    ] = "25",
     pixels_per_cell: Annotated[
         Optional[int],
         typer.Option(
@@ -915,7 +924,7 @@ def map_atlas_cmd(
         ),
     ] = False,
     object_footprint_source: Annotated[
-        str,
+        Literal["all", "fixed", "nonfixed"],
         typer.Option(
             "--object-source", help="Object source filter: all, fixed, or nonfixed"
         ),
@@ -929,7 +938,7 @@ def map_atlas_cmd(
         typer.Option("--object-model", help="sappear model ID filter (repeatable)"),
     ] = None,
     object_footprint_style: Annotated[
-        str,
+        Literal["outline", "fill"],
         typer.Option(
             "--object-footprint-style", help="Footprint style: outline or fill"
         ),
@@ -1026,8 +1035,24 @@ def map_atlas_cmd(
 
 
 @meta(
+    category="world",
     results=("image",),
     params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
+    option_groups={
+        "hillshade": ("hillshade_strength",),
+        "water": ("water_frame",),
+        "fixed_markers": ("fixed_marker_radius",),
+        "nonfixed_markers": ("nonfixed_marker_radius", "include_unlinked_nonfixed"),
+        "objects": ("object_lod",),
+        "object_footprints": (
+            "object_footprint_source",
+            "object_type_ids",
+            "object_model_ids",
+            "object_footprint_style",
+            "object_legend",
+        ),
+    },
+    option_sets={"Detail": ("pixels_per_cell",)},
 )
 def map_render_cmd(
     terrain: Annotated[
@@ -1076,7 +1101,8 @@ def map_render_cmd(
         typer.Option("--sdinfo", help="Matching sdInfo*.flx (auto-discovered)"),
     ] = None,
     output: Annotated[
-        Optional[str], typer.Option("-o", "--output", help="Output PNG path")
+        Optional[str],
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     metadata: Annotated[
         Optional[str],
@@ -1088,7 +1114,7 @@ def map_render_cmd(
             "--resolution",
             help="2D scale preset: full=28, 75=21, 50=14, 25=7 pixels/cell",
         ),
-    ] = "full",
+    ] = "25",
     pixels_per_cell: Annotated[
         Optional[int],
         typer.Option(
@@ -1184,7 +1210,7 @@ def map_render_cmd(
         ),
     ] = False,
     object_footprint_source: Annotated[
-        str,
+        Literal["all", "fixed", "nonfixed"],
         typer.Option(
             "--object-source",
             help="Object source filter: all, fixed, or nonfixed",
@@ -1205,7 +1231,7 @@ def map_render_cmd(
         ),
     ] = None,
     object_footprint_style: Annotated[
-        str,
+        Literal["outline", "fill"],
         typer.Option(
             "--object-footprint-style",
             help="Footprint polygon style: outline or fill",
@@ -1266,6 +1292,7 @@ def map_render_cmd(
 
 
 @meta(
+    category="world",
     results=("file",),
     params={"output": "output-file", "palette": "palette", "metadata": "output-file"},
 )
@@ -1406,7 +1433,11 @@ def map_export_glb_cmd(
     )
 
 
-@meta(results=("image",), params={"output": "output-file", "metadata": "output-file"})
+@meta(
+    category="world",
+    results=("image",),
+    params={"output": "output-file", "metadata": "output-file"},
+)
 def map_render_3d_cmd(
     scene: Annotated[
         str,
@@ -1414,7 +1445,7 @@ def map_render_3d_cmd(
     ],
     output: Annotated[
         Optional[str],
-        typer.Option("-o", "--output", help="Output PNG path"),
+        typer.Option("-o", "--output", help="Output PNG path" + DEFAULT_OUTPUT),
     ] = None,
     metadata: Annotated[
         Optional[str],

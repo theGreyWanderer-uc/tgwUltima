@@ -10,7 +10,7 @@ from titan._meta import configured_install, meta
 from titan.errors import exit_code
 
 
-@meta(results=("json",), params={"output": "output-file"})
+@meta(category="world", results=("json",), params={"output": "output-file"})
 def places_export_cmd(
     static: Annotated[
         Optional[str],

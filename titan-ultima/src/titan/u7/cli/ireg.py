@@ -30,6 +30,7 @@ from titan.errors import exit_code
 
 
 @meta(
+    category="world",
     results=("file",),
     params={"output": "output-file", "file": "input-file", "edits": "input-file"},
 )
@@ -142,7 +143,11 @@ def load_ireg_cli_context(
     return load_ireg_context(params, load_query_metadata(params)[0])
 
 
-@meta(results=("json",), params={"output": "output-file", "file": "input-file"})
+@meta(
+    category="world",
+    results=("json",),
+    params={"output": "output-file", "file": "input-file"},
+)
 def ireg_tree_cmd(
     file: Annotated[
         str,
@@ -202,7 +207,11 @@ def ireg_tree_cmd(
         raise SystemExit(exit_code(error)) from error
 
 
-@meta(results=("file",), params={"output": "output-file", "file": "input-file"})
+@meta(
+    category="world",
+    results=("file",),
+    params={"output": "output-file", "file": "input-file"},
+)
 def ireg_tree_edit_cmd(
     file: Annotated[
         str,

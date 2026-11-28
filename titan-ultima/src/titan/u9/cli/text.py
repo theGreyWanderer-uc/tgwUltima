@@ -524,7 +524,7 @@ def cmd_books_export(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def text_list_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
@@ -550,7 +550,7 @@ def text_list_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def text_blocks_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.flx")],
     by_size: Annotated[
@@ -566,7 +566,7 @@ def text_blocks_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def text_search_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
@@ -589,7 +589,7 @@ def text_search_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="text", results=("table",), params={"output": "output-file"})
 def text_export_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to static/text.flx or static/misctext.flx")
@@ -605,7 +605,11 @@ def text_export_cmd(
     raise SystemExit(cmd_text_export(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("file",), params={"output": "output-file", "csv_path": "input-file"})
+@meta(
+    category="text",
+    results=("file",),
+    params={"output": "output-file", "csv_path": "input-file"},
+)
 def text_import_cmd(
     file: Annotated[
         str,
@@ -629,7 +633,7 @@ def text_import_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def text_keys_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
     text: Annotated[
@@ -664,7 +668,7 @@ def text_keys_info_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def text_key_lookup_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
     key: Annotated[str, typer.Argument(help="Full key, e.g. 'Avatar : Farewell.'")],
@@ -683,7 +687,7 @@ def text_key_lookup_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="text", results=("table",), params={"output": "output-file"})
 def text_keys_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/text.dat")],
     text: Annotated[
@@ -726,7 +730,7 @@ def text_keys_export_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def books_list_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     by_size: Annotated[
@@ -742,7 +746,7 @@ def books_list_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def books_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     id: Annotated[
@@ -757,7 +761,7 @@ def books_show_cmd(
     raise SystemExit(cmd_books_show(SimpleNamespace(file=file, id=id, name=name)))
 
 
-@meta(results=("text",))
+@meta(category="text", results=("text",))
 def books_search_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     needle: Annotated[str, typer.Argument(help="Substring to look for")],
@@ -778,7 +782,7 @@ def books_search_cmd(
     )
 
 
-@meta(results=("table",), params={"output": "output-file"})
+@meta(category="text", results=("table",), params={"output": "output-file"})
 def books_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/BOOKS-EN.FLX")],
     output: Annotated[

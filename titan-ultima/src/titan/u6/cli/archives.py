@@ -118,7 +118,11 @@ def cmd_lib_extract_all(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="archives",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def lzw_decompress_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 LZW-compressed file")],
     output: Annotated[
@@ -129,7 +133,7 @@ def lzw_decompress_cmd(
     raise SystemExit(cmd_lzw_decompress(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("text",), params={"file": "install-file"})
+@meta(category="archives", results=("text",), params={"file": "install-file"})
 def lib_list_cmd(
     file: Annotated[
         str, typer.Argument(help="Path to a U6 library file (e.g. CONVERSE.A)")
@@ -152,7 +156,11 @@ def lib_list_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="archives",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def lib_extract_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
     item: Annotated[int, typer.Argument(help="Item index to extract")],
@@ -181,7 +189,11 @@ def lib_extract_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "file": "install-file"})
+@meta(
+    category="archives",
+    results=("files",),
+    params={"output": "output-dir", "file": "install-file"},
+)
 def lib_extract_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to a U6 library file")],
     entry_size: Annotated[

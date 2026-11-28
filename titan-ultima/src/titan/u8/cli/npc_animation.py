@@ -20,6 +20,7 @@ from titan.errors import exit_code
 
 
 @meta(
+    category="models",
     results=("files",),
     params={
         "output": "output-dir",

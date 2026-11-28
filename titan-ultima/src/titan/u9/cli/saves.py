@@ -30,7 +30,7 @@ def cmd_save_check(args: SimpleNamespace) -> int:
     return {"PASS": 0, "WARN": 1, "ERROR": 2, "FATAL": 3}[report.overall]
 
 
-@meta(results=("text", "json"), params={"json_output": "output-file"})
+@meta(category="saves", results=("text", "json"), params={"json_output": "output-file"})
 @renamed_options({"--json": "--output"})
 def save_check_cmd(
     target: Annotated[

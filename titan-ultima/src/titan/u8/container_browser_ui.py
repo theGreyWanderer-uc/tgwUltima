@@ -373,6 +373,7 @@ def run_u8_container_browser(
 
 
 @meta(
+    category="world",
     results=("files",),
     params={
         "output": "output-dir",

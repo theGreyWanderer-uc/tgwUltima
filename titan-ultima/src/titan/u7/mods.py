@@ -164,7 +164,16 @@ def _folder(folder: Path) -> dict:
     }
 
 
-def _exult_games(cfg_root: ET.Element, cfg_path: Path) -> list[dict]:
+def _exult_games(
+    cfg_root: ET.Element, cfg_path: Path, game: str | None = None
+) -> list[dict]:
+    """Exult's custom games (``exult.cfg`` ``<disk><game>`` entries other than
+    the two retail ones). With *game* (``"BG"``/``"SI"``), only those built on
+    it: a custom game's own STATIC data says which (Serpent Isle's paperdolls
+    and speech vs the Black Gate's endgame and speech); one whose data says
+    neither is kept for both."""
+    from titan.u7.install import content_game
+
     games = []
     for entry in cfg_root.findall("disk/game/*"):
         if entry.tag in {"blackgate", "serpentisle"}:
@@ -174,6 +183,9 @@ def _exult_games(cfg_root: ET.Element, cfg_path: Path) -> list[dict]:
             continue
         root = Path(base_path).expanduser()
         if not root.is_dir():
+            continue
+        built_on = content_game(root)
+        if game and built_on and built_on != game.upper():
             continue
         static = resolve_config_path(entry.findtext("static_path") or "static", root)
         patch = resolve_config_path(entry.findtext("patch") or "patch", root)
@@ -275,7 +287,7 @@ def discover_u7_mods(
             cfg_root = _read_config_xml(exult_cfg_path)
         except (OSError, ValueError, ET.ParseError):
             cfg_root = ET.Element("config")
-        for item in _exult_games(cfg_root, exult_cfg_path):
+        for item in _exult_games(cfg_root, exult_cfg_path, game):
             found.setdefault(item["key"].casefold(), item)
 
     settings = {

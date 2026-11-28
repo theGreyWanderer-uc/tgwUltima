@@ -141,6 +141,7 @@ def cmd_map_create(args: SimpleNamespace) -> int:
 
 @u3_app.command("map-create")
 @meta(
+    category="world",
     params={
         "palette": "palette",
         "si_source_json": "input-file",
@@ -149,7 +150,7 @@ def cmd_map_create(args: SimpleNamespace) -> int:
         "gamedat_root": "input-dir",
         "static": "install-dir",
         "render_output": "output-file",
-    }
+    },
 )
 def map_create_cmd(
     si_source_json: Annotated[

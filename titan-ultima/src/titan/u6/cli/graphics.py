@@ -184,6 +184,7 @@ def cmd_font_export(args: SimpleNamespace) -> int:
 
 
 @meta(
+    category="data",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "tileflag"},
@@ -199,6 +200,7 @@ def tileflag_dump_cmd(
 
 
 @meta(
+    category="palettes",
     results=("files",),
     params={"output": "output-dir", "file": "palette"},
     resources={"file": "palette"},
@@ -213,7 +215,11 @@ def palette_export_cmd(
     raise SystemExit(cmd_palette_export(SimpleNamespace(file=file, output=output)))
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="graphics",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def tile_export_cmd(
     tile_num: Annotated[
         str, typer.Argument(help="Tile number, decimal or 0x-hex (0-0x7FF)")
@@ -242,7 +248,11 @@ def tile_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="graphics",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def tile_export_all_cmd(
     gamedir: Annotated[
         Optional[str], typer.Option("-g", "--game-dir", help="U6 game directory")
@@ -279,6 +289,7 @@ def tile_export_all_cmd(
 
 
 @meta(
+    category="graphics",
     results=("files",),
     params={"output": "output-dir", "file": "install-file"},
     resources={"file": "font"},

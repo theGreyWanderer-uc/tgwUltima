@@ -74,7 +74,7 @@ def cmd_texture_usage(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="graphics", results=("files",), params={"output": "output-dir"})
 def texture_catalog_cmd(
     output: Annotated[
         str,
@@ -86,7 +86,7 @@ def texture_catalog_cmd(
     raise SystemExit(cmd_texture_catalog(SimpleNamespace(**locals())))
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="graphics", results=("files",), params={"output": "output-dir"})
 def texture_usage_cmd(
     output: Annotated[
         str, typer.Option("-o", "--output-dir", help="Usage JSON directory")

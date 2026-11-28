@@ -122,6 +122,24 @@ CLI flags always win over config values. If a required path is missing from
 both the command line and the config, TITAN prints an error pointing to
 `titan setup`.
 
+Whole-map renderers share `--resolution full|75|50|25`: the output size in percent
+of full resolution. A whole map defaults to `25` (full-size maps run to tens of
+thousands of pixels); a crop (`--region`, a U7 superchunk) defaults to `full`. File
+names say the size (`map_004_iso_classic_25pct.png`). It applies to `u6`, `md`,
+`u7` and `u8 map-render`, `u8 map-render-all`, `uw2 map-render`, `uo map-export`,
+and `u9 map-render`/`map-atlas` (whose presets are pixels per cell). The minimap
+samplers keep their `--scale`, and fixed-size views their `--size`.
+
+`titan config` ends with any problems in titan's config (a copy that shadows
+your main config, entries only an older setup wrote, paths that no longer
+resolve), each with its fix. `titan config --fix` applies the automatic ones:
+a shadowing copy is renamed to `.old`, an edited file is backed up to `.bak`
+first, and nothing is deleted.
+
+`titan setup` also extracts what U8's maps read (`U8SHAPES.FLX` into `shapes/`,
+`GLOB.FLX` into `globs/`) into titan's data folder when those are empty, so the
+first render doesn't have to.
+
 U6 and Martian Dreams commands that accept `-g`/`--game-dir` are
 config-aware the same way, falling back to `[u6.game] base` / `[md.game] base`
 (both written by `titan setup`).
@@ -213,7 +231,7 @@ titan uw2 map-verify -g "C:/UW2"
 ### `uw2 map-render`
 
 ```text
-titan uw2 map-render [--slots N ...] [-o DIR] [--workdir DIR]
+titan uw2 map-render [--slots N ...] [--resolution full|75|50|25] [-o DIR] [--workdir DIR]
     [--keep-intermediates | --reuse-workdir] [--tick N]
     [projection and display options] [-g DIR]
 ```
@@ -1560,7 +1578,8 @@ titan u8 map-render [path flags] --map N [--view VIEW] [-o FILE] [filter flags] 
 |----------|----------|-------------|
 | `--map N`, `-m N` | **yes** | Map number (0–255) |
 | `--view VIEW`, `-V VIEW` | no | Projection view (default: `iso_classic`) |
-| `-o FILE`, `--output FILE` | no | Output PNG path (default: `map_<N>_<view>.png`) |
+| `--resolution full\|75\|50\|25` | no | Output size in percent of full resolution (default: `25`) |
+| `-o FILE`, `--output FILE` | no | Output PNG path (default: `<data folder>/u8/exports/map-render/map_<N>_<view>[_<P>pct].png`) |
 
 **Examples**
 
@@ -2459,7 +2478,7 @@ game or world, including installed Exult mods and custom games.
 |---|---|---|
 | [Create a font](#u7-font-create) | `titan u7 font-create` | Turn a TrueType font into U7 font shapes, with colour and custom-text previews. |
 | [PNG to shape/archive](#u7-shape-create) | `titan u7 shape-create` | Convert a PNG or frame directory and save a shape or patch a VGA/Flex archive. |
-| [Render a map](#u7-map-render) | `titan u7 map-render` | Review a 20% preview, then render the full PNG with percentage progress. |
+| [Render a map](#u7-map-render) | `titan u7 map-render` | Review a 20% preview, then render the PNG at the chosen size with percentage progress. |
 | [Browse shapes and properties](#u7-shape-browse) | `titan u7 shape-browse` | Browse graphics and frames; **T** opens properties and **O** filters them. |
 | [Browse palettes](#u7-palette-browse) | `titan u7 palette-browse` | Inspect colour swatches, palette records, cycling colours, and gradient ramps. |
 | [Browse NPCs](#u7-npc-save-browsers) | `titan u7 npc-browse` | Inspect NPC images, stats, schedules, and inventory. |
@@ -2850,19 +2869,24 @@ nearby-flat fill for seamless ground coverage.
 Run `titan u7 map-render` to open the guided wizard. It uses the same arrow-key
 menus and Tab-completed paths as the shape and font wizards. Choose BG/SI,
 the retail game, an Exult mod or standalone world, and a map number; then
-select a superchunk, custom chunk rectangle, or full world. Projection,
+select a superchunk, custom chunk rectangle, or full world (the default when
+no area was supplied), then the saved image size: full, 75%, 50% or 25% (the
+default for the full world; `--resolution` preselects it). Projection,
 saved-game objects, lift limits, grids, palette records, and shape filters
 can be adjusted before rendering. Map and graphics overrides resolve against
 the selected world's own base and patch.
 
 The wizard first renders a PNG at **20% of full width and height** on a reduced
 canvas. It opens the image in the system viewer and asks **“Is this the correct
-map?”**. Accept it, choose a PNG filename, and confirm to start the full render.
+map?”**. Accept it, choose a PNG filename, and confirm to start the final render
+at the chosen size.
 Both passes show percentage progress and the current stage; percentages track
 rendering work, not a time estimate. Existing output files require confirmation.
-Save failures can be retried without repeating a completed full render.
+Save failures can be retried without repeating a completed final render.
 
-Explicit region options keep the existing batch behavior. Add `--interactive`
+Any option other than `--game` keeps the batch behavior. With options but no
+area (`--superchunk`, `--cx0/--cy0` or `--full`), the whole world renders, at
+25% unless `--resolution` says otherwise. Add `--interactive`
 (`-i`) to enter the wizard with supplied options as defaults, for example
 `titan u7 map-render --game si --sc 0x55 --grid --interactive`.
 
@@ -2872,6 +2896,7 @@ titan u7 map-render [static] [--game bg|si]
                     [--map-root DIR]
                     [--map-num N]
                     [--superchunk N | --cx0 X0 --cy0 Y0 --cx1 X1 --cy1 Y1 | --full]
+                    [--resolution full|75|50|25]
                     [-p PAL] [-o FILE] [--view VIEW]
                     [--save DIR] [--grid] [--exclude FLAG ...]
                     [--zone-profile NAME] [--zone-id ID ...] [--all-zones]
@@ -2884,12 +2909,14 @@ titan u7 map-render [static] [--game bg|si]
 |----------|-------------|
 | `static` | Optional path to a base `STATIC/` or Exult mod `patch/` containing `SHAPES.VGA`, `TFA.DAT`, and related rendering assets. It also supplies map data unless `--map-root` is used. If omitted, resolved from `titan.toml` (`[u7bg.paths]` / `[u7si.paths]`) |
 | `--game bg|si` | Select which config section supplies defaults and the base graphics for sparse mod patches (`bg` = `[u7bg.*]`, `si` = `[u7si.*]`) |
+| `--mod NAME` | Render a mod's or Exult game's map (`titan u7 mods` lists them): its own map folder, patch before STATIC as Exult reads it, unless `--map-root` is given; its patch folder's art overrides; an Exult game's own STATIC. A mod without maps renders the base world with its art |
 | `--map-root DIR` | Optional separate map-data root containing shared `U7CHUNKS` and root `U7MAP`/`U7IFIX*` or secondary `mapNN/` data. Rendering assets still come from `static`. When omitted, map data continues to come from `static` |
 | `--superchunk N`, `--sc N` | Superchunk number 0–143 (hex ok, e.g. `0x55`). Renders a 16×16 chunk region |
 | `--cx0`, `--cy0`, `--cx1`, `--cy1` | Chunk-level bounding box (0–191). Alternative to `--superchunk` |
-| `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`) |
+| `--full` | Render the entire world map (shorthand for `--cx0 0 --cy0 0 --cx1 191 --cy1 191`). Also what renders when options are given but no area |
 | `-p FILE`, `--palette FILE` | Path to `PALETTES.FLX`. Default resolution order: configured game palette, inferred mod base `STATIC/PALETTES.FLX`, then selected `static/PALETTES.FLX` |
-| `-o FILE`, `--output FILE` | Output PNG path (default: auto-named) |
+| `--resolution full\|75\|50\|25` | Output size in percent of full resolution. Default: `25` for the full world (a full world is about 25000 px square at full size), otherwise `full` |
+| `-o FILE`, `--output FILE` | Output PNG path (default: `<data folder>/u7/exports/map-render/u7_<game>_map<NN>_<region>_<view>[_<P>pct].png`, region `scNN`, `full` or a chunk range, `NN` the map number in hex) |
 | `--view VIEW` | Projection view: `classic` (45° lift, default), `flat` (no lift), `steep` (exaggerated lift) |
 | `--save DIR` | Path to `gamedat/` directory to include IREG dynamic objects |
 | `--grid / --no-grid` | Overlay grid lines (default: off). Blue lines for chunk boundaries (16×16 tiles each, coords e.g. `80,96`) with coordinate labels; red lines for superchunk boundaries (16×16 chunks each) with SC number labels |
@@ -2962,8 +2989,9 @@ titan u7 map-render STATIC/ --sc 85 --exclude no_transparent
 # Include dynamic objects from a savegame's gamedat/
 titan u7 map-render STATIC/ --sc 85 --save gamedat/ --view classic
 
-# Render the entire world map
+# Render the entire world map (25% by default; --resolution full for ~25000 px)
 titan u7 map-render STATIC/ --full -o u7_world.png
+titan u7 map-render STATIC/ --full --resolution 50 -o u7_world_half.png
 
 # Highlight three world-tile regions with per-rectangle colour
 titan u7 map-render STATIC/ --full \
@@ -4580,7 +4608,7 @@ titan u7 map-export-json [static] [--game bg|si] [--map-num N]
 | `static` | Source STATIC/map root containing shared `U7CHUNKS`, graphics metadata, and root map data or a selected `mapNN`; defaults to configured BG/SI STATIC |
 | `--game bg\|si` | Select source format and configured path; default `bg` |
 | `--map-num N` | Export map `0` from the source root or secondary map `N` from `mapNN`; default `0` |
-| `-o FILE`, `--output FILE` | Output JSON path; default `<data folder>/u7/exports/map-export-json/u7_map.json` |
+| `-o FILE`, `--output FILE` | Output JSON path; default `<data folder>/u7/exports/map-export-json/u7_<game>_map<NN>.json` (`NN` the map number in hex) |
 | `--include-fixed`, `--no-fixed` | Include or omit IFIX objects such as mountain faces; included by default |
 | `--shape-metadata`, `--no-shape-metadata` | Include or omit dimensions, origins, names, and frame counts for referenced shapes; included by default |
 | `--wrap-x`, `--wrap-y` | Declare horizontal or vertical wrapping in JSON metadata; both default off and do not alter source map data |
@@ -5624,7 +5652,8 @@ titan u6 map-render [-g DIR] [-p FILE] [--region x,y,w,h] [--dungeon N]
 | `--tick N` | Animation tick, for water/animated tiles (default: `0`) |
 | `--objects` | Overlay world objects (furniture, items, etc.) from `LZOBJBLK`/`LZDNGBLK` |
 | `--show-invisible` | Include invisible world objects; requires `--objects`; default is hidden |
-| `-o FILE`, `--output FILE` | Output PNG path |
+| `--resolution full\|75\|50\|25` | Output size in percent of full resolution (default: `25` for the surface or a dungeon, `full` for a `--region` crop) |
+| `-o FILE`, `--output FILE` | Output PNG path (default: `<data folder>/u6/exports/map-render/surface[_<P>pct].png` or `dungeon_N[_<P>pct].png`) |
 
 **Examples**
 ```bash
@@ -9261,8 +9290,8 @@ selected frame, and visible water cells/pixels. Missing textures are shown as
 magenta diagnostic tiles and listed in that report; Titan does not synthesize
 replacement ground.
 
-The default `--resolution full` uses 28 pixels per terrain cell, producing a
-28,672x28,672 Region 9 image. The `75`, `50`, and `25` presets use 21, 14, and
+`--resolution full` uses 28 pixels per terrain cell, producing a
+28,672x28,672 Region 9 image; the default, `25`, uses 7. The `75`, `50`, and `25` presets use 21, 14, and
 7 pixels per cell, producing 21,504x21,504, 14,336x14,336, and 7,168x7,168
 Region 9 images. An explicit `--pixels-per-cell` value overrides the preset.
 
@@ -9354,8 +9383,8 @@ Use `--pixels-per-cell` to select a smaller preview scale for exploratory
 batches. The manifest records the chosen value under
 `layout.pixels_per_cell`. A 28,672-pixel RGBA render requires several GiB of
 working memory even when its compressed PNG is much smaller.
-The equivalent named scales are `--resolution full`, `75`, `50`, and `25`,
-mapping to 28, 21, 14, and 7 pixels per cell. `--pixels-per-cell` remains an
+The equivalent named scales are `--resolution full`, `75`, `50`, and `25` (the
+default), mapping to 28, 21, 14, and 7 pixels per cell. `--pixels-per-cell` remains an
 explicit override.
 The contact-sheet title and enabled grid legend entries wrap to the available
 sheet width, so focused one-column atlases do not clip their header text.

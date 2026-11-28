@@ -557,7 +557,7 @@ def cmd_dimension_csv(args: SimpleNamespace) -> int:
     return 0
 
 
-@meta(results=("text",))
+@meta(category="models", results=("text",))
 def model_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     model_id: Annotated[int, typer.Argument(help="Model ID (0-7999) to inspect")],
@@ -586,7 +586,11 @@ def model_info_cmd(
     )
 
 
-@meta(results=("json", "table"), params={"fmt": "format", "output": "output-file"})
+@meta(
+    category="models",
+    results=("json", "table"),
+    params={"fmt": "format", "output": "output-file"},
+)
 def model_material_report_cmd(
     source: Annotated[
         str,
@@ -643,7 +647,11 @@ def model_material_report_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="models",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def model_export_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     model_id: Annotated[int, typer.Argument(help="Model ID (0-7999) to export")],
@@ -717,7 +725,11 @@ def model_export_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir", "palette": "palette"})
+@meta(
+    category="models",
+    results=("files",),
+    params={"output": "output-dir", "palette": "palette"},
+)
 def model_export_all_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/sappear.flx")],
     textures: Annotated[
@@ -787,7 +799,7 @@ def model_export_all_cmd(
     )
 
 
-@meta(results=("text",))
+@meta(category="models", results=("text",))
 def dimension_info_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
     models: Annotated[
@@ -799,7 +811,7 @@ def dimension_info_cmd(
     raise SystemExit(cmd_dimension_info(SimpleNamespace(file=file, models=models)))
 
 
-@meta(results=("text",))
+@meta(category="models", results=("text",))
 def dimension_show_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
     id: Annotated[int, typer.Argument(help="Model ID")],
@@ -814,7 +826,7 @@ def dimension_show_cmd(
     )
 
 
-@meta(results=("files",), params={"output": "output-dir"})
+@meta(category="models", results=("files",), params={"output": "output-dir"})
 def dimension_csv_cmd(
     file: Annotated[str, typer.Argument(help="Path to static/dimension.dat")],
     output: Annotated[

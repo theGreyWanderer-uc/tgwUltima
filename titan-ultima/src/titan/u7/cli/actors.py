@@ -28,7 +28,11 @@ from titan.u7.ireg_tree import ireg_context_sha256
 from titan.errors import exit_code
 
 
-@meta(results=("json",), params={"output": "output-file", "file": "input-file"})
+@meta(
+    category="characters",
+    results=("json",),
+    params={"output": "output-file", "file": "input-file"},
+)
 def actor_headers_cmd(
     file: Annotated[
         str,
@@ -90,7 +94,11 @@ def actor_headers_cmd(
         raise SystemExit(exit_code(error)) from error
 
 
-@meta(results=("file",), params={"output": "output-file", "file": "input-file"})
+@meta(
+    category="characters",
+    results=("file",),
+    params={"output": "output-file", "file": "input-file"},
+)
 def actor_rewrite_cmd(
     file: Annotated[
         str, typer.Argument(help="Loose actor stream or explicitly selected save")

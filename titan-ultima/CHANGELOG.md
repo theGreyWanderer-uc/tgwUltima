@@ -10,6 +10,81 @@ work for the next release.
 
 ### Added
 
+- **Saves started before the Forgotten World patch:** `save-check` and the
+  save browser now say when a save misses part of the 1.19G/1.19H fan patch.
+  `FWP01` (INFO): the installed maps have the companion fix but the save's own
+  copy of the main map does not, so Mariah and Jaana will not come. `FWP02`
+  (INFO): Runes and virtue items still at their old floating heights, by
+  shrine. Both advise a new game for every fix; neither changes the verdict,
+  because the save loads normally. Read from the maps, not from file hashes
+  (`titan.u9.fan_patch`).
+- **One map size option everywhere:** `--resolution full|75|50|25` on U6,
+  Martian Dreams and U8 `map-render`, U8 `map-render-all`, UW2 `map-render`
+  and UO `map-export`, as on U7. Whole maps now default to 25% (a crop with
+  `--region` stays full size), and file names say the size (`_25pct`). U9's
+  `map-render` and `map-atlas` presets now default to `25` too. Pass
+  `--resolution full` for the old size.
+- **Config problems, found and fixed:** `titan config` now ends with what's
+  wrong with titan's config: an older copy that titan reads instead of your
+  main config (e.g. a `titan.toml` in the folder you run titan from),
+  entries only an older `titan setup` wrote, and paths that no longer
+  resolve. `titan config --fix` applies the fixes titan knows: it renames a
+  shadowing copy to `.old`, edits a file only after backing it up (`.bak`),
+  and extracts U8's map data; it never deletes anything. Other commands print
+  one warning line while a copy shadows your main config.
+- **`u7 map-render --resolution full|75|50|25`:** renders at a fraction of
+  full size. A full-world render (`--full`) now defaults to 25%, about 6000
+  px square instead of 25000; pass `--resolution full` for the old size.
+  The guided wizard asks for the size too, after the area, and saves at it
+  (it used to save at full size only).
+- **`u7 map-render` without an area renders the whole world:** given options
+  but no `--superchunk`, chunk range or `--full`, it renders the full world at
+  25% instead of stopping with an error. The guided wizard now offers the
+  full world first when no area was supplied.
+- **Front-end contract number:** `titan._meta.CONTRACT` versions what front ends
+  such as titan-desktop use from titan, separately from the release number, so
+  a front end can check one number instead of probing for features.
+- **`u7 map-render --mod`:** renders a mod's or Exult custom game's map from
+  its own folders, with its art fixes, without pointing `--map-root` at them
+  by hand.
+- **Map lists, for front ends:** `titan._meta.list_maps()` lists the maps a
+  flavor has and how to render each: Ultima 7's main world and Exult's
+  extra maps (a mod's own maps included), Ultima 8's maps with items and
+  Ultima 9's regions.
+  Ultima 6 and Martian Dreams (the surface and each underground level),
+  Ultima Underworld II (each level in `LEV.ARK`, by name) and Ultima Online
+  (each facet the client ships, exported whole by `uo map-export`) are listed
+  too. The command category "Maps & world" is now called "World".
+  Each of a mod's maps says what the mod does to it: edits the base game's
+  map (with how many superchunks of layout and objects, and terrain chunks,
+  it changes), replaces it, or adds a new one.
+- **Flavors, for front ends:** `titan._meta.list_flavors()` lists every way
+  a game can be worked on: for Ultima 7, each install as played by Exult
+  or by the original DOS game, with Exult's mods and custom games under
+  Exult; for Ultima 8, the DOS game's, Pentagram's and ScummVM's saves (with
+  whether titan can read each); for Ultima Online, each configured client
+  (for example the EA Classic Client and UO Forever), plus clients the
+  registry records that no entry names; and for every game,
+  the configured install plus copies a store or your `[search] folders`
+  hold. Ultima 7's DOS saves (`GAMEnn.U7`) are now listed too.
+- **Setup finds games where your launchers installed them:** `titan setup`
+  now reads where Steam (every library), GOG (Galaxy and offline installers),
+  EA's installer, Ultima Online clients registered the classic way (as UO
+  Forever's installer does), Windows' installed-programs list, Heroic and
+  Lutris installed each Ultima game, before looking in the usual
+  folders, so games in custom libraries and folders are found. It says
+  where it found each one (`Found Ultima 9 (Steam): ...`). Nothing goes
+  online. A new optional `[search] folders` list in `titan.toml` adds your
+  own folders to the search, and the usual folders are now checked on every
+  fixed drive, not just C: to G:. For front ends,
+  `titan._meta.store_installs()` lists each store's copy as verified,
+  registered (listed but incomplete) or missing, and found installs say which
+  store they came from.
+- **Command categories for front ends:** every command now says what it's
+  about (archives, palettes, shapes and art, models, audio, maps and world,
+  characters, saves, text, data tables) through
+  `titan._meta.command_metas()`, so a front end can group commands without
+  guessing from their names.
 - **The configured install, for front ends:** `titan._meta.configured_install()`
   returns the install your `titan.toml` selects for a game, with its files
   and any `[<game>.paths]` overrides, and the configured paths that are
@@ -61,6 +136,20 @@ work for the next release.
   code, so the CLI and front ends agree on what counts as an install.
 
 ### Changed
+
+- **`titan setup` prepares U8's maps:** it extracts U8SHAPES.FLX and GLOB.FLX
+  into titan's `u8/shapes` and `u8/globs` working folders when they're empty,
+  so map commands (and front ends) find them ready.
+- **U6 and Martian Dreams `map-render` write into titan's exports:** an
+  omitted `-o` used to mean a file in the current folder; it is now
+  `<data folder>/<game>/exports/map-render/` and is reported to front ends.
+- **UW2 `map-render` and UO `map-export` report each PNG:** front ends that
+  read `TITAN_RESULTS_FILE` get the images, not just the folder, also when
+  the folder is titan's own default.
+- **U7 map file names name the map:** `u7 map-render` and `u7 map-export-json`
+  now name an omitted output after the game and map number
+  (`u7_si_map01_full_classic_25pct.png`, `u7_bg_map00.json`), so renders of
+  different maps no longer overwrite each other.
 
 - **Library code no longer prints:** saving a Flex archive, reading a
   damaged one, importing an oversized U7 frame and writing animation
@@ -134,6 +223,18 @@ work for the next release.
 
 ### Added (front ends)
 
+- **Option sets:** `@meta(option_sets={title: options})` groups options with
+  no parent of their own behind one titled switch (U8's `--no-*` type-flag
+  exclusions, UW2's geometry tuning). U8, U9, UW2, UO and Martian Dreams map
+  commands now lay their options out like U7's; U8 `map-render --view`, UW2's
+  orientation, texture transform, model style, solid fill and grid
+  coordinate options, and U9's object source and footprint style are now
+  Choices.
+- **Option layout:** `@meta` can say which options belong under another
+  (`option_groups`), which replace a switch while it is off
+  (`option_alternatives`) and what an omitted option amounts to (`defaults`),
+  so front ends can nest them. `u7 map-render` is the first command tagged.
+
 - **Run results file:** set `TITAN_RESULTS_FILE` to a path and titan writes
   `{"outputs": [...], "exit_code": N}` there when a command ends, listing what
   it wrote. `flex-extract` and `uw1 texture-export` report so far; more
@@ -142,6 +243,30 @@ work for the next release.
 
 ### Fixed
 
+- **U8 maps with an old setup's default save:** early `titan setup` releases
+  wrote `[u8.paths] nonfixed = "U8SAVE.000"` whether or not that save
+  existed, so map commands failed with "No such file" on installs without
+  slot 0. That default now means the base world unless the save is there.
+
+- **Map commands wrote into the current folder or the game install:** with no
+  `--output`, Ultima 7's `map-render`, `map-render-json` and `map-sample`,
+  Ultima 8's `map-render` and `map-sample`, and Ultima 9's `map-render` and
+  `map-export-glb` wrote to the current folder (Ultima 9: beside the terrain
+  file, inside the game's install). They now write to titan's exports folder
+  for the command, like other commands, and front ends are told the file.
+- **Exult custom games listed under both parts of Ultima 7:** a custom game
+  (an `exult.cfg` game such as one made in Exult Studio) now appears only
+  under the part its own data comes from, Serpent Isle when it has Serpent
+  Isle's paperdolls or speech, the Black Gate when it has the Black Gate's
+  endgame or speech, and under both only when its data says neither.
+- **Ultima 7 installs found as the wrong game:** setup and install detection
+  could list a Serpent Isle folder as a Black Gate install (or the reverse)
+  when the folder's name didn't say which game it was, such as
+  `ultima7si_no_exult`. titan now tells the two apart by files only one game
+  ships (`SISPEECH.SPC` and `PAPERDOL.VGA` for Serpent Isle; `ENDGAME.DAT`
+  and `U7SPEECH.SPC` for the Black Gate), then by Exult's settings and the
+  folder name. A folder you choose yourself still counts as the game you
+  asked for when nothing says otherwise.
 - **`u7 monster-report --game si`:** the world-object part of the report
   (`monster_world_objects.csv`) was read with Black Gate's shape metadata;
   it now uses Serpent Isle's.
