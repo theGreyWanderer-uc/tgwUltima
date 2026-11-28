@@ -243,6 +243,13 @@ work for the next release.
 
 ### Fixed
 
+- **U8 gumps and other archives exported under world-object names:**
+  `u8 shape-batch` named every slot after the usecode class with the same
+  number, whatever the archive, so `U8GUMPS.FLX` gave files such as
+  `0037_FLOOR` (spellbook text) and `0117_CHEST_NS`. Those names now go only
+  on shapes from `U8SHAPES.FLX`; other archives get plain slot numbers
+  (`0037_f0000.png`). The same goes for a folder of `.shp` files that
+  `extract_all` wrote from another archive (its `.meta.txt` names the source).
 - **U8 maps with an old setup's default save:** early `titan setup` releases
   wrote `[u8.paths] nonfixed = "U8SAVE.000"` whether or not that save
   existed, so map commands failed with "No such file" on installs without

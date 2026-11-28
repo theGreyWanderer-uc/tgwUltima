@@ -32,6 +32,34 @@ def load_u8_shape_names() -> dict[int, str]:
     return mapping
 
 
+U8_SHAPES_FLEX = "U8SHAPES.FLX"
+"""The only archive whose slot numbers are usecode class IDs."""
+
+
+def u8_flex_has_class_names(flex_path: str | Path) -> bool:
+    """Whether slot *N* of this archive is usecode class *N* (U8SHAPES.FLX only).
+
+    Gumps, fonts, mouse cursors and other Flex archives number their records
+    from 0 too, but those numbers have nothing to do with usecode classes.
+    """
+    return Path(flex_path).name.upper() == U8_SHAPES_FLEX
+
+
+def _sidecar_flex_source(shape_path: Path) -> str | None:
+    """The ``Flex source:`` an ``extract_all`` sidecar records for *shape_path*."""
+    sidecar = shape_path.with_name(f"{shape_path.stem}.meta.txt")
+    try:
+        with sidecar.open(encoding="utf-8") as stream:
+            for line in stream:
+                key, sep, value = line.partition(":")
+                if sep and key.strip() == "Flex source":
+                    value = value.strip()
+                    return None if not value or value == "(unknown)" else value
+    except OSError:
+        return None
+    return None
+
+
 def u8_shape_export_stem(shape_num: int, fallback: str | None = None) -> str:
     """Keep native slot IDs in filenames, adding a sanitized bundled class label."""
     name = load_u8_shape_names().get(shape_num)
@@ -43,10 +71,18 @@ def u8_shape_export_stem(shape_num: int, fallback: str | None = None) -> str:
 
 
 def u8_shape_stem_from_path(path: str) -> str:
-    """Preserve standalone shape stems; label purely decimal native slot stems."""
-    stem = Path(path).stem
+    """Preserve standalone shape stems; label purely decimal native slot stems.
+
+    A file whose ``.meta.txt`` sidecar names an archive other than U8SHAPES.FLX
+    (e.g. ``0037.shp`` extracted from U8GUMPS.FLX) keeps its plain number.
+    """
+    p = Path(path)
+    stem = p.stem
     try:
         number = int(stem, 10)
     except ValueError:
+        return stem
+    source = _sidecar_flex_source(p)
+    if source is not None and not u8_flex_has_class_names(source):
         return stem
     return u8_shape_export_stem(number, fallback=stem)
